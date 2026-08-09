@@ -103,6 +103,14 @@ const PATHS: Record<string, string> = {
   fix: `<line x1="12" y1="4" x2="12" y2="14"/><path d="M8 4h8"/><path d="M9 14h6l-3 6z" fill="currentColor"/>`,
 };
 
+/** The raw path markup for one icon, for components/shell/Icon.vue's v-html.
+ *  Every value in PATHS is a compile-time constant in this file — no document
+ *  or network data reaches it — which is what makes that v-html the ONE
+ *  sanctioned one in the app. */
+export function iconPaths(name: string): string {
+  return PATHS[name] ?? "";
+}
+
 export function icon(name: string): string {
   const p = PATHS[name] ?? "";
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;

@@ -2,6 +2,7 @@ import { setPrompt } from "../ui/prompt";
 import { SKETCH_PROMPTS } from "./actionTables";
 import { useUiStore } from "../stores/ui";
 import { useSketchPaletteStore } from "../stores/sketchPalette";
+import { useRibbonStore } from "../stores/ribbon";
 import type { Engine } from "./engine";
 
 /** Sketch mode state -> UI (ribbon context, palette, prompt, context tab), and
@@ -9,13 +10,14 @@ import type { Engine } from "./engine";
 export function installSketchStateBridge(e: Engine): void {
   const ui = useUiStore();
   const palette = useSketchPaletteStore();
+  const ribbon = useRibbonStore();
 
   let sketchWasActive = false;
   e.sketch.onState = () => {
     if (e.sketch.active && !sketchWasActive) palette.emitAll(); // apply palette opts
     sketchWasActive = e.sketch.active;
-    e.ui.ribbon.setContext(e.sketch.active ? "sketch" : "model");
-    e.ui.ribbon.setActiveSketchTool(e.sketch.tool);
+    ribbon.context = e.sketch.active ? "sketch" : "model";
+    ribbon.activeSketchTool = e.sketch.tool;
     palette.visible = e.sketch.active;
     // #context-tab is components/shell/TitleBar.vue now — SOLID/SKETCH and the
     // .sketch class both derive from this one flag.

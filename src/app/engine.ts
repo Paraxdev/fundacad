@@ -41,7 +41,7 @@ import { createBugReporter } from "../ui/bugReporter";
 import { setPrinterPillClick } from "../print/printStatusLine";
 import { activePrinterId } from "../print/printerClient";
 
-import { Ribbon } from "../ui/ribbon";
+import { useRibbonStore } from "../stores/ribbon";
 import { useCommandPaletteStore } from "../stores/commandPalette";
 import { Timeline } from "../ui/timeline";
 import { BrowserTree } from "../ui/browserTree";
@@ -84,7 +84,6 @@ export interface EngineTools {
 }
 
 export interface EngineUi {
-  ribbon: Ribbon;
   timeline: Timeline;
   tree: BrowserTree;
   welcome: WelcomeScreen;
@@ -246,8 +245,9 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
  *  subscribe, so who subscribes first is observable. */
 export function mountUi(e: Engine): void {
   e.ui = {} as EngineUi;
-  e.ui.ribbon = new Ribbon(document.getElementById("ribbon")!);
-  e.ui.ribbon.onAction = (a) => e.handleAction(a);
+  // The ribbon is components/shell/RibbonBar.vue; it renders itself from the
+  // store, so all that is left here is handing it the dispatcher.
+  useRibbonStore().bind((a) => e.handleAction(a));
 
   // Cmd/Ctrl-K command palette — search + run any command (discoverability safety net).
   // The overlay is components/overlays/CommandPalette.vue; this keeps the one

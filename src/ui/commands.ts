@@ -5,7 +5,7 @@
 // can never advertise a key the keymap doesn't actually bind (it used to claim
 // Fit was on "F" while F ran Fillet).
 
-import { MODEL, SKETCH, leavesOf, type Group } from "./ribbon";
+import { MODEL, SKETCH, leavesOf, type Group } from "./ribbonDefs";
 import { keyHint } from "../input/shortcuts";
 
 export interface Command {
