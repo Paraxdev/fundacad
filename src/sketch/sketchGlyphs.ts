@@ -1,25 +1,32 @@
-// On-canvas constraint glyphs: small DOM badges projected onto the sketch,
-// mirroring SketchDimensions. Each shows a constraint's type; clicking one (in
-// the select tool) deletes that constraint. Conflicting constraints render red.
+// On-canvas constraint glyphs: small badges projected onto the sketch, mirroring
+// SketchDimensions. Each shows a constraint's type; clicking one (in the select
+// tool) deletes that constraint. Conflicting constraints render red.
+//
+// This is now a FACADE. The badges are rendered by
+// components/overlays/SketchGlyphLayer.vue out of stores/sketchAnnotations.ts;
+// what stays here is the shape SketchMode already talks to — same constructor,
+// same show/hide/setInteractive, same onDelete/onOverlapPick hook fields — so
+// sketchMode.ts (3,781 lines, zero HTML) did not have to move a line.
+//
+// The projection loop that used to live at the bottom of this file went to the
+// component, NOT to reactivity: 200 badges re-projected on every camera frame
+// are style writes, not state. See the component and the store for the split.
 
-import * as THREE from "three";
+import { markRaw } from "vue";
 import type { Viewport } from "../viewport/viewport";
-import { camHash } from "../viewport/camHash";
 import type { SketchPlane } from "./plane";
 import { diagnosisOf, type ConstraintGlyph } from "./glyphs";
+import { glyphClass, glyphTitle } from "./annotationFormat";
+import { useSketchAnnotationStore, type GlyphHooks } from "../stores/sketchAnnotations";
 
-interface GlyphEl {
-  el: HTMLDivElement;
-  pos: THREE.Vector2;
+/** One rendered badge: the glyph's own data plus its presentation, resolved
+ *  once here because neither changes without a rebuild. */
+export interface GlyphItem extends ConstraintGlyph {
+  cls: string;
+  title: string;
 }
 
 export class SketchGlyphs {
-  private root: HTMLDivElement;
-  private items: GlyphEl[] = [];
-  private plane: SketchPlane | null = null;
-  private raf = 0;
-  private scratch = new THREE.Vector3();
-  private lastCamHash = "";
   /** delete the constraint at this index (wired by SketchMode) */
   onDelete: ((cIndex: number) => void) | null = null;
   /** Geometry-beats-glyph, mirroring SketchDimensions.onOverlapPick. A glyph is
@@ -27,75 +34,39 @@ export class SketchGlyphs {
    *  click that names an operand. Return true = "the click belonged to the tool
    *  underneath" and the glyph skips its delete for that click. */
   onOverlapPick: ((e: PointerEvent) => boolean) | null = null;
-  /** set by the pointerdown hook above; consumed by the click that follows */
-  private suppressDelete = false;
 
-  constructor(private viewport: Viewport) {
-    this.root = document.createElement("div");
-    this.root.className = "sketch-glyphs";
-    document.body.appendChild(this.root);
-  }
+  /** Both hooks are assigned by SketchMode AFTER construction, so this reads
+   *  them at call time rather than capturing them. markRaw: it closes over this
+   *  instance, which closes over SketchMode. */
+  private readonly hooks: GlyphHooks = markRaw({
+    overlapPick: (e: PointerEvent) => this.onOverlapPick?.(e) ?? false,
+    del: (cIndex: number) => this.onDelete?.(cIndex),
+  });
+
+  constructor(private viewport: Viewport) {}
 
   show(glyphs: ConstraintGlyph[], plane: SketchPlane, conflicts: Set<number>, over: Set<number>) {
-    this.clear();
-    this.plane = plane;
-    for (const g of glyphs) {
-      const el = document.createElement("div");
-      const st = diagnosisOf(g.cIndex, conflicts, over);
-      el.className = st ? `sketch-glyph ${st}` : "sketch-glyph";
-      el.textContent = g.label;
-      el.title = st === "conflict" ? "Conflicting constraint — click to delete"
-        : st === "over" ? "Redundant (over-defined) constraint — click to delete"
-        : "Click to delete this constraint";
-      el.addEventListener("pointerdown", (e) => {
-        e.stopPropagation();
-        this.suppressDelete = this.onOverlapPick?.(e) ?? false;
-      });
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (this.suppressDelete) {
-          this.suppressDelete = false;
-          return;
-        }
-        this.onDelete?.(g.cIndex);
-      });
-      this.root.appendChild(el);
-      this.items.push({ el, pos: g.pos });
-    }
-    this.lastCamHash = ""; // force a reposition next frame
-    if (!this.raf) this.loop();
+    const store = useSketchAnnotationStore();
+    store.glyphHooks = this.hooks;
+    store.showGlyphs(
+      glyphs.map((g) => {
+        const st = diagnosisOf(g.cIndex, conflicts, over);
+        // markRaw: `pos` is a THREE.Vector2 the layer projects every frame.
+        return markRaw<GlyphItem>({ ...g, cls: glyphClass(st), title: glyphTitle(st) });
+      }),
+      plane,
+      this.viewport,
+    );
   }
 
   hide() {
-    if (this.raf) cancelAnimationFrame(this.raf);
-    this.raf = 0;
-    this.plane = null;
-    this.clear();
+    useSketchAnnotationStore().hideGlyphs();
   }
 
   /** glyphs accept clicks in the select and dimension tools; under a drawing tool
    *  they stay click-through. In the dimension tool onOverlapPick above arbitrates,
    *  so a click that names a dimension operand still reaches the tool. */
   setInteractive(on: boolean) {
-    this.root.classList.toggle("glyphs-passive", !on);
+    useSketchAnnotationStore().glyphsPassive = !on;
   }
-
-  private clear() {
-    this.root.innerHTML = "";
-    this.items = [];
-  }
-
-  private loop = () => {
-    this.raf = requestAnimationFrame(this.loop);
-    if (!this.plane) return;
-    const cam = this.viewport.camera;
-    const hash = camHash(cam);
-    if (hash === this.lastCamHash) return;
-    this.lastCamHash = hash;
-    for (const g of this.items) {
-      this.plane.to3D(g.pos.x, g.pos.y, this.scratch);
-      const s = this.viewport.projectToScreen(this.scratch);
-      g.el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%)`;
-    }
-  };
 }

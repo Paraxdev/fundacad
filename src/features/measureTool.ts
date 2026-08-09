@@ -11,9 +11,9 @@ import type { EdgeRef } from "../viewport/edgeLines";
 import type { Viewport } from "../viewport/viewport";
 import type { Hit } from "../viewport/picking";
 import { setPrompt } from "../ui/prompt";
-import { getUnit, toDisplay, round } from "../ui/units";
-import { esc } from "../ui/escape";
 import { polylineMid } from "../viewport/edgeMatch";
+import { measureRows } from "./measureRows";
+import { useToolPanelStore } from "../stores/toolPanels";
 
 type Probe =
   | { kind: "face"; faceId: number; point: THREE.Vector3; dir: THREE.Vector3; area: number }
@@ -29,7 +29,6 @@ interface Soup {
 export class MeasureTool {
   active = false;
   private probes: Probe[] = [];
-  private panel: HTMLDivElement | null = null;
   private onDone: (() => void) | null = null;
   private boundDown: (e: PointerEvent) => void;
   private boundMove: (e: PointerEvent) => void;
@@ -52,7 +51,6 @@ export class MeasureTool {
     el.addEventListener("pointerdown", this.boundDown, true);
     el.addEventListener("pointermove", this.boundMove, true);
     window.addEventListener("keydown", this.boundKey, true);
-    this.buildPanel();
     this.update();
     setPrompt("Measure: click a face or edge · click a second to measure between them · Esc to exit");
   }
@@ -181,49 +179,14 @@ export class MeasureTool {
     this.viewport.measureHighlight(faceIds, lines);
   }
 
-  private buildPanel() {
-    const p = document.createElement("div");
-    p.className = "measure-panel";
-    document.body.appendChild(p);
-    this.panel = p;
-  }
-
   private update() {
-    if (!this.panel) return;
-    const unit = getUnit();
-    const f = toDisplay(1); // display units per mm (area uses f²)
-    const L = (mm: number) => `${round(toDisplay(mm))} ${unit}`;
-    const A = (mm2: number) => `${round(mm2 * f * f)} ${unit}²`;
-    const xyz = (v: THREE.Vector3) => `${round(toDisplay(v.x))}, ${round(toDisplay(v.y))}, ${round(toDisplay(v.z))}`;
-
-    const rows: [string, string][] = [];
     const [a, b] = this.probes;
-    if (!a) {
-      rows.push(["", "Pick a face or edge"]);
-    } else if (!b) {
-      if (a.kind === "face") rows.push(["Area", A(a.area)]);
-      else rows.push(["Length", L(a.length)]);
-      rows.push(["At", xyz(a.point)]);
-    } else {
-      const near = this.closestPair(a, b);
-      const delta = near.pb.clone().sub(near.pa);
-      rows.push(["Distance", L(near.d)]);
-      rows.push(["ΔX ΔY ΔZ", xyz(delta)]);
-      rows.push(["Centers", L(a.point.distanceTo(b.point))]);
-      const ang = THREE.MathUtils.radToDeg(a.dir.angleTo(b.dir));
-      rows.push(["Angle", `${round(ang)}°`]);
-      this.viewport.setMeasureMarker(near.pa, near.pb);
-    }
-
-    this.panel.innerHTML =
-      `<div class="measure-title">Measure</div>` +
-      rows
-        .map(
-          ([k, v]) =>
-            `<div class="measure-row"><span class="measure-k">${esc(k)}</span><span class="measure-v">${esc(v)}</span></div>`,
-        )
-        .join("") +
-      `<div class="measure-hint">Esc to exit</div>`;
+    // The shortest-distance search and the marker it feeds stay here: they are
+    // geometry, and setMeasureMarker is a Three.js write. Only the labelled
+    // lines are handed over — measureRows() is pure, and unit-tested.
+    const near = a && b ? this.closestPair(a, b) : null;
+    if (near) this.viewport.setMeasureMarker(near.pa, near.pb);
+    useToolPanelStore().measure = measureRows(a, b, near);
   }
 
   stop() {
@@ -232,8 +195,7 @@ export class MeasureTool {
     el.removeEventListener("pointerdown", this.boundDown, true);
     el.removeEventListener("pointermove", this.boundMove, true);
     window.removeEventListener("keydown", this.boundKey, true);
-    this.panel?.remove();
-    this.panel = null;
+    useToolPanelStore().measure = null;
     this.viewport.setMeasureMarker(null);
     this.viewport.hoverEntity(null);
     this.viewport.clearSelection();
