@@ -1,0 +1,35 @@
+// SindriCAD stylesheet entry point.
+//
+// This is src/styles.css split by section — a pure byte-move, nothing was
+// rewritten. The load order below IS the old file's top-to-bottom order and
+// must stay that way: several rules depend on later-wins cascade (most visibly
+// `.hidden { display: none !important }` in _utilities, which has to be able to
+// beat the display rules declared above it).
+//
+// Two deliberate non-decisions:
+//
+//   * No SFC <style> blocks anywhere. `<style scoped>` rewrites `.tree-row` to
+//     `.tree-row[data-v-abc]`, which raises specificity from (0,1,0) to (0,2,0);
+//     across ~336 class selectors with a lot of descendant/compound interplay
+//     that silently moves cascade outcomes. "Identical output" and "scoped" are
+//     mutually exclusive, and the e2e suite selects on these class names.
+//   * No SCSS variables. The theme is CSS custom properties on :root
+//     (_tokens.scss), so every component already gets it for free through the
+//     cascade and there is nothing to import or hoist. SCSS is here for @use
+//     file-splitting and nothing else.
+
+@use "tokens";
+@use "base";
+@use "titlebar";
+@use "ribbon";
+@use "palette";
+// The "MAIN — browser | viewport | inspector" section. Named _layout rather
+// than _main so it can't be confused with this entry file, which Sass would
+// otherwise refuse to disambiguate.
+@use "layout";
+@use "timeline";
+@use "inspector";
+@use "utilities";
+@use "browser";
+@use "modals";
+@use "welcome";

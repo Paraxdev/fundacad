@@ -1,0 +1,337 @@
+/* ============================================================================
+   TIMELINE  (slimmer; modern feature chips)
+   ============================================================================ */
+#timeline {
+  background: linear-gradient(180deg, #131519 0%, var(--panel) 100%);
+  border-top: 1px solid var(--line);
+  padding: 0 var(--s-3);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  overflow: hidden; /* the .timeline-scroll child owns horizontal scrolling */
+}
+/* the scrolling strip between the transport buttons and the error badge */
+.timeline-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+/* transport: roll-to-start / step / roll-to-end */
+.timeline-transport {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+.tl-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.tl-btn:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text);
+}
+.tl-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+/* failing-features badge (right end): click jumps to the next red chip */
+.timeline-errbadge {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  background: var(--error-tint);
+  border: 1px solid var(--error);
+  border-radius: var(--r-sm);
+  color: var(--error);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.timeline-errbadge.hidden {
+  display: none;
+}
+/* cancel the running operation (import / long rebuild). Sibling of the track,
+   never inside it — the track is wiped on every render. */
+.timeline-cancel {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  background: var(--error-tint);
+  border: 1px solid var(--error);
+  border-radius: var(--r-sm);
+  color: var(--error);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.timeline-cancel:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.timeline-cancel.hidden {
+  display: none;
+}
+/* what the running operation is doing, next to Cancel */
+.timeline-busy {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.timeline-busy.hidden {
+  display: none;
+}
+
+.panel-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-mute);
+  margin: var(--s-1) var(--s-1) var(--s-3);
+}
+
+/* feature tree rows */
+.feature-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 5px var(--s-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  color: var(--text);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.feature-row:hover {
+  background: var(--raised);
+}
+.feature-row.selected {
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.feature-row.error {
+  color: var(--error);
+}
+.feature-icon {
+  width: 16px;
+  text-align: center;
+  opacity: 0.75;
+  flex: 0 0 auto;
+}
+.feature-row.selected .feature-icon {
+  opacity: 1;
+}
+
+/* --- timeline track + nodes --- */
+.timeline-track {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  width: max-content;
+}
+.timeline-empty {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 var(--s-3);
+  color: var(--text-mute);
+  font-size: 12px;
+  font-style: normal;
+}
+.timeline-node {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 30px;
+  margin-right: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-dim);
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease);
+}
+.timeline-node:hover {
+  background: var(--raised);
+  border-color: var(--line-strong);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+.timeline-node.selected {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+  box-shadow: 0 0 0 1px var(--accent), 0 4px 14px var(--accent-glow);
+}
+.timeline-node.error {
+  border-color: var(--error);
+  color: var(--error);
+  background: var(--error-tint);
+}
+.timeline-node.rolled {
+  opacity: 0.38;
+} /* past the rollback marker = not built */
+.timeline-node.suppressed {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+.timeline-node.drop-target {
+  border-left: 2px solid var(--accent);
+  box-shadow: -4px 0 12px -4px var(--accent-glow);
+}
+.timeline-node.building {
+  width: auto;
+  padding: 0 10px 4px;
+  opacity: 0.9;
+  cursor: default;
+}
+.timeline-node .t-build {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.timeline-node .t-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 2px;
+  height: 2px;
+  background: var(--line);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.timeline-node .t-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s var(--ease);
+}
+.timeline-node .glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* rollback marker: a draggable vertical bar between features */
+.timeline-marker {
+  position: relative;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 34px;
+  margin: 0 1px;
+  cursor: ew-resize;
+}
+.timeline-marker::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 6px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.timeline-marker .marker-grip {
+  position: absolute;
+  top: -2px;
+  left: 2px;
+  width: 10px;
+  height: 13px;
+  background: var(--accent);
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.timeline-marker:hover::before,
+.timeline-marker.dragging::before {
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.timeline-marker:hover .marker-grip {
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* right-click context menu (timeline; reusable) */
+.context-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 168px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  padding: var(--s-1);
+  animation: pop-in var(--t-fast) var(--ease);
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.ctx-item:hover {
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+}
+.ctx-label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+.ctx-key {
+  flex: 0 0 auto;
+  padding-left: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.ctx-caret {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.ctx-swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid #0007;
+}
+.ctx-item.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.ctx-item.danger {
+  color: #e24a3b;
+}
+.ctx-item.danger:hover {
+  background: rgba(226, 74, 59, 0.14);
+  color: #ff7a66;
+}
+.ctx-sep {
+  height: 1px;
+  background: var(--line);
+  margin: var(--s-1) var(--s-2);
+}

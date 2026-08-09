@@ -1,0 +1,74 @@
+/* ============================================================================
+   SindriCAD — "FORGE" theme
+   Deep graphite near-black, a single molten-amber accent, soft layered depth.
+   The 3D viewport is the hero; the chrome stays quiet, crisp, and comfortable.
+   Token-driven: tweak :root and the whole app follows.
+   ============================================================================ */
+
+:root {
+  /* Every NATIVE control — a <select> and its popup list, scrollbars, the focus
+     ring on form fields — is drawn by the engine, not by us, and defaults to the
+     LIGHT palette however dark the page around it is. That is why the Units
+     dropdown came out white with near-invisible grey text on a black title bar.
+     Declaring the scheme is what makes the engine draw them dark; the rules on
+     the selects below then only have to handle the closed control's shape. */
+  color-scheme: dark;
+
+  /* --- surfaces (dark → light, back → front) --- */
+  --bg: #0e0f12;          /* app background, deepest */
+  --panel: #16181d;       /* docked panels (browser/inspector/ribbon/timeline) */
+  --panel-2: #1c1f26;     /* nested surfaces, inputs, popups */
+  --raised: #22262e;      /* hover / raised interactive surface */
+  --raised-2: #2a2f38;    /* pressed / stronger hover */
+
+  /* --- borders --- */
+  --line: #262a31;        /* hairline divider */
+  --line-strong: #323843; /* stronger border (focusable controls) */
+
+  /* --- text --- */
+  --text: #e6e8ec;        /* primary */
+  --text-dim: #9aa3af;    /* secondary / labels */
+  --text-mute: #6b7280;   /* tertiary / hints */
+
+  /* --- molten amber accent --- */
+  --accent: #ff7a3c;
+  --accent-hot: #ff9a5c;
+  --accent-tint: rgba(255, 122, 60, 0.14);
+  --accent-tint-2: rgba(255, 122, 60, 0.22);
+  --accent-glow: rgba(255, 122, 60, 0.35);
+  --on-accent: #160a04;   /* text on a filled amber surface */
+
+  /* --- semantic --- */
+  --ok: #4ad07d;
+  --warn: #ffd24a;
+  --error: #ff5c5c;
+  --error-tint: rgba(255, 92, 92, 0.14);
+
+  /* legacy alias (kept so any stray reference still resolves) */
+  --accent-blue: var(--accent);
+
+  /* --- radii --- */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+
+  /* --- spacing scale --- */
+  --s-1: 4px;
+  --s-2: 6px;
+  --s-3: 8px;
+  --s-4: 12px;
+  --s-5: 16px;
+  --s-6: 20px;
+
+  /* --- elevation (soft, layered, low-spread) --- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-pill: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+
+  /* --- motion --- */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --t-fast: 120ms;
+  --t-med: 160ms;
+}

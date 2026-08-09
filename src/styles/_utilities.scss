@@ -1,0 +1,245 @@
+/* ============================================================================
+   Utilities
+
+   (This section used to be headed "SKETCH CONTEXTUAL TOOLBAR + utilities" and
+   led with #sketchbar / .sketchbar-label / .sketchbar-sep. Those were dead —
+   no element in index.html, no reference anywhere in src/ — so they were
+   dropped when the stylesheet was split into partials. The sketch contextual
+   toolbar is the RIBBON in sketch context (see _ribbon.scss) plus the docked
+   palette (_palette.scss); this was an earlier design that left its CSS behind.)
+   ============================================================================ */
+.hidden { display: none !important; }
+
+button.finish {
+  background: rgba(74, 208, 125, 0.16);
+  border-color: rgba(74, 208, 125, 0.5);
+  color: #c5f6da;
+  font-weight: 600;
+}
+button.finish:hover {
+  background: rgba(74, 208, 125, 0.26);
+  border-color: rgba(74, 208, 125, 0.7);
+}
+
+/* ---- prompt toast (viewport instruction banner) ---- */
+.prompt {
+  position: absolute;
+  top: var(--s-5);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(18, 20, 25, 0.88);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+          backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0.1px;
+  box-shadow: var(--shadow-2);
+  z-index: 20;
+  max-width: min(80%, 720px);
+  animation: prompt-in var(--t-med) var(--ease);
+}
+.prompt::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+@keyframes prompt-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to   { opacity: 1; transform: translateX(-50%); }
+}
+
+/* ---- on-canvas dimension input ---- */
+.dim-input {
+  position: fixed;
+  display: flex;
+  gap: var(--s-1);
+  z-index: 200;
+  pointer-events: auto;
+}
+.dim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--accent-hot);
+  background: rgba(22, 24, 29, 0.95);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  padding: 3px 4px;
+  box-shadow: var(--shadow-2), 0 0 0 3px var(--accent-tint);
+}
+.dim-field input {
+  width: 52px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+}
+.dim-field input:focus {
+  outline: none;
+  border-color: var(--accent-hot);
+  box-shadow: 0 0 0 2px var(--accent-tint);
+}
+/* visible confirm/cancel on the heads-up input (Enter/Esc equivalents) */
+.dim-btn {
+  align-self: stretch;
+  width: 26px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: rgba(22, 24, 29, 0.95);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow-2);
+}
+.dim-ok {
+  color: #7fe08a;
+  border-color: #3f7a48;
+}
+.dim-ok:hover {
+  background: rgba(66, 130, 78, 0.25);
+}
+.dim-no {
+  color: var(--error);
+  border-color: var(--error);
+}
+.dim-no:hover {
+  background: var(--error-tint);
+}
+
+/* ---- toast notifications (bottom-center, above the timeline) ---- */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  z-index: 2500;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  max-width: 560px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-3);
+  font-size: 12.5px;
+  color: var(--text);
+  pointer-events: auto;
+  animation: pop-in var(--t-fast) var(--ease);
+}
+.toast-error {
+  border-color: var(--error);
+  background: linear-gradient(180deg, rgba(80, 24, 24, 0.55), var(--panel-2));
+}
+.toast-warning {
+  border-color: #d2a83b;
+  background: linear-gradient(180deg, rgba(80, 62, 16, 0.5), var(--panel-2));
+}
+.toast-msg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toast-action {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-close {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: var(--text-mute);
+  font-size: 12px;
+  cursor: pointer;
+}
+.toast-out {
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+}
+
+/* Shared look for the app's <select>s. `appearance: none` is the load-bearing
+   part: without it the engine draws its own button face and simply ignores
+   background/color, which is exactly how the Units control ended up light. The
+   arrow has to be redrawn once appearance is off, so it comes in as a background
+   image; keep the right padding clear of it. */
+.units select,
+.params-row select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b93a4' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 9px 6px;
+}
+/* The popup list is a native menu. color-scheme above is what darkens it on
+   engines that honour it; these are belt and braces for the ones that read
+   option colours instead. */
+.units select option,
+.params-row select option {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* ---- unit selector in the top bar ---- */
+.units {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.units select {
+  background-color: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  padding: 4px 22px 4px 6px; /* right side reserved for the arrow above */
+  font: inherit;
+  font-size: 12px;
+  text-transform: none;
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease);
+}
+.units select:hover {
+  border-color: #3d4452;
+}
+.units select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}

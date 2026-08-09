@@ -1,0 +1,160 @@
+/* ============================================================================
+   BROWSER TREE  (MCAD-style folders)
+   ============================================================================ */
+.tree-folder {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 5px var(--s-1);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text);
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast) var(--ease);
+}
+.tree-folder:hover {
+  background: var(--raised);
+}
+.tree-caret {
+  width: 12px;
+  font-size: 9px;
+  color: var(--text-mute);
+  transition: color var(--t-fast) var(--ease);
+}
+.tree-folder:hover .tree-caret {
+  color: var(--text-dim);
+}
+.tree-count {
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-mute);
+  background: var(--panel-2);
+  border-radius: var(--r-pill);
+  min-width: 16px;
+  text-align: center;
+  padding: 1px 6px;
+}
+.tree-count:empty {
+  display: none;
+}
+.tree-child {
+  padding-left: 26px;
+}
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-eye {
+  font-size: 12px;
+  color: var(--text-mute);
+  opacity: 0.35;
+  padding: 0 var(--s-2);
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+}
+.feature-row:hover .tree-eye {
+  opacity: 0.9;
+}
+.tree-eye:hover {
+  color: var(--accent-hot);
+  opacity: 1;
+}
+
+/* ---- editable in-canvas sketch dimensions ---- */
+.sketch-dims {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 150;
+}
+.sketch-dim {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: rgba(18, 20, 25, 0.92);
+  -webkit-backdrop-filter: blur(6px);
+          backdrop-filter: blur(6px);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: var(--shadow-1);
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.sketch-dim:hover {
+  background: var(--accent-tint);
+  border-color: var(--accent-hot);
+  color: var(--accent-hot);
+}
+/* driven (reference) dimension: measured-only, shown bracketed + muted, read-only */
+.sketch-dim-driven {
+  border-style: dashed;
+  border-color: var(--text-dim, #8a90a0);
+  color: var(--text-dim, #8a90a0);
+  cursor: default;
+}
+.sketch-dim-driven:hover {
+  background: rgba(18, 20, 25, 0.92);
+  border-color: var(--text-dim, #8a90a0);
+  color: var(--text-dim, #8a90a0);
+}
+/* solver-flagged dimensions: red = conflicting, amber = redundant/over-defined */
+.sketch-dim.conflict { border-color: #ff4444; color: #ff4444; }
+.sketch-dim.over { border-color: #e0a020; color: #e0a020; }
+/* the dimension the Delete key will remove (set by a click or a right-click) */
+.sketch-dim.is-selected { outline: 2px solid var(--accent, #4a9eff); outline-offset: 1px; }
+/* non-select tools: labels visible but click-through (a label floating over a
+   circle center must not swallow the dimension/draw pick underneath) */
+.sketch-dims.dims-passive .sketch-dim {
+  pointer-events: none;
+  cursor: default;
+}
+/* constraint glyphs: small square badges showing a relationship's type */
+.sketch-glyphs { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.sketch-glyph {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 20, 25, 0.9);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 3px;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: var(--shadow-1);
+}
+.sketch-glyph:hover { border-color: var(--accent-hot); color: var(--accent-hot); }
+.sketch-glyph.conflict { border-color: #ff4444; color: #ff4444; }
+.sketch-glyph.over { border-color: #e0a020; color: #e0a020; }
+.sketch-glyphs.glyphs-passive .sketch-glyph { pointer-events: none; cursor: default; }
+.sketch-dim input {
+  width: 52px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  border-radius: var(--r-sm);
+}
+.sketch-dim input:focus {
+  outline: none;
+  border-color: var(--accent-hot);
+}

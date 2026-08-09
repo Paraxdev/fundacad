@@ -1,0 +1,224 @@
+/* ============================================================================
+   TITLEBAR
+   ============================================================================ */
+#titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: 0 var(--s-4);
+  background: linear-gradient(180deg, #181a20 0%, var(--panel) 100%);
+  border-bottom: 1px solid var(--line);
+  /* Let the row be narrower than its content (see #app). Deliberately NOT
+     `overflow: hidden`: .menu-popup is absolutely positioned at top:100%, i.e.
+     it hangs BELOW this 36px bar while still being a child of it, so clipping
+     here makes every File/Edit/View menu invisible. The shrinking is done by
+     .status giving up its width instead. */
+  min-width: 0;
+}
+
+/* brand lockup: the SindriCAD mark + wordmark (assets/brand, set in index.html) */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.brand img {
+  display: block;
+  height: 22px;
+  width: auto;
+}
+
+.context-tab {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
+  text-transform: uppercase;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease);
+}
+.context-tab.sketch {
+  color: var(--accent-hot);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  box-shadow: 0 0 0 1px var(--accent-tint-2);
+}
+
+/* ---- menu bar (File …) ---- */
+.menubar {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+.menu {
+  position: relative;
+  display: flex;
+}
+.menu-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 0 11px;
+  margin: 6px 1px;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.menu-btn:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+.menu-btn.active {
+  background: var(--raised);
+  color: var(--text);
+}
+.menu-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  padding: var(--s-1);
+  z-index: 2000;
+  animation: pop-in var(--t-fast) var(--ease);
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.menu-popup.hidden {
+  display: none;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.menu-item:hover {
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+}
+.menu-item[disabled] {
+  color: var(--text-mute);
+  pointer-events: none;
+}
+.menu-shortcut {
+  color: var(--text-mute);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.menu-item:hover .menu-shortcut {
+  color: var(--accent);
+}
+.menu-sep {
+  height: 1px;
+  background: var(--line);
+  margin: var(--s-1) var(--s-2);
+}
+/* titlebar undo/redo (mouse-visible; Ctrl+Z was the only affordance before) */
+.tb-btn {
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.tb-btn:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text);
+}
+.tb-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ---- "?" shortcut cheat-sheet HUD ---- */
+.shortcut-hud {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 11, 14, 0.6);
+}
+.shortcut-hud-card {
+  display: flex;
+  gap: var(--s-6);
+  padding: var(--s-6);
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  animation: pop-in var(--t-fast) var(--ease);
+  flex-wrap: wrap;
+  max-width: 900px;
+}
+.shortcut-hud-title {
+  flex-basis: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: var(--s-2);
+}
+.shortcut-hud-group h4 {
+  margin: 0 0 var(--s-2);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-mute);
+}
+.shortcut-hud-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.shortcut-hud-row kbd {
+  min-width: 54px;
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--accent-hot);
+  font-size: 11px;
+  font-family: inherit;
+  text-align: center;
+}
+.docname {
+  color: var(--text-mute);
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+.docname.dirty {
+  color: var(--text);
+}
