@@ -80,12 +80,19 @@ const REPEATS = 7;
             await new Promise((r) => setTimeout(r, 100));
           }
           const bodies = (window.store.buildState.result?.bodies ?? []).length;
-          // time the tree render ALONE: refresh() clears the signature guard and
-          // rebuilds the panel synchronously, so this excludes viewport work.
+          // Time the tree render ALONE: refresh() invalidates the panel's state
+          // and resolves once Vue has flushed the re-render, so this excludes
+          // viewport work.
+          //
+          // The await is load-bearing. The panel is a Vue component now and
+          // "render this now" is nextTick, so refresh() returns a PROMISE —
+          // without awaiting it, every sample times the bump alone (~0ms) and
+          // the benchmark cheerfully reports an enormous speedup that is not
+          // real. This script is excluded from CI, so nothing else would catch it.
           const samples = [];
           for (let i = 0; i < repeats; i++) {
             const a = performance.now();
-            window.tree.refresh();
+            await window.tree.refresh();
             samples.push(performance.now() - a);
           }
           samples.sort((x, y) => x - y);

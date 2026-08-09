@@ -7,11 +7,9 @@ export function createSelection(
   e: Engine,
 ): Pick<Engine, "selectFeature" | "editFeature" | "featureForFace" | "deleteSelectedFace"> {
   const selectFeature = (id: string | null) => {
-    // Writing the store is what updates the inspector AND the timeline — both
-    // render from it rather than being pushed at. The tree is still an
-    // imperative class, so it keeps its explicit select() call until converted.
+    // Writing the store is what updates the inspector, the timeline AND the
+    // browser tree — all three render from it rather than being pushed at.
     useSelectionStore().featureId = id;
-    e.ui.tree?.select(id);
     e.viewport.highlightDatum(id); // brighten the matching construction plane (if any)
   };
 

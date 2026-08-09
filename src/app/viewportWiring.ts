@@ -1,5 +1,6 @@
 import { setPrompt } from "../ui/prompt";
 import { dismissContextMenu } from "../ui/menu";
+import { useBrowserStore } from "../stores/browser";
 import type { Engine } from "./engine";
 
 /** Viewport callbacks and the two Escape listeners that clear its selections.
@@ -67,8 +68,14 @@ export function installViewportWiring(e: Engine): void {
     }
   });
 
+  // The Viewport owns the body selection and is not reactive, so mirror it into
+  // the browser store on every change. That is also what killed the tree's old
+  // `isBodySelected(id)` predicate, which allocated a fresh array and scanned it
+  // once PER BODY on every doc change and every build.
+  const browser = useBrowserStore();
+  browser.setSelectedBodies(e.viewport.getSelectedBodies());
   e.viewport.onBodySelectionChange = () => {
-    e.ui.tree.refresh();
+    browser.setSelectedBodies(e.viewport.getSelectedBodies());
     if (e.toolBusy()) return;
     const n = e.viewport.getSelectedBodies().length;
     setPrompt(n ? `${n} bod${n > 1 ? "ies" : "y"} selected — Move (M) to drag · Esc to clear` : null);

@@ -1,7 +1,9 @@
+import { nextTick } from "vue";
 import { solveSketch } from "../sketch/solver";
 import { isChoiceOpen, choose } from "../ui/choice";
 import { toast } from "../ui/toast";
 import { contextMenu, dismissContextMenu } from "../ui/menu";
+import { useBrowserStore } from "../stores/browser";
 import type { Engine } from "./engine";
 
 /** Debug handles for console + headless frontend-logic tests. Gated to DEV so
@@ -25,7 +27,18 @@ export function installDevGlobals(e: Engine): void {
   w.pressPull = e.tools.pressPull;
   w.textureTool = e.tools.texture;
   w.solveSketch = solveSketch;
-  w.tree = e.ui.tree;
+  // The browser tree is components/shell/BrowserPane.vue now, so this is a
+  // handle onto its store rather than onto a class. refresh() is ASYNC: "render
+  // this now" in Vue is nextTick, and the bump is what makes it a genuine
+  // re-render rather than a no-op — e2e/browser_tree_perf.cjs times exactly this
+  // call and would otherwise measure nothing and report a false speedup.
+  w.tree = {
+    refresh: async () => {
+      useBrowserStore().bumpView();
+      await nextTick();
+    },
+    beginRename: (id: string) => useBrowserStore().beginRename(id),
+  };
   // DEV-only handle for driving the app from outside (demo capture, e2e).
   w.__sindri = {
     store: e.store,

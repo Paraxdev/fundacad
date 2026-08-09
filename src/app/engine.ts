@@ -43,7 +43,6 @@ import { activePrinterId } from "../print/printerClient";
 
 import { useRibbonStore } from "../stores/ribbon";
 import { useCommandPaletteStore } from "../stores/commandPalette";
-import { BrowserTree } from "../ui/browserTree";
 import { SpaceMouseSettings } from "../ui/spaceMouseSettings";
 import { WelcomeScreen, welcomeOnStartup, warmAccount } from "../ui/welcome";
 import { scheduleStartupUpdateCheck } from "../ui/updates";
@@ -58,7 +57,6 @@ import { createDocumentActions } from "./documentActions";
 import { createDatumPlanes } from "./datumPlanes";
 import { createSketchVisibility } from "./sketchVisibility";
 import { installRebuildBridge } from "./rebuildBridge";
-import { installBrowserWiring } from "./browserWiring";
 import { installViewportWiring } from "./viewportWiring";
 import { installSketchStateBridge } from "./sketchStateBridge";
 import { createActions } from "./actions";
@@ -83,7 +81,6 @@ export interface EngineTools {
 }
 
 export interface EngineUi {
-  tree: BrowserTree;
   welcome: WelcomeScreen;
   spaceMouseSettings: SpaceMouseSettings;
   panels: ReturnType<typeof createPanels>;
@@ -258,28 +255,6 @@ export function mountUi(e: Engine): void {
       cmdk.toggle(e.sketch.active ? "sketch" : "model");
     }
   });
-  e.ui.tree = new BrowserTree(document.getElementById("browser")!, e.store);
-
-  // WebKitGTK quirk: wheel events over overflow panels don't reliably reach the
-  // native scroller (GTK kinetic scrolling eats them — measured fine in Chromium,
-  // dead in the webview), so drive the panel scroll explicitly. deltaMode-
-  // normalized like the viewport's zoom wheel.
-  //
-  // #inspector is a component now and owns its own copy of this (see
-  // InspectorPane.vue); #browser keeps this one until the tree is converted.
-  {
-    const el = document.getElementById("browser")!;
-    el.addEventListener(
-      "wheel",
-      (ev) => {
-        if (el.scrollHeight <= el.clientHeight) return;
-        const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 100 : 1;
-        el.scrollTop += ev.deltaY * unit;
-        ev.preventDefault();
-      },
-      { passive: false },
-    );
-  }
 
   e.ui.spaceMouseSettings = new SpaceMouseSettings();
   e.ui.welcome = new WelcomeScreen({
@@ -321,7 +296,6 @@ export function mountUi(e: Engine): void {
     viewport: e.viewport,
     sketch: e.sketch,
     measure: e.tools.measure,
-    tree: e.ui.tree,
     toolBusy: () => e.toolBusy(),
     setStatus: (t, c) => e.setStatus(t, c),
     selectFeature: (id) => e.selectFeature(id),
@@ -360,7 +334,6 @@ export function mountUi(e: Engine): void {
 
   installTitlebar(e);
   installViewportWiring(e);
-  installBrowserWiring(e);
   installRebuildBridge(e);
   installSketchStateBridge(e);
   installKeyboard(e);

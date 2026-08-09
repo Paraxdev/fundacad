@@ -8,7 +8,8 @@ import type { DocumentStore } from "../document/store";
 import type { Viewport } from "../viewport/viewport";
 import type { SketchMode } from "../sketch/sketchMode";
 import type { MeasureTool } from "../features/measureTool";
-import { BrowserTree, bodyColorMenuItems } from "./browserTree";
+import { bodyColorMenuItems } from "./browserTree";
+import { useBrowserStore } from "../stores/browser";
 import { contextMenu, type CtxItem } from "./menu";
 import { isInspectorEditable } from "../document/numFields";
 import { allCommands } from "./commands";
@@ -22,7 +23,6 @@ export interface ContextMenusDeps {
   viewport: Viewport;
   sketch: SketchMode;
   measure: MeasureTool;
-  tree: BrowserTree;
   toolBusy: () => boolean;
   setStatus: (text: string, cls: "" | "connected" | "error") => void;
   selectFeature: (id: string | null) => void;
@@ -44,7 +44,6 @@ export function createContextMenus(deps: ContextMenusDeps) {
     viewport,
     sketch,
     measure,
-    tree,
     toolBusy,
     setStatus,
     selectFeature,
@@ -87,7 +86,9 @@ export function createContextMenus(deps: ContextMenusDeps) {
       { label: "Sketch on plane", disabled: !f, onClick: unlessBusy(() => { if (f) sketch.enter(datumPlaneDef(f), store, undefined, f.id); }) },
       { label: "Offset plane", disabled: !f, onClick: unlessBusy(() => { if (f) offsetPlaneFromFace(datumPlaneDef(f)); }) },
       { separator: true, label: "" },
-      { label: "Hide plane", onClick: () => { store.setPlaneVisibility(datumId, false); syncDatumPlanes(); tree.refresh(); } },
+      // setPlaneVisibility deliberately emits nothing (a plane toggle costs no
+      // rebuild), so the browser is told by hand — see stores/browser.ts.
+      { label: "Hide plane", onClick: () => { store.setPlaneVisibility(datumId, false); syncDatumPlanes(); useBrowserStore().bumpView(); } },
       { label: "Delete plane", danger: true, onClick: unlessBusy(() => { store.removeFeature(datumId); selectFeature(null); }) },
     ]);
   }
@@ -149,7 +150,7 @@ export function createContextMenus(deps: ContextMenusDeps) {
       { label: "Isolate body", onClick: () => isolateBody(bodyId) },
       { label: "Show all bodies", shortcut: keyHint("show-all-bodies"), onClick: () => handleAction("show-all-bodies") },
       { separator: true, label: "" },
-      { label: "Rename…", onClick: () => tree.beginRename(bodyId) },
+      { label: "Rename…", onClick: () => useBrowserStore().beginRename(bodyId) },
       { label: "Color", children: bodyColorMenuItems(store, bodyId) },
       { separator: true, label: "" },
       { label: "Remove body", danger: true, onClick: unlessBusy(() => store.removeBody(bodyId)) },
@@ -189,16 +190,17 @@ export function createContextMenus(deps: ContextMenusDeps) {
     ]);
   }
 
+  // Both of these re-emit the build (see store.setBodiesVisibility), which is
+  // what repaints the browser — no explicit refresh, and none of the old
+  // "toggle N bodies, re-render N times" hazard either.
   function hideBody(id: string) {
     store.setBodyVisibility(id, false);
-    tree.refresh();
   }
 
   /** Show only this body (Onshape "Isolate"): hide every other body — one batched
    *  store update, ONE re-render. Undo is "Show all bodies" (Shift+H / the menus). */
   function isolateBody(id: string) {
     store.setBodiesVisibility(new Map((store.buildState.result?.bodies ?? []).map((b) => [b.id, b.id === id])));
-    tree.refresh();
   }
 
   function openCanvasMenu(x: number, y: number) {

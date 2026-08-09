@@ -29,7 +29,7 @@ const root = useTemplateRef<HTMLElement>("root");
 //
 // Attached by hand rather than with @wheel because it MUST be non-passive:
 // preventDefault is the whole point, and a passive listener would silently
-// no-op it. #browser keeps its copy in mountUi until the tree is converted.
+// no-op it. BrowserPane.vue carries the twin of this.
 function onWheel(ev: WheelEvent) {
   const el = root.value;
   if (!el || el.scrollHeight <= el.clientHeight) return;
