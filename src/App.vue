@@ -9,6 +9,7 @@ import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
 import InspectorPane from "./components/shell/InspectorPane.vue";
 import CommandPalette from "./components/overlays/CommandPalette.vue";
 import RibbonBar from "./components/shell/RibbonBar.vue";
+import TimelineBar from "./components/shell/TimelineBar.vue";
 import PropertiesPanel from "./components/overlays/PropertiesPanel.vue";
 import InterferencePanel from "./components/overlays/InterferencePanel.vue";
 import OverhangPanel from "./components/overlays/OverhangPanel.vue";
@@ -23,8 +24,7 @@ import ParamsDialog from "./components/overlays/ParamsDialog.vue";
        selects on them.
 
        The empty <div>s are mount points for the panels that are still
-       imperative classes (ui/browserTree.ts, ui/timeline.ts,
-       ui/menu.ts). app/engine.ts's
+       imperative class ui/browserTree.ts. app/engine.ts's
        mountUi() runs immediately after app.mount() and constructs them into
        these nodes by id, exactly as main.ts used to. Each one disappears from
        here as its component is converted. -->
@@ -35,7 +35,7 @@ import ParamsDialog from "./components/overlays/ParamsDialog.vue";
     <ViewportPane />
     <InspectorPane />
   </div>
-  <footer id="timeline"></footer>
+  <TimelineBar />
 
   <!-- Global overlays. Each Teleports to body, which is where the imperative
        versions appended themselves — they must not inherit a stacking context

@@ -5,32 +5,29 @@
 //
 // Exactly one component may use it: Icon.vue, over icons.ts's compile-time
 // constant path table. This test is the enforcement.
+//
+// Sources come from import.meta.glob rather than node:fs so the check needs no
+// @types/node and no __dirname — it is Vite reading the same files it builds.
 
 import { describe, it, expect } from "vitest";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+
+const sources = import.meta.glob("./**/*.vue", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
 
 const ALLOWED = ["Icon.vue"];
 
-function vueFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) return vueFiles(p);
-    return name.endsWith(".vue") ? [p] : [];
-  });
-}
-
 describe("v-html policy", () => {
-  const files = vueFiles(join(__dirname));
-
   it("finds the components to check", () => {
-    expect(files.length).toBeGreaterThan(10);
+    expect(Object.keys(sources).length).toBeGreaterThan(10);
   });
 
   it("is used only by Icon.vue", () => {
-    const offenders = files
-      .filter((f) => /\bv-html\b/.test(readFileSync(f, "utf8")))
-      .map((f) => f.split(/[\\/]/).pop()!)
+    const offenders = Object.entries(sources)
+      .filter(([, src]) => /\bv-html\b/.test(src))
+      .map(([path]) => path.split("/").pop()!)
       .filter((name) => !ALLOWED.includes(name));
 
     // If this fails: use {{ }} or a :attr binding instead. If the content is

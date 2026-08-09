@@ -43,7 +43,6 @@ import { activePrinterId } from "../print/printerClient";
 
 import { useRibbonStore } from "../stores/ribbon";
 import { useCommandPaletteStore } from "../stores/commandPalette";
-import { Timeline } from "../ui/timeline";
 import { BrowserTree } from "../ui/browserTree";
 import { SpaceMouseSettings } from "../ui/spaceMouseSettings";
 import { WelcomeScreen, welcomeOnStartup, warmAccount } from "../ui/welcome";
@@ -84,7 +83,6 @@ export interface EngineTools {
 }
 
 export interface EngineUi {
-  timeline: Timeline;
   tree: BrowserTree;
   welcome: WelcomeScreen;
   spaceMouseSettings: SpaceMouseSettings;
@@ -260,7 +258,6 @@ export function mountUi(e: Engine): void {
       cmdk.toggle(e.sketch.active ? "sketch" : "model");
     }
   });
-  e.ui.timeline = new Timeline(document.getElementById("timeline")!, e.store);
   e.ui.tree = new BrowserTree(document.getElementById("browser")!, e.store);
 
   // WebKitGTK quirk: wheel events over overflow panels don't reliably reach the

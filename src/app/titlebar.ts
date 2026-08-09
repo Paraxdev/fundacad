@@ -1,5 +1,6 @@
 import { ambiguousDiagFor } from "../features/repickReference";
 import { useUiStore } from "../stores/ui";
+import { useTimelineStore } from "../stores/timeline";
 import type { Engine } from "./engine";
 
 /** Feeds the titlebar's reactive state and wires the timeline's callbacks.
@@ -21,14 +22,16 @@ export function installTitlebar(e: Engine): void {
     ui.dirty = e.store.dirty;
   });
 
-  e.ui.timeline.onSelect = (id) => e.selectFeature(id);
-  e.ui.timeline.onEdit = (id) => e.editFeature(id);
-  // Read the diagnostics off the LATEST build each time rather than caching: the
-  // menu opens long after the build, and a feature repaired in between must stop
-  // offering the repair.
-  e.ui.timeline.canRepick = (id) => !!ambiguousDiagFor(e.store.buildState.result?.diagnostics, id);
-  e.ui.timeline.onRepick = (id) => {
-    const amb = ambiguousDiagFor(e.store.buildState.result?.diagnostics, id);
-    if (amb?.at) e.starters.repickReference(id, amb.at);
-  };
+  useTimelineStore().bind({
+    onSelect: (id) => e.selectFeature(id),
+    onEdit: (id) => e.editFeature(id),
+    // Read the diagnostics off the LATEST build each time rather than caching: the
+    // menu opens long after the build, and a feature repaired in between must stop
+    // offering the repair.
+    canRepick: (id) => !!ambiguousDiagFor(e.store.buildState.result?.diagnostics, id),
+    onRepick: (id) => {
+      const amb = ambiguousDiagFor(e.store.buildState.result?.diagnostics, id);
+      if (amb?.at) e.starters.repickReference(id, amb.at);
+    },
+  });
 }
