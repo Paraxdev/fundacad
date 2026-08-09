@@ -233,7 +233,11 @@ describe("describeImportCapability", () => {
   it("warns gently just past the smooth limit", () => {
     const msg = describeImportCapability(1500);
     expect(msg).not.toBeNull();
-    expect(msg!).toContain("1,500");
+    // toLocaleString(), not a hard-coded "1,500": the message groups the count
+    // for whoever is reading it, so the separator is the RUNTIME's, and pinning
+    // the en-US spelling fails on any machine with a different locale (de-DE
+    // renders 1.500) while telling us nothing about the behaviour.
+    expect(msg!).toContain((1500).toLocaleString());
     expect(msg!).toMatch(/still works/i);   // reassures: not a refusal
     expect(msg!).not.toMatch(/27-37/);      // the harsher figure is for later
   });
@@ -241,7 +245,7 @@ describe("describeImportCapability", () => {
   it("is blunt about a document past the slow limit, and says what still works", () => {
     const msg = describeImportCapability(3060);
     expect(msg).not.toBeNull();
-    expect(msg!).toContain("3,060");
+    expect(msg!).toContain((3060).toLocaleString());
     expect(msg!).toContain("27-37 fps");    // the measured number, not a vague "slow"
     // The user needs to know this is a VIEWPORT limit, not a broken import —
     // otherwise the natural conclusion is that the file failed to load.
