@@ -16,11 +16,11 @@ import type { Feature, Selector } from "../types";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
 import { snap } from "../ui/units";
-import { axisDragDistance } from "./manipulator";
+import { axisDragDistance, createArrowHandle, disposeArrowHandle, HANDLE_UP } from "./manipulator";
 
 type Phase = "pick" | "drag";
 
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const Y_AXIS = HANDLE_UP;
 const HANDLE_IDLE = 0xffc83d; // amber (pull / add)
 const HANDLE_HOT = 0xffe9a8; // brighter when hovered/grabbed
 const HANDLE_CUT = 0xff6b5c; // red when pushing in (cut)
@@ -270,22 +270,11 @@ export class PressPullTool {
     this.viewport.setPressPullGhost(this.faceIds, this.value);
   }
 
-  /** A small arrow built in pixel units; tick() scales it to constant screen size.
-   *  depthTest off + high renderOrder so it's always visible and grabbable. */
   private buildGizmo() {
-    const mat = new THREE.MeshBasicMaterial({ color: HANDLE_IDLE, depthTest: false, depthWrite: false });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 34, 12), mat);
-    shaft.position.y = 6 + 17; // gap off the face + half the shaft length
-    const head = new THREE.Mesh(new THREE.ConeGeometry(5, 13, 18), mat);
-    head.position.y = 6 + 34 + 6.5;
-    const g = new THREE.Group();
-    g.add(shaft, head);
-    g.renderOrder = 999;
-    shaft.renderOrder = 999;
-    head.renderOrder = 999;
-    this.gizmoMat = mat;
-    this.gizmo = g;
-    this.viewport.addToScene(g);
+    const { group, material } = createArrowHandle(HANDLE_IDLE);
+    this.gizmoMat = material;
+    this.gizmo = group;
+    this.viewport.addToScene(group);
   }
 
   private hitGizmo(x: number, y: number): boolean {
@@ -368,12 +357,9 @@ export class PressPullTool {
   }
 
   private disposeGizmo() {
-    if (!this.gizmo) return;
+    if (!this.gizmo || !this.gizmoMat) return;
     this.viewport.removeFromScene(this.gizmo);
-    for (const child of this.gizmo.children) {
-      if (child instanceof THREE.Mesh) child.geometry.dispose();
-    }
-    this.gizmoMat?.dispose();
+    disposeArrowHandle(this.gizmo, this.gizmoMat);
     this.gizmo = null;
     this.gizmoMat = null;
   }
