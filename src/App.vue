@@ -7,6 +7,7 @@ import PrintStatusPill from "./components/overlays/PrintStatusPill.vue";
 import ShortcutHud from "./components/overlays/ShortcutHud.vue";
 import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
 import InspectorPane from "./components/shell/InspectorPane.vue";
+import CommandPalette from "./components/overlays/CommandPalette.vue";
 </script>
 
 <template>
@@ -38,4 +39,5 @@ import InspectorPane from "./components/shell/InspectorPane.vue";
   <PrintStatusPill />
   <ShortcutHud />
   <ContextMenuHost />
+  <CommandPalette />
 </template>

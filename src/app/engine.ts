@@ -42,7 +42,7 @@ import { setPrinterPillClick } from "../print/printStatusLine";
 import { activePrinterId } from "../print/printerClient";
 
 import { Ribbon } from "../ui/ribbon";
-import { CommandPalette } from "../ui/commandPalette";
+import { useCommandPaletteStore } from "../stores/commandPalette";
 import { Timeline } from "../ui/timeline";
 import { BrowserTree } from "../ui/browserTree";
 import { SpaceMouseSettings } from "../ui/spaceMouseSettings";
@@ -85,7 +85,6 @@ export interface EngineTools {
 
 export interface EngineUi {
   ribbon: Ribbon;
-  cmdk: CommandPalette;
   timeline: Timeline;
   tree: BrowserTree;
   welcome: WelcomeScreen;
@@ -250,12 +249,15 @@ export function mountUi(e: Engine): void {
   e.ui.ribbon = new Ribbon(document.getElementById("ribbon")!);
   e.ui.ribbon.onAction = (a) => e.handleAction(a);
 
-  // Cmd/Ctrl-K command palette — search + run any command (discoverability safety net)
-  e.ui.cmdk = new CommandPalette((a) => e.handleAction(a));
+  // Cmd/Ctrl-K command palette — search + run any command (discoverability safety net).
+  // The overlay is components/overlays/CommandPalette.vue; this keeps the one
+  // binding that has to be global, because the palette must open from anywhere.
+  const cmdk = useCommandPaletteStore();
+  cmdk.bind((a) => e.handleAction(a));
   window.addEventListener("keydown", (ev) => {
     if ((ev.ctrlKey || ev.metaKey) && (ev.key === "k" || ev.key === "K")) {
       ev.preventDefault();
-      e.ui.cmdk.toggle(e.sketch.active ? "sketch" : "model");
+      cmdk.toggle(e.sketch.active ? "sketch" : "model");
     }
   });
   e.ui.timeline = new Timeline(document.getElementById("timeline")!, e.store);
