@@ -92,10 +92,30 @@ export function installViewportWiring(e: Engine): void {
     if (!e.sketch.active) e.overlay.update(e.store.document);
   });
 
-  // --- selected-edge hint: tells you pre-selection is usable by Fillet/Chamfer ---
+  // --- selecting an edge offers the drag handle straight away ---------------
+  // The old behaviour was a prompt line and nothing else: the edge lit up, and
+  // you were expected to know that Fillet or Chamfer would consume it. The
+  // handle puts the offer where the edge is; the prompt now explains the handle
+  // rather than substituting for it.
   e.viewport.onSelectionChange = () => {
+    const edges = e.viewport.selectedEdgeLines();
+    e.edgeNudge.showFor(edges);
     if (e.toolBusy()) return;
-    const n = e.viewport.selectedEdgeSelectors().length;
-    setPrompt(n ? `${n} edge${n > 1 ? "s" : ""} selected — Fillet or Chamfer to apply · Esc to clear` : null);
+    const n = edges.length;
+    setPrompt(
+      n
+        ? `${n} edge${n > 1 ? "s" : ""} selected — drag the arrow to round it off (Tab switches to a chamfer) · Esc to clear`
+        : null,
+    );
   };
+
+  // A completed rebuild replaces the mesh and renumbers topology, so the
+  // handle's anchor — and the edge selection it was drawn from — refer to
+  // objects that no longer exist. Same staleness reasoning as dismissing the
+  // context menu above, and the same fix: drop it rather than let it act on a
+  // stale target. Re-selecting the edge brings it back.
+  e.store.onBuild((s) => {
+    if (s.result && !s.building) e.edgeNudge.hide();
+  });
+  e.store.onDocChange(() => e.edgeNudge.hide());
 }

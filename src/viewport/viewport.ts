@@ -451,8 +451,14 @@ export class Viewport {
     if (this.selectionMode === m) return;
     this.selectionMode = m;
     // switching clears the other kind of selection so paint never mixes
-    if (m === "bodies") this.highlighter?.clearSelection();
-    else {
+    if (m === "bodies") {
+      this.highlighter?.clearSelection();
+      // ...and it must SAY so. This cleared the edge/face selection silently,
+      // which left the "N edges selected" prompt standing over a selection that
+      // no longer existed — and now would leave the edge drag handle floating
+      // over an edge nothing is holding.
+      this.onSelectionChange?.();
+    } else {
       this.highlighter?.clearBodySelection();
       this.onBodySelectionChange?.();
     }
@@ -758,6 +764,13 @@ export class Viewport {
         q.userData.datumId === id ? 0.32 : 0.12;
     }
     this.requestRender();
+  }
+
+  /** The currently selected edge lines themselves — for the selection handle,
+   *  which needs their polylines (midpoint + tangent) rather than the
+   *  rebuild-stable selectors those polylines get turned into. */
+  selectedEdgeLines(): EdgeRef[] {
+    return this.highlighter?.getSelectedEdges() ?? [];
   }
 
   /** Selectors for the currently selected edges (for pre-selected fillet/chamfer). */

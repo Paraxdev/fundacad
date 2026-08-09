@@ -26,6 +26,7 @@ import { crumb } from "../diagnostics/breadcrumbs";
 
 import { ExtrudeTool } from "../features/extrudeTool";
 import { EdgeFeatureTool } from "../features/edgeFeatureTool";
+import { EdgeNudge } from "../features/edgeNudge";
 import { PressPullTool } from "../features/pressPullTool";
 import { FaceOffsetTool } from "../features/faceOffsetTool";
 import { LoftTool } from "../features/loftTool";
@@ -94,6 +95,10 @@ export interface Engine {
   overlay: SketchOverlay;
   sketch: SketchMode;
   tools: EngineTools;
+  /** The arrow offered on an edge selection. Deliberately NOT in `tools`: it
+   *  holds no document state and must never appear in toolBusy(), or selecting
+   *  an edge would silently disable every command in the app. */
+  edgeNudge: EdgeNudge;
   ui: EngineUi;
 
   starters: ReturnType<typeof createFeatureStarters>;
@@ -207,6 +212,13 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
     planeOffset: new PlaneOffsetTool(e.viewport),
     texture: new TextureTool(e.viewport, e.store),
   };
+
+  // Reads e.toolBusy and e.starters, both assigned below/in mountUi — hence the
+  // thunks, the same late binding every other block in this file uses.
+  e.edgeNudge = new EdgeNudge(e.viewport, {
+    toolBusy: () => e.toolBusy(),
+    onGrab: (x, y, tangent) => e.starters.grabEdgeHandle(x, y, tangent),
+  });
 
   // Warm up the constraint solver WASM. Deliberately ignores failure: initSolver
   // resolves false rather than rejecting, so a runtime that cannot compile the

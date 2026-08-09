@@ -3,6 +3,7 @@
 // Shell, Draft, Pattern, Scale, Move, Press/Pull…) plus the interactive
 // plane/face pickers they share. Each closes over the same large set of
 // singletons/state owned by main.ts, passed in once via createFeatureStarters.
+import type * as THREE from "three";
 import type { DocumentStore } from "../document/store";
 import type { Viewport } from "../viewport/viewport";
 import type { SketchOverlay } from "../sketch/overlay";
@@ -68,13 +69,26 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
 
   // Interactive Fillet / Chamfer: pick an edge (or use a Ctrl-click pre-selection),
   // then drag an arrow to scrub the radius/distance with a live sidecar preview.
+  const edgeFeatureDone = (id: string | null) => { noteCommitted(id); if (id) selectFeature(id); };
   const startFillet = () => {
     if (toolBusy()) return;
-    edgeFeature.start("fillet", (id) => { noteCommitted(id); if (id) selectFeature(id); });
+    edgeFeature.start("fillet", edgeFeatureDone);
   };
   const startChamfer = () => {
     if (toolBusy()) return;
-    edgeFeature.start("chamfer", (id) => { noteCommitted(id); if (id) selectFeature(id); });
+    edgeFeature.start("chamfer", edgeFeatureDone);
+  };
+  /** The selection handle (features/edgeNudge.ts) was pressed: arm the same
+   *  tool, from the same pre-selection, but already holding the arrow — the
+   *  press that summons the tool is the press that drags it.
+   *
+   *  It opens on FILLET because that is much the more common answer and one Tab
+   *  reaches the other. Opening on a mode the user has to choose first would put
+   *  a decision back in front of the gesture, which is the thing this flow
+   *  exists to stop doing. */
+  const grabEdgeHandle = (x: number, y: number, tangent: THREE.Vector3 | null) => {
+    if (toolBusy()) return;
+    edgeFeature.start("fillet", edgeFeatureDone, { tangent, grabAt: { x, y } });
   };
   // Interactive Press/Pull: pick a solid face, then drag an arrow along its normal
   // to add/cut material (planar) or offset a curved face — with a live preview.
@@ -655,6 +669,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     cancelPlanePick,
     startFillet,
     startChamfer,
+    grabEdgeHandle,
     startPressPull,
     startSketch,
     offsetPlane,
