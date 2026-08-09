@@ -17,14 +17,33 @@ import type { Feature, Selector } from "../types";
 import { midMatchTol, polylineMid, edgeSelectorFrom } from "../viewport/edgeMatch";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
-import { snap } from "../ui/units";
-import { axisDragDistance } from "./manipulator";
+import {
+  axisDragDistance,
+  createArrowHandle,
+  disposeArrowHandle,
+  edgeHandleAxis,
+  HANDLE_UP,
+} from "./manipulator";
+import { fmtLength } from "../ui/units";
+import {
+  clampValue,
+  dragBounds,
+  MIN_EDGE_VALUE,
+  otherTreatment,
+  scrubValue,
+  seedValue,
+  switchTreatment,
+  treatmentField,
+  treatmentLabel,
+  type EdgeTreatment,
+  type ValueBounds,
+} from "./edgeDragMath";
 
 type Phase = "pick" | "drag";
-type Kind = "fillet" | "chamfer";
+type Kind = EdgeTreatment;
 type Vec3 = [number, number, number];
 
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const Y_AXIS = HANDLE_UP;
 const HANDLE_IDLE = 0xffc83d; // amber
 const HANDLE_HOT = 0xffe9a8; // brighter when hovered/grabbed
 // Ghost member lines (edit mode): drawn on top of the live preview, where the
@@ -67,11 +86,16 @@ export class EdgeFeatureTool {
   private editId: string | null = null; // committed feature id being edited
   private awaitingRollback = false; // waiting for the rolled-back model build
   private unsubBuild: (() => void) | null = null;
+  /** the last completed rebuild refused this value on at least one member edge */
+  private previewFailed = false;
 
   private gizmo: THREE.Group | null = null;
   private gizmoMat: THREE.MeshBasicMaterial | null = null;
   private hovering = false;
   private grabbing = false;
+  /** true when this drag began on the passive selection handle rather than on
+   *  our own gizmo — a one-press gesture, so releasing it commits (see onUp). */
+  private fluentGrab = false;
   private grabValue = 0; // value at grab start (relative drag)
   private grabProj = 0; // axis projection at grab start
   private downPos = { x: 0, y: 0 };
@@ -99,13 +123,39 @@ export class EdgeFeatureTool {
   }
 
   private get field() {
-    return this.kind === "fillet"
-      ? { name: "radius", label: "R" }
-      : { name: "distance", label: "D" };
+    return treatmentField(this.kind);
   }
 
-  start(kind: Kind, onDone: (id: string | null) => void) {
+  /** Bounds for a DRAGGED value at the handle's current position: floored at
+   *  one zoom-scaled snap step, capped relative to the model's size. Recomputed
+   *  per drag rather than cached because both inputs move — the snap step with
+   *  the zoom, the diagonal with the model. */
+  private bounds(): ValueBounds {
+    const bb = this.store.buildState.result?.bbox;
+    const diag = bb
+      ? Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2])
+      : null;
+    return dragBounds(this.viewport.snapStep(this.anchor), diag);
+  }
+
+  /** `opts` is the direct-manipulation entry (features/edgeNudge.ts): the user
+   *  pressed on the handle that appears the moment an edge is selected, so we
+   *  arm from that pre-selection AND begin scrubbing inside the same
+   *  pointerdown. `tangent` is the handle's, adopted rather than recomputed so
+   *  the arrow does not jump at the instant of the grab. */
+  start(
+    kind: Kind,
+    onDone: (id: string | null) => void,
+    opts?: { tangent?: THREE.Vector3 | null; grabAt?: { x: number; y: number } },
+  ) {
     if (this.active) return;
+    // The direct-manipulation entry needs the selection its handle was drawn
+    // for. If a rebuild landed between the paint and the press, arming into the
+    // pick phase would be a bait-and-switch into a tool nobody asked for — and
+    // it would hold toolBusy() until noticed. Refuse before anything is
+    // installed rather than arm and unwind.
+    const pre = this.viewport.selectedEdgeSelectors();
+    if (opts?.grabAt && !pre.length) return;
     this.active = true;
     this.kind = kind;
     this.phase = "pick";
@@ -119,13 +169,29 @@ export class EdgeFeatureTool {
     el.addEventListener("pointerup", this.boundUp);
     window.addEventListener("keydown", this.boundKey, true);
 
-    // pre-selection (Ctrl-click): skip the pick phase and go straight to the drag
-    const pre = this.viewport.selectedEdgeSelectors();
+    // pre-selection (Ctrl-click, or the selection handle): skip the pick phase
+    // and go straight to the drag
     if (pre.length) {
-      this.beginDrag(pre, this.anchorFromSelectors(pre), null);
+      this.beginDrag(pre, this.anchorFromSelectors(pre), opts?.tangent ?? null);
+      if (opts?.grabAt) this.grabHandle(opts.grabAt.x, opts.grabAt.y);
     } else {
       setPrompt(`Select an edge to ${kind} (Ctrl-click first to pre-select several)`);
     }
+  }
+
+  /** Take hold of the arrow at (x, y) without a fresh pointerdown of our own —
+   *  the press that started the gesture landed on the passive selection handle,
+   *  before this tool existed. Everything after this point is the ordinary
+   *  drag: the same onMove scrub, the same onUp release. */
+  private grabHandle(clientX: number, clientY: number) {
+    if (this.phase !== "drag") return;
+    this.grabbing = true;
+    this.fluentGrab = true;
+    this.downOnGizmo = true;
+    this.downPos = { x: clientX, y: clientY };
+    this.grabValue = this.value;
+    this.grabProj = axisDragDistance(this.viewport, clientX, clientY, this.anchor, this.axis);
+    this.viewport.domElement.style.cursor = "grabbing";
   }
 
   /** Re-open a committed fillet/chamfer for editing: the model rolls back to
@@ -170,18 +236,30 @@ export class EdgeFeatureTool {
     // the sharp member edges, which we snapshot as ghosts before pushing the
     // live preview back on top of them.
     this.store.beginEditPreview(featureId);
+    this.watchBuilds(sels);
+    return true;
+  }
+
+  /** Watch completed rebuilds for the whole gesture.
+   *
+   *  Edit mode also uses the FIRST one to snapshot the rolled-back sharp edges
+   *  (pass its saved selectors); create mode passes null and only wants the
+   *  failure feedback. Create mode used to subscribe to nothing at all, so a
+   *  radius the kernel refused mid-drag registered as "the preview stopped
+   *  changing" — no red edges, no message, nothing to tell you the drag had
+   *  gone past what the geometry allows. */
+  private watchBuilds(rollbackSels: Selector[] | null) {
     this.unsubBuild = this.store.onBuild((s) => {
       if (s.building || !s.result) return;
-      if (this.awaitingRollback) {
+      if (this.awaitingRollback && rollbackSels) {
         this.awaitingRollback = false;
-        this.seedGhosts(sels);
+        this.seedGhosts(rollbackSels);
         this.enterEditUI();
         this.pushPreview();
-      } else if (this.editId) {
-        this.recolorGhostsFromDiagnostics(s.result.diagnostics);
+        return;
       }
+      this.recolorGhostsFromDiagnostics(s.result.diagnostics);
     });
-    return true;
   }
 
   /** Match each saved selector to a rendered sharp edge and build its ghost.
@@ -339,16 +417,92 @@ export class EdgeFeatureTool {
     const s = this.viewport.projectToScreen(this.anchor);
     this.dim.position(s.x, s.y);
     this.dim.updateFromCursor({ [this.field.name]: this.value });
-    setPrompt(
-      `Editing ${this.kind}: click an edge to add or remove it · drag the arrow or type a value · ` +
-        `Enter/click empty space to apply · Esc to cancel (later features are hidden while editing)`,
-    );
+    this.promptForPhase();
     if (!this.raf) this.raf = requestAnimationFrame(this.boundTick);
   }
 
   /** The full member selector set (ghosted + unmatched saved selectors). */
   private currentSelectors(): Selector[] {
     return [...this.unmatchedSels, ...this.ghosts.map((g) => g.sel)];
+  }
+
+  /** Fillet ↔ chamfer without leaving the gesture.
+   *
+   *  The number carries across untouched — a radius and a setback are the same
+   *  magnitude off the same edge — so the only real work is re-labelling the
+   *  heads-up input, and DimInput builds its fields once in show(), so that
+   *  means tearing the box down and putting it back under the new field name. */
+  private flipKind() {
+    if (this.phase !== "drag") return;
+    const prevName = this.field.name;
+    const typed = this.dim.isUserDriven(prevName);
+    if (typed) {
+      const v = this.dim.getValue(prevName);
+      if (v != null) this.value = v; // a typed number outranks the drag's
+    }
+    // A typed number is the user's, not the drag's: hold it to the absolute
+    // floor only. Re-clamping it to the DRAG bounds would round a deliberate
+    // 0.2 mm up to whatever the current zoom's snap step happens to be.
+    const bounds = typed ? { min: MIN_EDGE_VALUE, max: Infinity } : this.bounds();
+    const next = switchTreatment(this.kind, this.value, bounds);
+    // Editing a committed feature whose OTHER field is parameter-driven: the
+    // commit would silently drop the expression, so refuse the flip the same
+    // way startEdit refuses to open a bound value at all.
+    if (
+      this.editId &&
+      this.store.isParamBound({
+        kind: "feature",
+        feature: this.editId,
+        field: treatmentField(next.kind).name,
+      })
+    ) {
+      setPrompt(
+        `Can't switch: this feature's ${treatmentField(next.kind).name} is driven by a parameter — ` +
+          `change it in the inspector · Esc to cancel`,
+      );
+      return;
+    }
+    this.kind = next.kind;
+    this.value = next.value;
+    this.dim.hide();
+    this.dim.show([{ ...this.field, kind: "length" }], () => this.commit(), () => this.cancel());
+    if (typed) this.dim.seed(this.field.name, this.value);
+    else this.dim.updateFromCursor({ [this.field.name]: this.value });
+    const s = this.viewport.projectToScreen(this.anchor);
+    this.dim.position(s.x, s.y);
+    this.pushPreview();
+    this.promptForPhase();
+  }
+
+  /** The drag-phase prompt.
+   *
+   *  One function because four things move under it — the treatment, the member
+   *  count, create-vs-edit, and whether the kernel is currently refusing the
+   *  value — and the three hand-written copies this replaced had already
+   *  drifted apart on which keys they bothered to mention. */
+  private promptForPhase() {
+    const n = this.currentSelectors().length;
+    if (!n) {
+      setPrompt("No edges selected — click an edge to add one · Esc to cancel");
+      return;
+    }
+    if (this.previewFailed) {
+      // The red ghosts say WHICH edge; this says what to do about it. Without
+      // it a too-large radius just looks like the drag stopped working.
+      setPrompt(
+        `${treatmentLabel(this.kind)} ${fmtLength(this.value)} won't build on the red edge${n === 1 ? "" : "s"} — ` +
+          `drag smaller, Tab to try a ${otherTreatment(this.kind)}, or Esc to cancel`,
+      );
+      return;
+    }
+    const verb = this.editId ? "Editing" : "Creating";
+    const apply = this.editId ? "apply" : "commit";
+    setPrompt(
+      `${verb} ${this.kind}: ${n} edge${n === 1 ? "" : "s"} · drag the arrow or type a ${this.field.name} · ` +
+        `Tab switches to ${otherTreatment(this.kind)} · click edges to add/remove · ` +
+        `Enter or click empty space to ${apply} · Esc to cancel` +
+        (this.editId ? " (later features are hidden while editing)" : ""),
+    );
   }
 
   /** Route the live preview to the right store channel: edit mode replaces the
@@ -360,11 +514,24 @@ export class EdgeFeatureTool {
   }
 
   /** Paint ghosts red when the sidecar's failure probe names their edge (the
-   *  edgeOpFailed diagnostic carries the failed edges' midpoints). */
+   *  edgeOpFailed diagnostic carries the failed edges' midpoints), and say so
+   *  in the prompt.
+   *
+   *  Deliberately advisory: the commit is NOT blocked by it. Rebuilds coalesce
+   *  during a drag, so the newest diagnostic can lag the value by one
+   *  round-trip — refusing a commit off it would sometimes reject a value that
+   *  builds fine. A feature that fails is already a recoverable, visible,
+   *  editable state everywhere else in this app; a commit that silently didn't
+   *  happen is not. */
   private recolorGhostsFromDiagnostics(diags: import("../types").ResolveDiag[] | undefined) {
     const entry = diags?.find(
       (d) => d.kind === "edgeOpFailed" && d.feature_id === this.previewId && d.failed?.length,
     );
+    const failedNow = !!entry;
+    if (failedNow !== this.previewFailed) {
+      this.previewFailed = failedNow;
+      this.promptForPhase();
+    }
     const bb = this.store.buildState.result?.bbox;
     const diag = bb
       ? Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2])
@@ -387,12 +554,14 @@ export class EdgeFeatureTool {
       return;
     }
     if (this.grabbing) {
-      const proj = axisDragDistance(this.viewport, e.clientX, e.clientY, this.anchor, this.axis);
-      // snap to a clean step that scales with zoom (5/1/0.5/0.1mm), so the
-      // radius/distance reads as a round number rather than 0.3425.
-      const raw = this.grabValue + (proj - this.grabProj);
       const step = this.viewport.snapStep(this.anchor);
-      const stepped = Math.max(step, snap(raw, step));
+      const stepped = scrubValue({
+        grabValue: this.grabValue,
+        grabProj: this.grabProj,
+        proj: axisDragDistance(this.viewport, e.clientX, e.clientY, this.anchor, this.axis),
+        step,
+        bounds: this.bounds(),
+      });
       if (stepped === this.value) return; // same step — don't re-trigger an OCCT rebuild
       this.value = stepped;
       this.dim.updateFromCursor({ [this.field.name]: this.value });
@@ -464,8 +633,22 @@ export class EdgeFeatureTool {
   private onUp(e: PointerEvent) {
     if (e.button !== 0 || this.phase !== "drag") return;
     if (this.grabbing) {
+      const moved =
+        Math.abs(e.clientX - this.downPos.x) > 3 || Math.abs(e.clientY - this.downPos.y) > 3;
       this.grabbing = false;
+      // A gesture that began on the selection handle is ONE press: press, drag,
+      // release, done — that is the whole point of the affordance, and leaving
+      // the tool armed after the release would strand the user in a modal state
+      // they never opted into. A press that never moved is not a drag though;
+      // it stays armed so a stray click on the arrow can't commit a default
+      // 2 mm fillet, and so clicking the handle is a way IN to the full tool.
+      if (this.fluentGrab && moved) {
+        this.commit();
+        return;
+      }
+      this.fluentGrab = false;
       this.viewport.domElement.style.cursor = this.hovering ? "grab" : "default";
+      if (!moved) this.promptForPhase();
       return;
     }
     // a clean click on empty space (no orbit drag) commits
@@ -475,7 +658,21 @@ export class EdgeFeatureTool {
   }
 
   private onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") this.cancel();
+    if (e.key === "Escape") {
+      this.cancel();
+      return;
+    }
+    // Tab flips fillet ↔ chamfer and carries the number across, mid-drag and
+    // all. Capture phase, so it reaches us whether focus sits in the heads-up
+    // input or on the canvas — and so DimInput's own Tab (move to the next
+    // field) never sees it. Nothing is lost there: fillet and chamfer each
+    // show exactly ONE field, so tabbing between fields was already a no-op
+    // that only had the side effect of locking the field against the drag.
+    if (e.key === "Tab" && this.phase === "drag") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.flipKind();
+    }
   }
 
   private beginDrag(
@@ -500,10 +697,10 @@ export class EdgeFeatureTool {
     this.anchor.copy(anchor);
     this.tangent = tangent;
     this.phase = "drag";
-    this.value = this.kind === "fillet" ? 2 : 1;
-    this.previewId = this.store.nextId();
     this.axis.copy(this.computeAxis());
     this.quat.setFromUnitVectors(Y_AXIS, this.axis);
+    this.value = seedValue(this.kind, this.bounds()); // needs the anchor, hence here
+    this.previewId = this.store.nextId();
     // keep edges emphasized: more edges can be clicked into the set mid-drag
     this.viewport.clearHover();
     this.buildGizmo();
@@ -511,11 +708,9 @@ export class EdgeFeatureTool {
     const s = this.viewport.projectToScreen(this.anchor);
     this.dim.position(s.x, s.y);
     this.dim.updateFromCursor({ [this.field.name]: this.value });
-    setPrompt(
-      `Drag the arrow to set ${this.field.name} · type a value + Enter · ` +
-        `click edges to add/remove them · click empty space to commit · Esc to cancel`,
-    );
+    this.promptForPhase();
     this.pushPreview();
+    if (!this.unsubBuild) this.watchBuilds(null); // create mode: failure feedback only
     this.raf = requestAnimationFrame(this.boundTick);
   }
 
@@ -533,7 +728,9 @@ export class EdgeFeatureTool {
       if (!this.grabbing && this.dim.isUserDriven(this.field.name)) {
         const v = this.dim.getValue(this.field.name);
         if (v != null && Math.abs(v - this.value) > 1e-6) {
-          this.value = Math.max(0.001, v);
+          // a TYPED value is held only to the absolute floor: the drag's
+          // zoom-scaled step has no business rounding a number someone chose.
+          this.value = clampValue(v, { min: MIN_EDGE_VALUE, max: Infinity });
           this.pushPreview();
         }
       }
@@ -541,34 +738,15 @@ export class EdgeFeatureTool {
     }
   }
 
-  /** Drag axis: perpendicular to the edge and lying in the screen plane, so the
-   *  handle sits clear of the edge. Falls back to the camera's right vector when
-   *  there's no tangent (pre-selection) or the edge points at the camera. */
   private computeAxis(): THREE.Vector3 {
-    const fwd = this.viewport.camera.getWorldDirection(new THREE.Vector3());
-    if (this.tangent) {
-      const perp = this.tangent.clone().cross(fwd);
-      if (perp.lengthSq() > 1e-6) return perp.normalize();
-    }
-    return new THREE.Vector3().setFromMatrixColumn(this.viewport.camera.matrixWorld, 0).normalize();
+    return edgeHandleAxis(this.viewport, this.tangent);
   }
 
-  /** A small arrow built in pixel units; tick() scales it to constant screen size.
-   *  depthTest off + high renderOrder so it's always visible and grabbable. */
   private buildGizmo() {
-    const mat = new THREE.MeshBasicMaterial({ color: HANDLE_IDLE, depthTest: false, depthWrite: false });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 34, 12), mat);
-    shaft.position.y = 6 + 17; // gap off the edge + half the shaft length
-    const head = new THREE.Mesh(new THREE.ConeGeometry(5, 13, 18), mat);
-    head.position.y = 6 + 34 + 6.5;
-    const g = new THREE.Group();
-    g.add(shaft, head);
-    g.renderOrder = 999;
-    shaft.renderOrder = 999;
-    head.renderOrder = 999;
-    this.gizmoMat = mat;
-    this.gizmo = g;
-    this.viewport.addToScene(g);
+    const { group, material } = createArrowHandle(HANDLE_IDLE);
+    this.gizmoMat = material;
+    this.gizmo = group;
+    this.viewport.addToScene(group);
   }
 
   private hitGizmo(x: number, y: number): boolean {
@@ -582,21 +760,17 @@ export class EdgeFeatureTool {
    *  no edges would just error every rebuild). */
   private afterMembershipChange() {
     const sels = this.currentSelectors();
-    const verb = this.editId ? "Editing" : "Creating";
     if (sels.length) {
       this.anchor.copy(this.anchorFromSelectors(sels));
       this.axis.copy(this.computeAxis());
       this.quat.setFromUnitVectors(Y_AXIS, this.axis);
       this.pushPreview();
-      setPrompt(
-        `${verb} ${this.kind}: ${sels.length} edge${sels.length === 1 ? "" : "s"} · click edges to add/remove · ` +
-          `Enter/click empty space to ${this.editId ? "apply" : "commit"} · Esc to cancel`,
-      );
     } else {
       if (this.editId) this.store.setEditPreview(null);
       else this.store.setPreview(null);
-      setPrompt(`No edges selected — click an edge to add one · Esc to cancel`);
+      this.previewFailed = false; // no members, nothing to have failed
     }
+    this.promptForPhase();
   }
 
   private buildFeature(): Feature {
@@ -612,7 +786,7 @@ export class EdgeFeatureTool {
     if (this.phase !== "drag") return this.cancel();
     const v = this.dim.getValue(this.field.name);
     if (v != null) this.value = v;
-    if (this.value < 1e-3) return this.cancel(); // ignore zero
+    if (this.value < MIN_EDGE_VALUE) return this.cancel(); // ignore zero
     if (this.currentSelectors().length === 0) {
       setPrompt("No edges selected — click an edge to add one · Esc to cancel");
       return; // deleting is an explicit timeline action, not an implicit empty commit
@@ -657,18 +831,18 @@ export class EdgeFeatureTool {
     this.viewport.clearHover();
     this.viewport.suspendPicking = false;
     this.active = false;
+    this.phase = "pick";
     this.grabbing = false;
+    this.fluentGrab = false;
+    this.previewFailed = false;
     this.hovering = false;
     setPrompt(null);
   }
 
   private disposeGizmo() {
-    if (!this.gizmo) return;
+    if (!this.gizmo || !this.gizmoMat) return;
     this.viewport.removeFromScene(this.gizmo);
-    for (const child of this.gizmo.children) {
-      if (child instanceof THREE.Mesh) child.geometry.dispose();
-    }
-    this.gizmoMat?.dispose();
+    disposeArrowHandle(this.gizmo, this.gizmoMat);
     this.gizmo = null;
     this.gizmoMat = null;
   }
