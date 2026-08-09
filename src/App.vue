@@ -6,6 +6,7 @@ import ModalHost from "./components/overlays/ModalHost.vue";
 import PrintStatusPill from "./components/overlays/PrintStatusPill.vue";
 import ShortcutHud from "./components/overlays/ShortcutHud.vue";
 import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
+import InspectorPane from "./components/shell/InspectorPane.vue";
 </script>
 
 <template>
@@ -15,8 +16,8 @@ import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
        selects on them.
 
        The empty <div>s are mount points for the panels that are still
-       imperative classes (ui/ribbon.ts, ui/browserTree.ts, ui/inspector.ts,
-       ui/timeline.ts, ui/menu.ts, ui/sketchPalette.ts). app/engine.ts's
+       imperative classes (ui/ribbon.ts, ui/browserTree.ts, ui/timeline.ts,
+       ui/menu.ts). app/engine.ts's
        mountUi() runs immediately after app.mount() and constructs them into
        these nodes by id, exactly as main.ts used to. Each one disappears from
        here as its component is converted. -->
@@ -25,7 +26,7 @@ import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
   <div id="main">
     <aside id="browser"></aside>
     <ViewportPane />
-    <aside id="inspector"></aside>
+    <InspectorPane />
   </div>
   <footer id="timeline"></footer>
 

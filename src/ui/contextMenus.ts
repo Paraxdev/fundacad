@@ -10,7 +10,7 @@ import type { SketchMode } from "../sketch/sketchMode";
 import type { MeasureTool } from "../features/measureTool";
 import { BrowserTree, bodyColorMenuItems } from "./browserTree";
 import { contextMenu, type CtxItem } from "./menu";
-import { isInspectorEditable } from "./inspector";
+import { isInspectorEditable } from "../document/numFields";
 import { allCommands } from "./commands";
 import { FEATURE_META } from "./featureMeta";
 import { keyHint } from "../input/shortcuts";

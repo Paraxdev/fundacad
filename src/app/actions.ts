@@ -6,6 +6,7 @@ import { toggleShortcutHUD } from "../input/shortcuts";
 import { choose } from "../ui/choice";
 import { SKETCH_TOOLS, SKETCH_MODIFY, NON_REPEATABLE } from "./actionTables";
 import { useUiStore } from "../stores/ui";
+import { useSketchPaletteStore } from "../stores/sketchPalette";
 import type { Engine } from "./engine";
 import type { SketchTool } from "../sketch/sketchMode";
 import type { StandardView } from "../viewport/cameras";
@@ -18,6 +19,7 @@ export function createActions(e: Engine): (action: string) => void {
   // components/shell/ViewControls.vue now and render from this store, so the
   // label can no longer drift out of sync with viewport.selecting.
   const ui = useUiStore();
+  const palette = useSketchPaletteStore();
 
   // Offset Face / Thicken: one interactive tool for both (pick face → scrub along
   // its normal → commit), with a real sidecar preview since neither can be faked
@@ -47,7 +49,7 @@ export function createActions(e: Engine): (action: string) => void {
       return;
     }
     if (action === "finish") return void e.sketch.finish(true);
-    if (action === "palette") return void e.ui.palette.setVisible(true);
+    if (action === "palette") return void (palette.visible = true);
     // Undo/redo must be handled BEFORE the finish-the-sketch line below. They are
     // not 3D modeling commands: letting Ctrl+Z fall through would commit the sketch
     // and THEN undo it as a whole — which is the exact bug in-sketch undo exists to

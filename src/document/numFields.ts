@@ -36,6 +36,17 @@ export const FEATURE_NUM_FIELDS: Partial<Record<Feature["type"], [string, string
   texture: [["depth", "Depth", "length"], ["scale", "Scale", "length"], ["angle", "Angle", "angle"], ["offset", "Offset", "length"], ["sharpness", "Sharpness", "count"], ["boundaryInset", "Edge blend", "length"], ["seed", "Seed", "count"]],
 };
 
+/** Whether selecting this feature type actually opens an editor (numeric fields
+ *  in the inspector, or the sketch editor). The context menu labels "Edit"
+ *  honestly — a type without an editor gets "Select" instead.
+ *
+ *  Lives here rather than in the inspector because it is a fact about the field
+ *  table above, and its other caller (ui/contextMenus.ts) has no other reason to
+ *  reach into a panel. */
+export function isInspectorEditable(type: Feature["type"]): boolean {
+  return type === "sketch" || type in FEATURE_NUM_FIELDS;
+}
+
 /** Numeric fields on the solver-RIGID parametric shapes (the solver never writes
  *  these, so a parameter may own them directly). Solved geometry (lines, circles,
  *  rectangles…) is parameter-driven through a dimension constraint instead — the

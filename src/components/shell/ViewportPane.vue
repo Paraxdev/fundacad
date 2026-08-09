@@ -4,6 +4,7 @@ import { useEngine } from "../../app/engineKey";
 import ViewControls from "./ViewControls.vue";
 import PromptBanner from "./PromptBanner.vue";
 import FpsReadout from "./FpsReadout.vue";
+import SketchPalette from "./SketchPalette.vue";
 
 const engine = useEngine();
 const host = useTemplateRef<HTMLDivElement>("host");
@@ -24,8 +25,7 @@ onMounted(() => host.value!.prepend(engine.canvas));
 
 <template>
   <div id="viewport" ref="host">
-    <!-- still the imperative ui/sketchPalette.ts class; it mounts in here -->
-    <aside id="palette" class="palette hidden"></aside>
+    <SketchPalette />
     <PromptBanner />
     <ViewControls />
     <FpsReadout />

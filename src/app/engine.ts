@@ -43,10 +43,8 @@ import { activePrinterId } from "../print/printerClient";
 
 import { Ribbon } from "../ui/ribbon";
 import { CommandPalette } from "../ui/commandPalette";
-import { SketchPalette } from "../ui/sketchPalette";
 import { Timeline } from "../ui/timeline";
 import { BrowserTree } from "../ui/browserTree";
-import { Inspector } from "../ui/inspector";
 import { SpaceMouseSettings } from "../ui/spaceMouseSettings";
 import { WelcomeScreen, welcomeOnStartup, warmAccount } from "../ui/welcome";
 import { scheduleStartupUpdateCheck } from "../ui/updates";
@@ -68,6 +66,7 @@ import { createActions } from "./actions";
 import { installKeyboard } from "./keyboard";
 import { installTitlebar } from "./titlebar";
 import { useUiStore } from "../stores/ui";
+import { createDocBridge, type DocBridge } from "./docBridge";
 
 import type { Feature, PlaneDef } from "../types";
 
@@ -87,10 +86,8 @@ export interface EngineTools {
 export interface EngineUi {
   ribbon: Ribbon;
   cmdk: CommandPalette;
-  palette: SketchPalette;
   timeline: Timeline;
   tree: BrowserTree;
-  inspector: Inspector;
   welcome: WelcomeScreen;
   spaceMouseSettings: SpaceMouseSettings;
   panels: ReturnType<typeof createPanels>;
@@ -108,6 +105,9 @@ export interface Engine {
 
   starters: ReturnType<typeof createFeatureStarters>;
   menus: ReturnType<typeof createContextMenus>;
+  /** DocumentStore's callback channels, mirrored as version refs. See
+   *  app/useDoc.ts for how components must consume it. */
+  bridge: DocBridge;
 
   /** The single action dispatcher — ribbon, keymap, command palette and every
    *  context menu funnel through this one function. */
@@ -175,6 +175,9 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
   // nothing in a production build. Both live in this one function now, so hand
   // it over directly.
   e.viewport.attachStore(e.store);
+  // Subscribe ONCE, here, before any component exists — components read version
+  // refs rather than adding their own store subscriptions.
+  e.bridge = createDocBridge(e.store);
   // crash-safety: periodic recovery snapshots + restore-on-launch prompt
   installAutosave(e.store);
   void checkRecovery(e.store);
@@ -255,17 +258,18 @@ export function mountUi(e: Engine): void {
       e.ui.cmdk.toggle(e.sketch.active ? "sketch" : "model");
     }
   });
-  e.ui.palette = new SketchPalette(document.getElementById("palette")!);
   e.ui.timeline = new Timeline(document.getElementById("timeline")!, e.store);
   e.ui.tree = new BrowserTree(document.getElementById("browser")!, e.store);
-  e.ui.inspector = new Inspector(document.getElementById("inspector")!, e.store);
 
   // WebKitGTK quirk: wheel events over overflow panels don't reliably reach the
   // native scroller (GTK kinetic scrolling eats them — measured fine in Chromium,
   // dead in the webview), so drive the panel scroll explicitly. deltaMode-
   // normalized like the viewport's zoom wheel.
-  for (const id of ["browser", "inspector"]) {
-    const el = document.getElementById(id)!;
+  //
+  // #inspector is a component now and owns its own copy of this (see
+  // InspectorPane.vue); #browser keeps this one until the tree is converted.
+  {
+    const el = document.getElementById("browser")!;
     el.addEventListener(
       "wheel",
       (ev) => {

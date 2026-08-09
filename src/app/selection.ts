@@ -1,4 +1,5 @@
 import { setPrompt } from "../ui/prompt";
+import { useSelectionStore } from "../stores/selection";
 import type { Engine } from "./engine";
 import type { Feature } from "../types";
 
@@ -6,10 +7,12 @@ export function createSelection(
   e: Engine,
 ): Pick<Engine, "selectFeature" | "editFeature" | "featureForFace" | "deleteSelectedFace"> {
   const selectFeature = (id: string | null) => {
-    e.selectedFeature = id;
-    e.ui.timeline.select(id);
-    e.ui.tree.select(id);
-    e.ui.inspector.select(id);
+    // Writing the store is what updates the inspector — it renders from this
+    // rather than being pushed at. The timeline and tree are still imperative
+    // classes, so they keep their explicit select() calls until converted.
+    useSelectionStore().featureId = id;
+    e.ui.timeline?.select(id);
+    e.ui.tree?.select(id);
     e.viewport.highlightDatum(id); // brighten the matching construction plane (if any)
   };
 
