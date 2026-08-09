@@ -47,7 +47,6 @@ import { SketchPalette } from "../ui/sketchPalette";
 import { Timeline } from "../ui/timeline";
 import { BrowserTree } from "../ui/browserTree";
 import { Inspector } from "../ui/inspector";
-import { Menubar } from "../ui/menu";
 import { SpaceMouseSettings } from "../ui/spaceMouseSettings";
 import { WelcomeScreen, welcomeOnStartup, warmAccount } from "../ui/welcome";
 import { scheduleStartupUpdateCheck } from "../ui/updates";
@@ -65,7 +64,6 @@ import { installRebuildBridge } from "./rebuildBridge";
 import { installBrowserWiring } from "./browserWiring";
 import { installViewportWiring } from "./viewportWiring";
 import { installSketchStateBridge } from "./sketchStateBridge";
-import { buildMenubar } from "./menubarDef";
 import { createActions } from "./actions";
 import { installKeyboard } from "./keyboard";
 import { installTitlebar } from "./titlebar";
@@ -349,7 +347,8 @@ export function mountUi(e: Engine): void {
   // over handleAction through the thunks above — assign it once they exist.
   e.handleAction = createActions(e);
 
-  new Menubar(document.getElementById("menubar")!, buildMenubar(e));
+  // (The menubar is components/shell/MenuBar.vue now — TitleBar.vue calls
+  // buildMenubar(engine) itself, so there is nothing to construct here.)
 
   // warm the TinkerAtlas identity cache from disk (offline-safe), then show the
   // welcome screen unless the user turned it off (its footer checkbox).

@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { markRaw, ref, onMounted, onUnmounted } from "vue";
 import { useEngine } from "../../app/engineKey";
 import { useUiStore } from "../../stores/ui";
 import { getUnit, setUnit, asUnit, onUnitChange, type Unit } from "../../ui/units";
+import { buildMenubar } from "../../app/menubarDef";
+import MenuBar from "./MenuBar.vue";
 import brandLockup from "../../../assets/brand/sindricad-lockup-app.svg";
 
 const engine = useEngine();
 const ui = useUiStore();
+
+// Built once. The tree is static; everything dynamic about it (Undo greying
+// out, the SpaceMouse mode checkmarks, Sign in/out) is a thunk that MenuBar
+// re-evaluates each time a menu opens. markRaw because every onClick closes
+// over the raw engine.
+const menus = markRaw(buildMenubar(engine));
 
 // units.ts is a module-level observable with its own listener set and a
 // localStorage backing. Rather than move that state into Pinia (it is read
@@ -27,8 +35,7 @@ function onUnitInput(ev: Event) {
 <template>
   <header id="titlebar">
     <span class="brand"><img :src="brandLockup" alt="SindriCAD" /></span>
-    <!-- Menubar is still the imperative ui/menu.ts class; it mounts in here. -->
-    <nav id="menubar"></nav>
+    <MenuBar :menus="menus" />
     <button
       id="undo-btn"
       class="tb-btn"
