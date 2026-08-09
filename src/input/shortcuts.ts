@@ -4,6 +4,8 @@
 // dispatched, the palette advertised Fit on "F" while F ran Fillet, and the
 // ribbon promised sketch Offset on "O" with no binding behind it).
 
+import { useUiStore } from "../stores/ui";
+
 export interface Shortcut {
   key: string; // normalized lowercase key ("b", "home", "f6", "?")
   shift?: boolean;
@@ -79,67 +81,42 @@ export function resolveShortcut(
 }
 
 // --- the `?` cheat-sheet HUD: auto-generated, dismissed by any key/click ---
-let hud: HTMLDivElement | null = null;
 
+/** One rendered section of the HUD. Derived from SHORTCUTS so the cheat sheet
+ *  cannot drift from what the dispatcher actually does — the whole point of this
+ *  file being the single source of truth. */
+export interface HudGroup {
+  name: string;
+  rows: { key: string; label: string }[];
+}
+
+/** Pure: the HUD's content. Exported so it is unit-testable without a DOM. */
+export function shortcutHudGroups(): HudGroup[] {
+  const fmt = (s: Shortcut) => (s.shift ? `Shift+${s.key.toUpperCase()}` : s.key.toUpperCase());
+  const byContext = (ctx: Shortcut["context"]) =>
+    SHORTCUTS.filter((s) => s.context === ctx).map((s) => ({ key: fmt(s), label: s.label }));
+  return [
+    { name: "Model", rows: byContext("model") },
+    { name: "Sketch", rows: byContext("sketch") },
+    { name: "Global", rows: byContext("global") },
+    {
+      name: "Always",
+      rows: [
+        { key: "Ctrl+K", label: "Command palette" },
+        { key: "Ctrl+Z / Ctrl+Y", label: "Undo / Redo" },
+        { key: "Ctrl+S / Ctrl+Shift+S", label: "Save / Save As" },
+        { key: "Ctrl+N / Ctrl+O / Ctrl+E", label: "New / Open / Export" },
+        { key: "Del", label: "Delete face (heal) / feature" },
+        { key: "Esc", label: "Cancel / clear selection" },
+      ],
+    },
+  ];
+}
+
+/** Toggle the HUD. Facade over stores/ui.ts, rendered by
+ *  components/overlays/ShortcutHud.vue; the signature is unchanged for its two
+ *  callers (the Help menu and the "shortcut-help" action). */
 export function toggleShortcutHUD() {
-  if (hud) {
-    hud.remove();
-    hud = null;
-    return;
-  }
-  const groups: [string, Shortcut[]][] = [
-    ["Model", SHORTCUTS.filter((s) => s.context === "model")],
-    ["Sketch", SHORTCUTS.filter((s) => s.context === "sketch")],
-    ["Global", SHORTCUTS.filter((s) => s.context === "global")],
-  ];
-  const extra = [
-    ["Ctrl+K", "Command palette"],
-    ["Ctrl+Z / Ctrl+Y", "Undo / Redo"],
-    ["Ctrl+S / Ctrl+Shift+S", "Save / Save As"],
-    ["Ctrl+N / Ctrl+O / Ctrl+E", "New / Open / Export"],
-    ["Del", "Delete face (heal) / feature"],
-    ["Esc", "Cancel / clear selection"],
-  ];
-  hud = document.createElement("div");
-  hud.className = "shortcut-hud";
-  const card = document.createElement("div");
-  card.className = "shortcut-hud-card";
-  card.innerHTML =
-    `<div class="shortcut-hud-title">Keyboard shortcuts</div>` +
-    groups
-      .map(
-        ([name, list]) =>
-          `<div class="shortcut-hud-group"><h4>${name}</h4>` +
-          list
-            .map((s) => {
-              const k = s.shift ? `Shift+${s.key.toUpperCase()}` : s.key.toUpperCase();
-              return `<div class="shortcut-hud-row"><kbd>${k}</kbd><span>${s.label}</span></div>`;
-            })
-            .join("") +
-          `</div>`,
-      )
-      .join("") +
-    `<div class="shortcut-hud-group"><h4>Always</h4>` +
-    extra
-      .map(([k, l]) => `<div class="shortcut-hud-row"><kbd>${k}</kbd><span>${l}</span></div>`)
-      .join("") +
-    `</div>`;
-  hud.appendChild(card);
-  document.body.appendChild(hud);
-  const dismiss = () => {
-    hud?.remove();
-    hud = null;
-    window.removeEventListener("keydown", onAny, true);
-    window.removeEventListener("pointerdown", onAny, true);
-  };
-  const onAny = (e: Event) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dismiss();
-  };
-  // defer so the `?` keydown that opened it doesn't instantly close it
-  setTimeout(() => {
-    window.addEventListener("keydown", onAny, true);
-    window.addEventListener("pointerdown", onAny, true);
-  }, 0);
+  const ui = useUiStore();
+  ui.shortcutHudOpen = !ui.shortcutHudOpen;
 }

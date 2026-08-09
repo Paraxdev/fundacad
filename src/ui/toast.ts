@@ -4,6 +4,10 @@
 // the model stayed visually unchanged — indistinguishable from "nothing
 // happened". Errors persist longer and carry an optional action button
 // ("Show" → select the failing feature).
+//
+// This is now a facade over stores/toasts.ts, rendered by
+// components/overlays/ToastStack.vue. `toast(message, opts)` keeps its exact
+// signature, so all ~40 call sites are untouched.
 
 export interface ToastOptions {
   kind?: "error" | "warning" | "info";
@@ -12,55 +16,15 @@ export interface ToastOptions {
 }
 
 import { crumb } from "../diagnostics/breadcrumbs";
-
-let stack: HTMLDivElement | null = null;
-
-function ensureStack(): HTMLDivElement {
-  if (!stack) {
-    stack = document.createElement("div");
-    stack.className = "toast-stack";
-    document.body.appendChild(stack);
-  }
-  return stack;
-}
+import { useToastStore } from "../stores/toasts";
 
 export function toast(message: string, opts: ToastOptions = {}) {
-  const host = ensureStack();
   const kind = opts.kind ?? "info";
   crumb(`[${kind}] ${message}`); // toasts double as bug-report breadcrumbs
-  // keep the stack short — oldest goes first
-  while (host.children.length >= 3) host.firstElementChild?.remove();
-
-  const el = document.createElement("div");
-  el.className = `toast toast-${kind}`;
-  const msg = document.createElement("span");
-  msg.className = "toast-msg";
-  msg.textContent = message;
-  el.appendChild(msg);
-
-  let timer = 0;
-  const dismiss = () => {
-    window.clearTimeout(timer);
-    el.classList.add("toast-out");
-    window.setTimeout(() => el.remove(), 180);
-  };
-
-  if (opts.action) {
-    const btn = document.createElement("button");
-    btn.className = "toast-action";
-    btn.textContent = opts.action.label;
-    btn.addEventListener("click", () => {
-      opts.action!.onClick();
-      dismiss();
-    });
-    el.appendChild(btn);
-  }
-  const close = document.createElement("button");
-  close.className = "toast-close";
-  close.textContent = "✕";
-  close.addEventListener("click", dismiss);
-  el.appendChild(close);
-
-  host.appendChild(el);
-  timer = window.setTimeout(dismiss, opts.timeout ?? (kind === "error" ? 8000 : kind === "warning" ? 6000 : 3500));
+  useToastStore().push(
+    message,
+    kind,
+    opts.action,
+    opts.timeout ?? (kind === "error" ? 8000 : kind === "warning" ? 6000 : 3500),
+  );
 }

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import TitleBar from "./components/shell/TitleBar.vue";
 import ViewportPane from "./components/shell/ViewportPane.vue";
+import ToastStack from "./components/overlays/ToastStack.vue";
+import ModalHost from "./components/overlays/ModalHost.vue";
+import PrintStatusPill from "./components/overlays/PrintStatusPill.vue";
+import ShortcutHud from "./components/overlays/ShortcutHud.vue";
 </script>
 
 <template>
@@ -23,4 +27,12 @@ import ViewportPane from "./components/shell/ViewportPane.vue";
     <aside id="inspector"></aside>
   </div>
   <footer id="timeline"></footer>
+
+  <!-- Global overlays. Each Teleports to body, which is where the imperative
+       versions appended themselves — they must not inherit a stacking context
+       from #app's grid. -->
+  <ToastStack />
+  <ModalHost />
+  <PrintStatusPill />
+  <ShortcutHud />
 </template>
