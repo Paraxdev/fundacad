@@ -23,9 +23,25 @@ export class FpsMeter {
   private el: HTMLElement | null;
   private timer = 0;
 
-  constructor(host: HTMLElement | null = document.getElementById("fps")) {
+  constructor(host: HTMLElement | null = null) {
     this.el = host;
-    if (this.el) this.timer = window.setInterval(() => this.paint(), REFRESH_MS);
+    if (this.el) this.start();
+  }
+
+  /** Adopt the readout element after construction.
+   *
+   *  The Viewport creates its FpsMeter in a field initializer, which runs while
+   *  the Vue shell that owns #fps has not rendered yet — so the element cannot
+   *  be looked up by id any more. components/shell/FpsReadout.vue hands it over
+   *  in onMounted instead. */
+  setHost(host: HTMLElement) {
+    if (this.el) return;
+    this.el = host;
+    this.start();
+  }
+
+  private start() {
+    if (!this.timer) this.timer = window.setInterval(() => this.paint(), REFRESH_MS);
   }
 
   /** Call once per ACTUALLY RENDERED frame (not once per rAF tick — the loop

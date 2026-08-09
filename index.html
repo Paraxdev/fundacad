@@ -6,49 +6,16 @@
     <title>SindriCAD</title>
   </head>
   <body>
-    <div id="app">
-      <header id="titlebar">
-        <span class="brand"><img src="assets/brand/sindricad-lockup-app.svg" alt="SindriCAD" /></span>
-        <nav id="menubar"></nav>
-        <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" disabled>↶</button>
-        <button id="redo-btn" class="tb-btn" title="Redo (Ctrl+Y)" disabled>↷</button>
-        <span id="context-tab" class="context-tab">SOLID</span>
-        <span id="docname" class="docname">Untitled</span>
-        <div class="spacer"></div>
-        <label class="units" title="Display units (geometry is stored in mm)">
-          Units
-          <select id="unit">
-            <option value="mm">mm</option>
-            <option value="cm">cm</option>
-            <option value="in">in</option>
-          </select>
-        </label>
-        <span id="status" class="status">connecting…</span>
-      </header>
-      <div id="ribbon"></div>
-      <div id="main">
-        <aside id="browser"></aside>
-        <div id="viewport">
-          <canvas id="canvas"></canvas>
-          <aside id="palette" class="palette hidden"></aside>
-          <div id="prompt" class="prompt hidden"></div>
-          <div id="viewcontrols">
-            <button data-view="iso" title="Isometric">ISO</button>
-            <button data-view="top" title="Top">Top</button>
-            <button data-view="front" title="Front">Front</button>
-            <button data-view="right" title="Right">Right</button>
-            <button id="fit" title="Fit to view">Fit</button>
-            <button id="proj" title="Projection: Persp / Ortho / Auto (ortho when viewing straight-on)">Auto</button>
-            <button id="selmode" title="Toggle selecting Faces / whole Bodies">Faces</button>
-          </div>
-          <div id="fps" class="fps">idle</div>
-        </div>
-        <aside id="inspector"></aside>
-      </div>
-      <footer id="timeline"></footer>
-    </div>
+    <!-- The shell used to be written out here as static markup. It now lives in
+         src/App.vue; Vue mounts into this node. Keep it EMPTY — Vue treats a
+         mount container's existing innerHTML as a template when the root
+         component has no render function, which is both a footgun and a thing
+         the webview CSP (no 'unsafe-eval') could not compile anyway. -->
+    <div id="app"></div>
     <!-- Before main.ts on purpose: boot.ts reports to Rust that the page
-         loaded, and must not be able to fail because main.ts did. -->
+         loaded, and must not be able to fail because main.ts did. Vue is
+         imported only by main.ts, so this separation still means what its
+         comment says it means. -->
     <script type="module" src="/src/boot.ts"></script>
     <script type="module" src="/src/main.ts"></script>
   </body>

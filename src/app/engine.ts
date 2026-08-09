@@ -1,0 +1,380 @@
+// The composition root, formerly the top 950 lines of main.ts.
+//
+// main.ts was 1363 lines of bare top-level statements: import order and
+// statement order WERE the boot sequence, and ~25 singletons referred to each
+// other through function-declaration hoisting. Moving that across module
+// boundaries loses hoisting, so the mutual references are resolved the way
+// main.ts already resolved getLastAction/setLastAction — late-bound members on
+// one mutable record, assigned in the same order the statements used to run.
+//
+// The ordering constraints that were documented as comments in main.ts are kept
+// as comments HERE, next to the lines they constrain. They are not stylistic:
+// several of them encode bugs that took multiple rounds to find.
+
+import { Viewport } from "../viewport/viewport";
+import { Geometry, type GeometryBackend } from "../geometry/client";
+import { TauriGeometry } from "../geometry/tauriClient";
+import { DocumentStore, EMPTY_DOCUMENT } from "../document/store";
+import { SketchOverlay } from "../sketch/overlay";
+import { SketchMode } from "../sketch/sketchMode";
+import { setTextBackend } from "../sketch/textCache";
+import { solveSketchFeature } from "../sketch/headlessSolve";
+import { initSolver } from "../sketch/solver";
+import { installAutosave, checkRecovery } from "../io/recovery";
+import { toast } from "../ui/toast";
+import { crumb } from "../diagnostics/breadcrumbs";
+
+import { ExtrudeTool } from "../features/extrudeTool";
+import { EdgeFeatureTool } from "../features/edgeFeatureTool";
+import { PressPullTool } from "../features/pressPullTool";
+import { FaceOffsetTool } from "../features/faceOffsetTool";
+import { LoftTool } from "../features/loftTool";
+import { MoveTool } from "../features/moveTool";
+import { MeasureTool } from "../features/measureTool";
+import { SectionTool } from "../features/sectionTool";
+import { PlaneOffsetTool } from "../features/planeOffsetTool";
+import { TextureTool } from "../features/textureTool";
+import { createFeatureStarters } from "../features/featureStarters";
+import { createContextMenus } from "../ui/contextMenus";
+import { createPanels } from "../ui/panels";
+import { createBugReporter } from "../ui/bugReporter";
+import { setPrinterPillClick } from "../print/printStatusLine";
+import { activePrinterId } from "../print/printerClient";
+
+import { Ribbon } from "../ui/ribbon";
+import { CommandPalette } from "../ui/commandPalette";
+import { SketchPalette } from "../ui/sketchPalette";
+import { Timeline } from "../ui/timeline";
+import { BrowserTree } from "../ui/browserTree";
+import { Inspector } from "../ui/inspector";
+import { Menubar } from "../ui/menu";
+import { SpaceMouseSettings } from "../ui/spaceMouseSettings";
+import { WelcomeScreen, welcomeOnStartup, warmAccount } from "../ui/welcome";
+import { scheduleStartupUpdateCheck } from "../ui/updates";
+import { openDocumentAtPath } from "../io/files";
+import { openSignInDialog, signOutFlow } from "../tinkeratlas/account";
+
+import { installSidecarDiedToast } from "./sidecarWatch";
+import { installSpaceMouse } from "./spaceMouseSetup";
+import { createSelection } from "./selection";
+import { createToolBusy } from "./toolBusy";
+import { createDocumentActions } from "./documentActions";
+import { createDatumPlanes } from "./datumPlanes";
+import { createSketchVisibility } from "./sketchVisibility";
+import { installRebuildBridge } from "./rebuildBridge";
+import { installBrowserWiring } from "./browserWiring";
+import { installViewportWiring } from "./viewportWiring";
+import { installSketchStateBridge } from "./sketchStateBridge";
+import { buildMenubar } from "./menubarDef";
+import { createActions } from "./actions";
+import { installKeyboard } from "./keyboard";
+import { installTitlebar } from "./titlebar";
+import { useUiStore } from "../stores/ui";
+
+import type { Feature, PlaneDef } from "../types";
+
+export interface EngineTools {
+  extrude: ExtrudeTool;
+  edgeFeature: EdgeFeatureTool;
+  pressPull: PressPullTool;
+  faceOffset: FaceOffsetTool;
+  loft: LoftTool;
+  move: MoveTool;
+  measure: MeasureTool;
+  section: SectionTool;
+  planeOffset: PlaneOffsetTool;
+  texture: TextureTool;
+}
+
+export interface EngineUi {
+  ribbon: Ribbon;
+  cmdk: CommandPalette;
+  palette: SketchPalette;
+  timeline: Timeline;
+  tree: BrowserTree;
+  inspector: Inspector;
+  welcome: WelcomeScreen;
+  spaceMouseSettings: SpaceMouseSettings;
+  panels: ReturnType<typeof createPanels>;
+}
+
+export interface Engine {
+  canvas: HTMLCanvasElement;
+  viewport: Viewport;
+  geometry: GeometryBackend;
+  store: DocumentStore;
+  overlay: SketchOverlay;
+  sketch: SketchMode;
+  tools: EngineTools;
+  ui: EngineUi;
+
+  starters: ReturnType<typeof createFeatureStarters>;
+  menus: ReturnType<typeof createContextMenus>;
+
+  /** The single action dispatcher — ribbon, keymap, command palette and every
+   *  context menu funnel through this one function. */
+  handleAction(action: string): void;
+
+  /** Guard checked at the top of every start* tool and interactive helper: they
+   *  can't fire mid-sketch / mid-drag. Deliberately a plain function, not
+   *  reactive state — it is only ever read at event time. */
+  toolBusy(): boolean;
+  /** True when the current rebuild produced a solid body (something to modify). */
+  hasBody(): boolean;
+  planePick: boolean;
+
+  selectedFeature: string | null;
+  selectFeature(id: string | null): void;
+  editFeature(id: string): void;
+  featureForFace(faceId: number): string | null;
+  deleteSelectedFace(): boolean;
+  noteCommitted(id: string | null): void;
+
+  isSketchConsumed(id: string): boolean;
+  isSketchVisible(id: string): boolean;
+  datumPlaneDef(f: Extract<Feature, { type: "datumPlane" }>): PlaneDef;
+  syncDatumPlanes(): void;
+
+  newDocument(): Promise<void>;
+  openDoc(): Promise<void>;
+  doUndo(): void;
+  doRedo(): void;
+
+  lastAction: string | null;
+  setStatus(text: string, cls: "" | "connected" | "error"): void;
+}
+
+export function createEngine(canvas: HTMLCanvasElement): Engine {
+  // Filled top-to-bottom in exactly the order main.ts's statements ran. Members
+  // are read through `e` rather than captured, so a block installed early can
+  // still call one assigned later (what hoisting used to buy).
+  const e = {} as Engine;
+  e.canvas = canvas;
+  e.lastAction = null;
+  e.planePick = false;
+  e.selectedFeature = null;
+
+  // Was `statusEl.textContent = …; statusEl.className = \`status ${cls}\``.
+  // The pinia instance is created and made active in main.ts BEFORE this runs,
+  // so a store is usable here even though no component has mounted yet.
+  e.setStatus = (text, cls) => useUiStore().setStatus(text, cls);
+
+  e.viewport = new Viewport(canvas);
+
+  e.geometry = import.meta.env.VITE_GEOM === "rust" ? new TauriGeometry() : new Geometry();
+  void e.geometry.init(); // fetch the per-launch sidecar auth token + open the socket
+  installSidecarDiedToast();
+
+  // Start on a blank canvas. It used to open a built-in example bracket, which
+  // meant every launch began by rebuilding geometry nobody asked for, and "File →
+  // New" was the first thing most people did. Recovery still restores real work
+  // (checkRecovery below), so the only thing lost is the sample.
+  e.store = new DocumentStore(e.geometry, EMPTY_DOCUMENT);
+  e.store.onWarning = (msg) => toast(msg);
+  // The Viewport is constructed before the store, and used to reach the store
+  // back through `(window as any).store` — which main.ts only ever set under
+  // import.meta.env.DEV, so the ViewCube's persisted side overrides silently did
+  // nothing in a production build. Both live in this one function now, so hand
+  // it over directly.
+  e.viewport.attachStore(e.store);
+  // crash-safety: periodic recovery snapshots + restore-on-launch prompt
+  installAutosave(e.store);
+  void checkRecovery(e.store);
+
+  e.overlay = new SketchOverlay();
+  e.viewport.addToScene(e.overlay.group);
+  e.sketch = new SketchMode(e.viewport, e.overlay);
+  // params engine ↔ sketcher plumbing: closed sketches re-solve headlessly after
+  // a parameter edit; the open one refreshes its live dim values itself.
+  e.store.headlessSolve = solveSketchFeature;
+  e.store.openSketchId = () => e.sketch.openDocId;
+  e.store.onParamsApplied = () => e.sketch.syncParamValues();
+  // projection refresh entries for the OPEN sketch bypass the doc (the session
+  // owns it) and patch the live entities instead
+  e.store.onProjectionsApplied = (updates) => e.sketch.syncProjectedCurves(updates);
+  e.store.onParamSolveIssue = (id) =>
+    toast(`Sketch ${id}: dimensions could not be satisfied after the parameter change — geometry left unchanged`);
+  // Sidecar owns fonts: glyph outlines arrive async via tessellateText; repaint the
+  // right surface (active sketch or committed overlay) when they land.
+  setTextBackend(e.geometry, () => {
+    if (e.sketch.active) e.sketch.redraw();
+    else e.overlay.update(e.store.document);
+  });
+
+  e.tools = {
+    extrude: new ExtrudeTool(e.viewport, e.overlay, e.store),
+    edgeFeature: new EdgeFeatureTool(e.viewport, e.store),
+    pressPull: new PressPullTool(e.viewport, e.store),
+    faceOffset: new FaceOffsetTool(e.viewport, e.store),
+    loft: new LoftTool(e.viewport, e.overlay, e.store),
+    move: new MoveTool(e.viewport, e.store),
+    measure: new MeasureTool(e.viewport),
+    section: new SectionTool(e.viewport),
+    planeOffset: new PlaneOffsetTool(e.viewport),
+    texture: new TextureTool(e.viewport, e.store),
+  };
+
+  // Warm up the constraint solver WASM. Deliberately ignores failure: initSolver
+  // resolves false rather than rejecting, so a runtime that cannot compile the
+  // module no longer greets the user with a nameless "Something went wrong" at
+  // startup (field report, 0.1.73 on Windows). The real, specific error is raised
+  // if and when a sketch actually needs to solve.
+  void initSolver().then((ok) => {
+    if (!ok) crumb("[solver] constraint solver unavailable — sketching without constraints");
+  });
+
+  installSpaceMouse(e.viewport);
+
+  // --- predicates the UI wiring below depends on ---
+  Object.assign(e, createToolBusy(e));
+  Object.assign(e, createSketchVisibility(e));
+  Object.assign(e, createDatumPlanes(e));
+  Object.assign(e, createSelection(e));
+  Object.assign(e, createDocumentActions(e));
+
+  return e;
+}
+
+/** Everything from main.ts's `// --- UI ---` marker onward.
+ *
+ *  Split out of createEngine for one reason: the panels that are still
+ *  imperative classes take a container element from the shell, and the shell no
+ *  longer exists until Vue has mounted. main.ts calls this immediately after
+ *  app.mount(), which is synchronous — so the only change to the original boot
+ *  sequence is that a mount happens in the middle of it. Relative order within
+ *  each half is untouched, which matters: several store subscriptions replay on
+ *  subscribe, so who subscribes first is observable. */
+export function mountUi(e: Engine): void {
+  e.ui = {} as EngineUi;
+  e.ui.ribbon = new Ribbon(document.getElementById("ribbon")!);
+  e.ui.ribbon.onAction = (a) => e.handleAction(a);
+
+  // Cmd/Ctrl-K command palette — search + run any command (discoverability safety net)
+  e.ui.cmdk = new CommandPalette((a) => e.handleAction(a));
+  window.addEventListener("keydown", (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && (ev.key === "k" || ev.key === "K")) {
+      ev.preventDefault();
+      e.ui.cmdk.toggle(e.sketch.active ? "sketch" : "model");
+    }
+  });
+  e.ui.palette = new SketchPalette(document.getElementById("palette")!);
+  e.ui.timeline = new Timeline(document.getElementById("timeline")!, e.store);
+  e.ui.tree = new BrowserTree(document.getElementById("browser")!, e.store);
+  e.ui.inspector = new Inspector(document.getElementById("inspector")!, e.store);
+
+  // WebKitGTK quirk: wheel events over overflow panels don't reliably reach the
+  // native scroller (GTK kinetic scrolling eats them — measured fine in Chromium,
+  // dead in the webview), so drive the panel scroll explicitly. deltaMode-
+  // normalized like the viewport's zoom wheel.
+  for (const id of ["browser", "inspector"]) {
+    const el = document.getElementById(id)!;
+    el.addEventListener(
+      "wheel",
+      (ev) => {
+        if (el.scrollHeight <= el.clientHeight) return;
+        const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 100 : 1;
+        el.scrollTop += ev.deltaY * unit;
+        ev.preventDefault();
+      },
+      { passive: false },
+    );
+  }
+
+  e.ui.spaceMouseSettings = new SpaceMouseSettings();
+  e.ui.welcome = new WelcomeScreen({
+    onNew: () => void e.newDocument(),
+    onOpen: () => void e.openDoc(),
+    onOpenPath: async (path) => {
+      if (e.sketch.active) e.sketch.cancel(); // same guard as openDoc
+      return openDocumentAtPath(e.store, path, e.geometry);
+    },
+    onSignIn: () => void openSignInDialog(),
+    onSignOut: () => void signOutFlow(),
+  });
+
+  e.starters = createFeatureStarters({
+    store: e.store,
+    viewport: e.viewport,
+    overlay: e.overlay,
+    sketch: e.sketch,
+    extrude: e.tools.extrude,
+    edgeFeature: e.tools.edgeFeature,
+    pressPull: e.tools.pressPull,
+    loftTool: e.tools.loft,
+    moveTool: e.tools.move,
+    planeOffset: e.tools.planeOffset,
+    texture: e.tools.texture,
+    canvas: e.canvas,
+    toolBusy: () => e.toolBusy(),
+    hasBody: () => e.hasBody(),
+    setStatus: (t, c) => e.setStatus(t, c),
+    selectFeature: (id) => e.selectFeature(id),
+    noteCommitted: (id) => e.noteCommitted(id),
+    isSketchConsumed: (id) => e.isSketchConsumed(id),
+    getSelectedFeature: () => e.selectedFeature,
+    setPlanePick: (v) => { e.planePick = v; },
+  });
+
+  e.menus = createContextMenus({
+    store: e.store,
+    viewport: e.viewport,
+    sketch: e.sketch,
+    measure: e.tools.measure,
+    tree: e.ui.tree,
+    toolBusy: () => e.toolBusy(),
+    setStatus: (t, c) => e.setStatus(t, c),
+    selectFeature: (id) => e.selectFeature(id),
+    editFeature: (id) => e.editFeature(id),
+    featureForFace: (id) => e.featureForFace(id),
+    deleteSelectedFace: () => e.deleteSelectedFace(),
+    syncDatumPlanes: () => e.syncDatumPlanes(),
+    datumPlaneDef: (f) => e.datumPlaneDef(f),
+    handleAction: (a) => e.handleAction(a),
+    getLastAction: () => e.lastAction,
+    setLastAction: (a) => { e.lastAction = a; },
+    startCutByPlane: (id) => e.starters.startCutByPlane(id),
+    offsetPlaneFromFace: (...args) => e.starters.offsetPlaneFromFace(...args),
+  });
+
+  e.ui.panels = createPanels({
+    store: e.store,
+    viewport: e.viewport,
+    geometry: e.geometry,
+    hasBody: () => e.hasBody(),
+    setStatus: (t, c) => e.setStatus(t, c),
+    setSelectionMode: (mode) => { useUiStore().selMode = mode; },
+  });
+
+  // handleAction closes over `menus`/`panels`/`starters`, and those close back
+  // over handleAction through the thunks above — assign it once they exist.
+  e.handleAction = createActions(e);
+
+  new Menubar(document.getElementById("menubar")!, buildMenubar(e));
+
+  // warm the TinkerAtlas identity cache from disk (offline-safe), then show the
+  // welcome screen unless the user turned it off (its footer checkbox).
+  void warmAccount();
+  if (welcomeOnStartup()) e.ui.welcome.open();
+  scheduleStartupUpdateCheck();
+
+  installTitlebar(e);
+  installViewportWiring(e);
+  installBrowserWiring(e);
+  installRebuildBridge(e);
+  installSketchStateBridge(e);
+  installKeyboard(e);
+
+  createBugReporter({
+    store: e.store,
+    geometry: e.geometry,
+    viewport: e.viewport,
+    sketch: e.sketch,
+  }); // floating bug icon, bottom-right
+  // clicking the live print-progress pill opens the camera on the active printer.
+  setPrinterPillClick(() => void e.ui.panels.showCameraPanel(activePrinterId()));
+
+  e.geometry.onStatus((connected) => {
+    if (!connected) e.setStatus("connecting to sidecar…", "error");
+    else void e.store.rebuildNow();
+  });
+}

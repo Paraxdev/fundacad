@@ -196,18 +196,31 @@ export class Viewport {
     this.lingerFrames = 3;
   }
 
-  // The document store is wired lazily (the Viewport is constructed before the
-  // store in main.ts). Persisted ViewCube overrides live on the document.
-  private storeSubscribed = false;
+  // The document store is wired after construction (the Viewport is built first,
+  // because the store needs the geometry backend and the backend needs a canvas
+  // to exist). Persisted ViewCube overrides live on the document.
+  //
+  // This used to read `(window as any).store`, which main.ts only ever set inside
+  // an `import.meta.env.DEV` branch — so in a PRODUCTION build this getter always
+  // returned undefined and every `this.store?.…` below silently no-op'd. That
+  // meant the ViewCube's "redefine this side" overrides did not persist, did not
+  // reset, and never re-marked, in exactly the builds users run. Both objects are
+  // now constructed inside app/engine.ts, so the store is handed over explicitly.
+  private storeRef: DocumentStore | undefined;
   private get store(): DocumentStore | undefined {
-    const s = (window as any).store as DocumentStore | undefined;
-    if (s && !this.storeSubscribed) {
-      this.storeSubscribed = true;
-      // refresh the cube's redefined-side markers whenever the document changes
-      // (open file, undo/redo, override set/reset).
-      s.onDocChange(() => this.cube.refreshOverrideMarks());
-    }
-    return s;
+    return this.storeRef;
+  }
+  /** Hand the FPS readout its element once the Vue shell has rendered it. */
+  attachFpsHost(host: HTMLElement) {
+    this.fps.setHost(host);
+  }
+
+  attachStore(s: DocumentStore) {
+    if (this.storeRef) return;
+    this.storeRef = s;
+    // refresh the cube's redefined-side markers whenever the document changes
+    // (open file, undo/redo, override set/reset).
+    s.onDocChange(() => this.cube.refreshOverrideMarks());
   }
 
   private installPointer() {
@@ -2097,7 +2110,9 @@ export class Viewport {
     // whole app (the rAF used to be unreachable after a throw).
     try {
       const dt = this.clock.getDelta();
-      void this.store; // lazily wire the store subscription once it exists
+      // (There used to be a `void this.store` here, once per frame, whose only
+      // job was to poke the lazy getter into subscribing. attachStore() does
+      // that explicitly now.)
       // The ViewCube drives the camera through camera-controls' own animated
       // setLookAt, so we just always advance the controls — no busy/adopt dance.
       // Always run this (needed for damping/transitions to progress); its

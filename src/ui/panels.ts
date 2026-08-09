@@ -55,11 +55,15 @@ export interface PanelsDeps {
   geometry: GeometryBackend;
   hasBody: () => boolean;
   setStatus: (text: string, cls: "" | "connected" | "error") => void;
-  selBtn: HTMLButtonElement;
+  /** Reflect a programmatic selection-mode change in the Faces/Bodies pill.
+   *  Used to be a raw `HTMLButtonElement` this module poked at directly; the
+   *  pill is a Vue component now, so it takes the same setter the "selmode"
+   *  action uses. */
+  setSelectionMode: (mode: "faces" | "bodies") => void;
 }
 
 export function createPanels(deps: PanelsDeps) {
-  const { store, viewport, geometry, hasBody, setStatus, selBtn } = deps;
+  const { store, viewport, geometry, hasBody, setStatus, setSelectionMode } = deps;
 
   // --- Inspect: Properties readout (volume / area / mass / center / bbox) ---
   const propsPanel = new FloatingPanel();
@@ -142,8 +146,7 @@ export function createPanels(deps: PanelsDeps) {
         const p = pairs[Number(row.dataset.i)];
         if (!p) return;
         viewport.setSelectionMode("bodies");
-        selBtn.textContent = "Bodies";
-        selBtn.classList.add("active");
+        setSelectionMode("bodies"); // keep the Faces/Bodies pill in step
         viewport.setSelectedBodies([p.a, p.b]);
       });
     });
