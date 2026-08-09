@@ -1,6 +1,7 @@
 import { solveSketch } from "../sketch/solver";
 import { isChoiceOpen, choose } from "../ui/choice";
 import { toast } from "../ui/toast";
+import { contextMenu, dismissContextMenu } from "../ui/menu";
 import type { Engine } from "./engine";
 
 /** Debug handles for console + headless frontend-logic tests. Gated to DEV so
@@ -38,6 +39,7 @@ export function installDevGlobals(e: Engine): void {
     // them without needing an operation that happens to raise one.
     toast,
     choose,
+    menu: { contextMenu, dismissContextMenu },
     busyWhy: () => ({
       sketch: e.sketch.active,
       extrude: e.tools.extrude.active,

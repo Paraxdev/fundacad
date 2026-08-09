@@ -5,6 +5,7 @@ import ToastStack from "./components/overlays/ToastStack.vue";
 import ModalHost from "./components/overlays/ModalHost.vue";
 import PrintStatusPill from "./components/overlays/PrintStatusPill.vue";
 import ShortcutHud from "./components/overlays/ShortcutHud.vue";
+import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
 </script>
 
 <template>
@@ -35,4 +36,5 @@ import ShortcutHud from "./components/overlays/ShortcutHud.vue";
   <ModalHost />
   <PrintStatusPill />
   <ShortcutHud />
+  <ContextMenuHost />
 </template>

@@ -19,6 +19,7 @@
 import * as THREE from "three";
 import type { StandardView } from "./cameras";
 import type { ViewCubeSide, ViewOverride } from "../types";
+import { contextMenu } from "../ui/menu";
 
 const SIZE = 120; // corner viewport, CSS px
 const MARGIN = 14; // gap from the top-right edge
@@ -79,7 +80,6 @@ export class ViewCube {
   private raycaster = new THREE.Raycaster();
   private ndc = new THREE.Vector2();
   private hovered: Part | null = null;
-  private menu: HTMLDivElement | null = null;
   private faceTextures = new Map<ViewCubeSide, { canvas: HTMLCanvasElement; texture: THREE.CanvasTexture }>();
 
   constructor(
@@ -334,17 +334,15 @@ export class ViewCube {
 
   // ---- right-click context menu -------------------------------------------
 
+  // This used to be a near-duplicate of the context-menu engine: its own body
+  // portal, its own deferred document pointerdown/keydown dismissers, and a
+  // cleanup function monkey-patched onto the element as `_cleanup`. It now pops
+  // the one shared menu, so overflow flipping, Escape handling that doesn't also
+  // clear the app selection, and "opening one closes the other" all come for
+  // free — and ~60 lines of duplicated dismissal bookkeeping are gone.
   private openMenu(clientX: number, clientY: number, side: ViewCubeSide) {
-    this.closeMenu();
-    const menu = document.createElement("div");
-    menu.className = "menu-popup viewcube-menu";
-    menu.style.position = "fixed";
-    menu.style.left = `${clientX}px`;
-    menu.style.top = `${clientY}px`;
-    menu.style.minWidth = "200px";
-
     const has = !!this.hooks.getOverrides()[side];
-    const items: Array<{ label: string; onClick: () => void; disabled?: boolean }> = [
+    contextMenu(clientX, clientY, [
       {
         label: `Set "${FACE_VIEWS[side].label}" from face…`,
         onClick: () => this.hooks.beginSetOverride(side),
@@ -357,46 +355,9 @@ export class ViewCube {
           this.refreshOverrideMarks();
         },
       },
-    ];
-    for (const it of items) {
-      const btn = document.createElement("button");
-      btn.className = "menu-item";
-      if (it.disabled) btn.toggleAttribute("disabled", true);
-      const label = document.createElement("span");
-      label.textContent = it.label;
-      btn.appendChild(label);
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.closeMenu();
-        if (!it.disabled) it.onClick();
-      });
-      menu.appendChild(btn);
-    }
-    document.body.appendChild(menu);
-    this.menu = menu;
-    // dismiss on the next outside pointerdown / Escape
-    const onDown = (e: PointerEvent) => {
-      if (this.menu && !this.menu.contains(e.target as Node)) this.closeMenu();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") this.closeMenu();
-    };
-    setTimeout(() => {
-      document.addEventListener("pointerdown", onDown, { once: false });
-      document.addEventListener("keydown", onKey);
-      (menu as any)._cleanup = () => {
-        document.removeEventListener("pointerdown", onDown);
-        document.removeEventListener("keydown", onKey);
-      };
-    }, 0);
+    ]);
   }
 
-  private closeMenu() {
-    if (!this.menu) return;
-    (this.menu as any)._cleanup?.();
-    this.menu.remove();
-    this.menu = null;
-  }
 }
 
 // the 12 edge midpoint directions (two nonzero ±1 components)
