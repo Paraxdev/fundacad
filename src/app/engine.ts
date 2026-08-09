@@ -346,7 +346,6 @@ export function mountUi(e: Engine): void {
     geometry: e.geometry,
     hasBody: () => e.hasBody(),
     setStatus: (t, c) => e.setStatus(t, c),
-    setSelectionMode: (mode) => { useUiStore().selMode = mode; },
   });
 
   // handleAction closes over `menus`/`panels`/`starters`, and those close back

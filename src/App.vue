@@ -8,6 +8,11 @@ import ShortcutHud from "./components/overlays/ShortcutHud.vue";
 import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
 import InspectorPane from "./components/shell/InspectorPane.vue";
 import CommandPalette from "./components/overlays/CommandPalette.vue";
+import PropertiesPanel from "./components/overlays/PropertiesPanel.vue";
+import InterferencePanel from "./components/overlays/InterferencePanel.vue";
+import OverhangPanel from "./components/overlays/OverhangPanel.vue";
+import CameraPanel from "./components/overlays/CameraPanel.vue";
+import ParamsDialog from "./components/overlays/ParamsDialog.vue";
 </script>
 
 <template>
@@ -40,4 +45,12 @@ import CommandPalette from "./components/overlays/CommandPalette.vue";
   <ShortcutHud />
   <ContextMenuHost />
   <CommandPalette />
+
+  <!-- Floating "measure-panel" popups. Independent of one another: Properties
+       and the Overhang settings are legitimately on screen together. -->
+  <PropertiesPanel />
+  <InterferencePanel />
+  <OverhangPanel />
+  <CameraPanel />
+  <ParamsDialog />
 </template>

@@ -170,7 +170,7 @@ export function createActions(e: Engine): (action: string) => void {
         e.ui.panels.showProperties();
         break;
       case "change-parameters":
-        openParamsDialog(e.store);
+        openParamsDialog();
         break;
       case "section":
         if (e.tools.section.active) {
