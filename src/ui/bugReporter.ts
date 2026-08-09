@@ -5,188 +5,157 @@
 // signed out — that's the primary use case. On ANY failed submit (network,
 // rejection, endpoint not deployed yet) the report is offered to the
 // clipboard so it is never lost.
+//
+// The button is components/overlays/BugReportButton.vue and the dialog is
+// BugReportDialog.vue. What stays here is everything that is NOT markup: what a
+// report contains, how it is assembled, and the clipboard fallback. The
+// component owns the form fields and calls submitBugReport().
 
 import type { DocumentStore } from "../document/store";
 import type { GeometryBackend } from "../geometry/client";
-import { esc } from "./escape";
 import { toast } from "./toast";
-import { pushModal, popModal } from "./choice";
-import { appVersion } from "./updates";
 import { breadcrumbs } from "../diagnostics/breadcrumbs";
 import { taBugReport, asTaError } from "../tinkeratlas/client";
+import { useDialogStore } from "../stores/dialogs";
 import type { Viewport } from "../viewport/viewport";
 import type { SketchMode } from "../sketch/sketchMode";
 import type { Feature } from "../types";
 
 const isTauri = () => "__TAURI_INTERNALS__" in window;
 
-export function createBugReporter(deps: {
+export interface BugReportDeps {
   store: DocumentStore;
   geometry: GeometryBackend;
   viewport: Viewport;
   sketch: SketchMode;
-}) {
-  const { store, geometry, viewport, sketch } = deps;
+}
 
-  /** The document as the user sees it, including a sketch still being drawn.
-   *  `store.toJSON()` alone is the COMMITTED document: an open sketch has not
-   *  reached it yet, so a report filed from inside the sketcher carried a stale
-   *  sketch, or none at all when it was the first. */
-  function documentWithOpenSketch(live: Feature | null): string {
-    if (!live) return store.toJSON();
-    const doc = JSON.parse(store.toJSON());
-    const i = doc.features.findIndex((f: Feature) => f.id === live.id);
-    if (i >= 0) doc.features[i] = live;
-    else doc.features.push(live);
-    return JSON.stringify(doc);
+/** What the dialog is willing to send, as the user has ticked it. */
+export interface BugReportForm {
+  description: string;
+  includeLog: boolean;
+  includeDocument: boolean;
+  version: string;
+  /** Both snapshotted when the dialog opened — the crumbs so that filling the
+   *  form in doesn't push the interesting events off the end of the list, and
+   *  `connected` so the report says what the sidecar was doing when the user
+   *  decided something was wrong, not when they finished typing. */
+  connected: boolean;
+  crumbs: string[];
+}
+
+/** Registers the reporter's engine handles. The floating button renders once
+ *  these exist; app/engine.ts's mountUi() call site is unchanged. */
+export function createBugReporter(deps: BugReportDeps): void {
+  useDialogStore().bindBugReporter(deps);
+}
+
+/** The context line collected at OPEN time.
+ *
+ *  Scene stats come FIRST: they answer the questions a performance report
+ *  always raises (how many triangles, how big the canvas, what frame rate), and
+ *  leading the list keeps them inside the server's breadcrumb cap. */
+export function bugContext(deps: BugReportDeps): { connected: boolean; crumbs: string[] } {
+  return {
+    connected: deps.geometry.connected,
+    crumbs: [...deps.viewport.sceneStats(), ...breadcrumbs()],
+  };
+}
+
+/** The document as the user sees it, including a sketch still being drawn.
+ *  `store.toJSON()` alone is the COMMITTED document: an open sketch has not
+ *  reached it yet, so a report filed from inside the sketcher carried a stale
+ *  sketch, or none at all when it was the first. */
+function documentWithOpenSketch(store: DocumentStore, live: Feature | null): string {
+  if (!live) return store.toJSON();
+  const doc = JSON.parse(store.toJSON());
+  const i = doc.features.findIndex((f: Feature) => f.id === live.id);
+  if (i >= 0) doc.features[i] = live;
+  else doc.features.push(live);
+  return JSON.stringify(doc);
+}
+
+/** Says the report came from inside the sketcher. Worth recording even when
+ *  the document is NOT attached: it tells the triager the repro starts by
+ *  opening a sketch, which no other field carries. */
+function openSketchCrumb(store: DocumentStore, live: Feature | null): string | null {
+  if (!live) return null;
+  const isEdit = JSON.parse(store.toJSON()).features.some((f: Feature) => f.id === live.id);
+  const ents = live.type === "sketch" ? live.entities.length : 0;
+  const cons = live.type === "sketch" ? (live.constraints?.length ?? 0) : 0;
+  return `sketch OPEN when reported (${isEdit ? `editing ${live.id}` : "new, uncommitted"}): ` +
+    `${ents} entities, ${cons} constraints`;
+}
+
+async function copyFallback(
+  description: string,
+  version: string,
+  connected: boolean,
+  crumbs: string[],
+): Promise<boolean> {
+  const text = [
+    `SindriCAD bug report`,
+    `version: ${version} · ${navigator.userAgent.slice(0, 80)}`,
+    `geometry engine connected: ${connected}`,
+    ``,
+    description,
+    ``,
+    `recent events:`,
+    ...crumbs.map((c) => `  ${c}`),
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
   }
+}
 
-  /** Says the report came from inside the sketcher. Worth recording even when
-   *  the document is NOT attached: it tells the triager the repro starts by
-   *  opening a sketch, which no other field carries. */
-  function openSketchCrumb(live: Feature | null): string | null {
-    if (!live) return null;
-    const isEdit = JSON.parse(store.toJSON()).features.some((f: Feature) => f.id === live.id);
-    const ents = live.type === "sketch" ? live.entities.length : 0;
-    const cons = live.type === "sketch" ? (live.constraints?.length ?? 0) : 0;
-    return `sketch OPEN when reported (${isEdit ? `editing ${live.id}` : "new, uncommitted"}): ` +
-      `${ents} entities, ${cons} constraints`;
+/** Send the report (or copy it, outside Tauri). Resolves true when the dialog
+ *  should close.
+ *
+ *  A FAILED submit deliberately leaves the dialog open: the clipboard copy is a
+ *  fallback, not a substitute, and the user may want to retry or edit. */
+export async function submitBugReport(deps: BugReportDeps, form: BugReportForm): Promise<boolean> {
+  const { store, sketch } = deps;
+  const live = sketch.snapshotFeature();
+  const sketchCrumb = openSketchCrumb(store, live);
+  // prepended, not appended: the server caps the breadcrumb list, and the
+  // same reasoning that puts scene stats first applies here. Used by the
+  // clipboard fallback too, so an offline report keeps the context.
+  const crumbList = sketchCrumb ? [sketchCrumb, ...form.crumbs] : form.crumbs;
+  const connected = form.connected;
+  const payload = {
+    description: form.description,
+    appVersion: form.version,
+    sidecarConnected: connected,
+    includeLog: form.includeLog,
+    breadcrumbs: crumbList,
+    ...(form.includeDocument ? { documentJson: documentWithOpenSketch(store, live) } : {}),
+  };
+  if (!isTauri()) {
+    await copyFallback(form.description, form.version, connected, crumbList);
+    return true;
   }
-
-  const btn = document.createElement("button");
-  btn.className = "bug-report-btn";
-  btn.title = "Report a bug";
-  btn.setAttribute("aria-label", "Report a bug");
-  btn.textContent = "🐞";
-  document.body.appendChild(btn);
-  btn.addEventListener("click", () => void openDialog());
-
-  async function openDialog() {
-    if (document.querySelector(".bug-report-card")) return; // one at a time
-    const version = await appVersion();
-    const connected = geometry.connected;
-    // Scene stats FIRST: they answer the questions a performance report always
-    // raises (how many triangles, how big the canvas, what frame rate), and
-    // leading the list keeps them inside the server's breadcrumb cap.
-    const crumbs = [...viewport.sceneStats(), ...breadcrumbs()];
-
-    pushModal();
-    const backdrop = document.createElement("div");
-    backdrop.className = "choice-backdrop";
-    const card = document.createElement("div");
-    card.className = "choice-card bug-report-card";
-    card.innerHTML =
-      `<div class="choice-title">Report a bug</div>` +
-      `<textarea class="bug-desc" rows="4" placeholder="What happened? What did you expect?"></textarea>` +
-      `<label class="bug-check"><input type="checkbox" class="bug-log" checked> Include geometry-engine log (recommended — usernames are removed)</label>` +
-      `<label class="bug-check"><input type="checkbox" class="bug-doc"> Include current document (contains your design)</label>` +
-      `<details class="bug-preview"><summary>What will be sent</summary><pre>${esc(
-        [
-          `SindriCAD ${version} · ${navigator.userAgent.slice(0, 80)}`,
-          `geometry engine connected: ${connected}`,
-          `recent events (${crumbs.length}):`,
-          ...crumbs.slice(-5).map((c) => `  ${c}`),
-          `+ sidecar log tail (if checked), usernames/paths redacted`,
-          `+ current document (only if checked)`,
-        ].join("\n"),
-      )}</pre></details>` +
-      `<div class="choice-row"><button class="choice-btn bug-send"><span>Send report</span></button>` +
-      `<button class="choice-btn bug-cancel"><span>Cancel</span></button></div>`;
-    backdrop.appendChild(card);
-    document.body.appendChild(backdrop);
-
-    const desc = card.querySelector(".bug-desc") as HTMLTextAreaElement;
-    const logCb = card.querySelector(".bug-log") as HTMLInputElement;
-    const docCb = card.querySelector(".bug-doc") as HTMLInputElement;
-    desc.focus();
-
-    const close = () => {
-      backdrop.remove();
-      window.removeEventListener("keydown", onKey, true);
-      popModal();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        close();
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    (card.querySelector(".bug-cancel") as HTMLButtonElement).addEventListener("click", close);
-    backdrop.addEventListener("click", (e) => {
-      if (e.target === backdrop) close();
-    });
-
-    (card.querySelector(".bug-send") as HTMLButtonElement).addEventListener("click", async () => {
-      const description = desc.value.trim();
-      if (!description) {
-        desc.focus();
-        return;
-      }
-      const live = sketch.snapshotFeature();
-      const sketchCrumb = openSketchCrumb(live);
-      // prepended, not appended: the server caps the breadcrumb list, and the
-      // same reasoning that puts scene stats first applies here. Used by the
-      // clipboard fallback too, so an offline report keeps the context.
-      const crumbList = sketchCrumb ? [sketchCrumb, ...crumbs] : crumbs;
-      const payload = {
-        description,
-        appVersion: version,
-        sidecarConnected: connected,
-        includeLog: logCb.checked,
-        breadcrumbs: crumbList,
-        ...(docCb.checked ? { documentJson: documentWithOpenSketch(live) } : {}),
-      };
-      if (!isTauri()) {
-        await copyFallback(description, version, connected, crumbList);
-        close();
-        return;
-      }
-      try {
-        const res = await taBugReport(payload);
-        close();
-        toast(
-          res.deduplicated
-            ? "Thanks — this matches a known report; the existing one was updated."
-            : "Bug report sent. Thank you!",
-          { kind: "info" },
-        );
-      } catch (e) {
-        // ANY failure (unreachable, rejected, endpoint missing): never lose
-        // the report — offer the clipboard path.
-        const te = asTaError(e);
-        const copied = await copyFallback(description, version, connected, crumbList);
-        toast(
-          `Couldn't send the report${te ? `: ${te.message}` : ""}.` +
-            (copied ? " A copy is on your clipboard — paste it in the SindriCAD Discord." : ""),
-          { kind: "error", timeout: 10000 },
-        );
-      }
-    });
-  }
-
-  async function copyFallback(
-    description: string,
-    version: string,
-    connected: boolean,
-    crumbs: string[],
-  ): Promise<boolean> {
-    const text = [
-      `SindriCAD bug report`,
-      `version: ${version} · ${navigator.userAgent.slice(0, 80)}`,
-      `geometry engine connected: ${connected}`,
-      ``,
-      description,
-      ``,
-      `recent events:`,
-      ...crumbs.map((c) => `  ${c}`),
-    ].join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      return false;
-    }
+  try {
+    const res = await taBugReport(payload);
+    toast(
+      res.deduplicated
+        ? "Thanks — this matches a known report; the existing one was updated."
+        : "Bug report sent. Thank you!",
+      { kind: "info" },
+    );
+    return true;
+  } catch (e) {
+    // ANY failure (unreachable, rejected, endpoint missing): never lose
+    // the report — offer the clipboard path.
+    const te = asTaError(e);
+    const copied = await copyFallback(form.description, form.version, connected, crumbList);
+    toast(
+      `Couldn't send the report${te ? `: ${te.message}` : ""}.` +
+        (copied ? " A copy is on your clipboard — paste it in the SindriCAD Discord." : ""),
+      { kind: "error", timeout: 10000 },
+    );
+    return false;
   }
 }

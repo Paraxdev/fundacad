@@ -6,8 +6,8 @@
 import type { DocumentStore } from "../document/store";
 import type { GeometryBackend } from "../geometry/client";
 import type { Viewport } from "../viewport/viewport";
-import { pushModal, popModal, choose, listModal } from "../ui/choice";
-import { esc } from "../ui/escape";
+import { choose, listModal } from "../ui/choice";
+import { useDialogStore } from "../stores/dialogs";
 import { toast } from "../ui/toast";
 import { openExternal } from "../ui/welcome";
 import { openSignInDialog } from "./account";
@@ -15,10 +15,18 @@ import { currentAccount, taStagingPath, taPublish, asTaError } from "./client";
 
 const isTauri = () => "__TAURI_INTERNALS__" in window;
 
-interface PublishMeta {
+export interface PublishMeta {
   title: string;
   description: string;
   publish: boolean;
+}
+
+/** The metadata form. Facade over stores/dialogs.ts, rendered by
+ *  components/overlays/PublishDialog.vue — the 88 lines of imperative DOM this
+ *  replaces are in there, minus the esc() around the button label — that would
+ *  double-escape now the label is an interpolation. */
+function publishForm(defaultTitle: string): Promise<PublishMeta | null> {
+  return useDialogStore().openPublishForm(defaultTitle);
 }
 
 export async function publishToTinkerAtlas(
@@ -91,94 +99,4 @@ export async function publishToTinkerAtlas(
       toast(`Publish failed: ${ta?.message ?? String(e)}`, { kind: "error" });
     }
   }
-}
-
-function publishForm(defaultTitle: string): Promise<PublishMeta | null> {
-  return new Promise((resolve) => {
-    pushModal();
-    const backdrop = document.createElement("div");
-    backdrop.className = "choice-backdrop";
-    const card = document.createElement("div");
-    card.className = "choice-card ta-publish";
-    card.innerHTML = `<div class="choice-title">Publish to TinkerAtlas</div>`;
-
-    const title = document.createElement("input");
-    title.className = "ta-signin-input";
-    title.maxLength = 200;
-    title.value = defaultTitle;
-    title.placeholder = "Title";
-    card.appendChild(title);
-
-    const desc = document.createElement("textarea");
-    desc.className = "ta-signin-input ta-publish-desc";
-    desc.rows = 4;
-    desc.placeholder = "Description (optional)";
-    card.appendChild(desc);
-
-    const pub = document.createElement("label");
-    pub.className = "ta-publish-public";
-    const pubCb = document.createElement("input");
-    pubCb.type = "checkbox";
-    pubCb.checked = true;
-    pub.append(pubCb, document.createTextNode(" Post publicly (off = private draft)"));
-    card.appendChild(pub);
-
-    const err = document.createElement("div");
-    err.className = "ta-signin-error";
-    card.appendChild(err);
-
-    const row = document.createElement("div");
-    row.className = "choice-row";
-    const cancel = document.createElement("button");
-    cancel.className = "choice-btn";
-    cancel.innerHTML = "<span>Cancel</span>";
-    const ok = document.createElement("button");
-    ok.className = "choice-btn choice-primary";
-    ok.innerHTML = `<span>${esc("Publish")}</span>`;
-    row.append(cancel, ok);
-    card.appendChild(row);
-    backdrop.appendChild(card);
-    document.body.appendChild(backdrop);
-    title.focus();
-    title.select();
-
-    const submit = () => {
-      const t = title.value.trim();
-      if (t.length < 3) {
-        err.textContent = "Title needs at least 3 characters.";
-        title.focus();
-        return;
-      }
-      done({ title: t, description: desc.value.trim(), publish: pubCb.checked });
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        done(null);
-        return;
-      }
-      if (e.key === "Enter" && document.activeElement !== desc) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        submit();
-        return;
-      }
-      // typing reaches the fields; global shortcuts stay gated by pushModal.
-      e.stopPropagation();
-    };
-    backdrop.addEventListener("pointerdown", (e) => {
-      if (e.target === backdrop) done(null);
-    });
-    window.addEventListener("keydown", onKey, true);
-    cancel.addEventListener("click", () => done(null));
-    ok.addEventListener("click", submit);
-
-    function done(value: PublishMeta | null) {
-      window.removeEventListener("keydown", onKey, true);
-      popModal();
-      backdrop.remove();
-      resolve(value);
-    }
-  });
 }
