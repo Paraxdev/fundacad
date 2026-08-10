@@ -104,7 +104,12 @@ from geom_select import (
     REL_DRIFT,
 )
 import texture
-from conic_blend import PROFILE_EPS, clamp_profile, conic_blend
+from conic_blend import (
+    PROFILE_EPS,
+    ConicNotApplicable,
+    clamp_profile,
+    conic_blend,
+)
 
 PLANES = {"XY": Plane.XY, "XZ": Plane.XZ, "YZ": Plane.YZ}
 AXES = {"X": Axis.X, "Y": Axis.Y, "Z": Axis.Z}
@@ -1892,6 +1897,16 @@ def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
             raise ValueError(f"no edge found to {label.lower()} on {body['name']}")
         try:
             new_shape = combined(body["shape"], edges)
+        except ConicNotApplicable:
+            # NOT a failure of the fillet, and it must not be reported as one.
+            # The plain fillet at this radius builds perfectly well; it is the
+            # PROFILE that this face cannot carry. Letting it fall through to
+            # the per-edge retry below would spend the work only to arrive at
+            # the same refusal, and then dress it as "Fillet failed on Body1",
+            # which sends the user hunting for a radius problem that isn't
+            # there. Re-raised untouched so its own sentence — which names the
+            # geometry and says to use profile 0 — is what reaches the toast.
+            raise
         except Exception as combined_err:
             # Combined call failed: fall back to per-edge blending on the evolving body.
             new_shape, unresolved = _sequential_blend(

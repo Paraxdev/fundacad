@@ -36,6 +36,18 @@ What we DO have to repair: an edge running across a section moves (its arc
 becomes a conic). Its pcurve is still right, so the new 3D curve is recovered
 from (pcurve, new surface), which is the definition of the curve we want.
 
+The one shape of geometry this argument does not reach, and why: it holds
+because every boundary of a blend face is either a tangency rail (an arc END
+pole, which does not move) or a whole section (which moves inside its own plane,
+so its pcurve still describes it). A boolean can leave a blend face bounded a
+third way — cut clean through by a face that is neither, when the blend runs off
+the end of one of its supports and is trimmed by whatever it hits. That trim is
+a genuine surface/surface intersection, so it lands on a different pcurve once
+the section changes shape, and its corner vertices move with it (measured: on a
+4.8mm blend, up to 2.8mm at profile 0.95). Re-cutting it is a different
+operation from reweighting, so such a blend is refused rather than approximated
+— see `ConicNotApplicable`.
+
 Caveat for callers: `BRepGProp.VolumeProperties` integrates in parameter space
 and is unreliable on these surfaces at large |profile| — weights spanning two
 orders of magnitude defeat its quadrature. It reported a blend that removes ~2mm3
@@ -69,6 +81,18 @@ PROFILE_EPS = 1e-6
 #: The slider is open at both ends — a profile of exactly 1 is a sharp corner (no
 #: feature at all) and exactly -1 is a degenerate zero weight. Clamp inside.
 PROFILE_LIMIT = 0.999
+
+
+class ConicNotApplicable(ValueError):
+    """This blend is not a member of the conic family, at any profile.
+
+    Its own class rather than a bare ValueError because callers must tell it
+    apart from "we tried and broke it". Nothing is wrong with the fillet, the
+    solid or the request — the reweighting identity simply does not describe
+    this face, so the only honest answers are the plain fillet or nothing. A
+    caller that catches this can fall back to profile 0; a caller that catches
+    ValueError generally is catching real breakage as well.
+    """
 
 
 def clamp_profile(p):
@@ -192,21 +216,81 @@ def _moved_edges(face, oldsurf, newsurf, samples=12):
     return out
 
 
+def _extent(bs):
+    """How big this blend face is, from its control polygon.
+
+    A local length to judge gaps against, so the judgement travels: the same
+    blend modelled in metres and in millimetres has to be called the same thing.
+    The poles bound the surface, and reading them costs nothing next to sampling
+    it.
+    """
+    lo = [1e300] * 3
+    hi = [-1e300] * 3
+    for i in range(1, bs.NbUPoles() + 1):
+        for j in range(1, bs.NbVPoles() + 1):
+            p = bs.Pole(i, j)
+            for c, x in enumerate((p.X(), p.Y(), p.Z())):
+                lo[c], hi[c] = min(lo[c], x), max(hi[c], x)
+    return max(TOL, sum((hi[c] - lo[c]) ** 2 for c in range(3)) ** 0.5)
+
+
 def _rebuild_edge(edge, face, newsurf):
     """The edge's 3D curve recovered from its pcurve on the new surface."""
     ad = BRepAdaptor_Curve2d(edge, face)
     pc = BRep_Tool.CurveOnSurface_s(edge, face, 0.0, 0.0)
     p1, p2 = ad.FirstParameter(), ad.LastParameter()
+    head, tail = pc.Value(p1), pc.Value(p2)
+    start = newsurf.Value(head.X(), head.Y())
+    end = newsurf.Value(tail.X(), tail.Y())
+
     # Reuse the original vertices — a section's endpoints are corner poles, and
     # corner poles do not move, so the neighbouring faces still meet us exactly
     # there. Pair them by POSITION: an edge's stored first/last follow its own
     # curve, which need not agree with its sense inside this wire, and getting
     # that backwards fails the build with DifferentsPointAndParameter.
+    #
+    # Score the two assignments whole rather than asking only "which vertex is
+    # nearer the start". On a short section the two vertices can sit closer to
+    # each other than either is to the wrong end, and the one-sided test then
+    # picks by a difference that is pure rounding; using both ends makes the
+    # decision the sum of two agreements, which no near-coincidence can flip.
     v1, v2 = TopExp.FirstVertex_s(edge), TopExp.LastVertex_s(edge)
-    head = pc.Value(p1)
-    start = newsurf.Value(head.X(), head.Y())
-    if BRep_Tool.Pnt_s(v1).Distance(start) > BRep_Tool.Pnt_s(v2).Distance(start):
+    a, b = BRep_Tool.Pnt_s(v1), BRep_Tool.Pnt_s(v2)
+    if (a.Distance(start) + b.Distance(end)
+            > b.Distance(start) + a.Distance(end)):
         v1, v2 = v2, v1
+        a, b = b, a
+
+    # A corner that no longer lands on the new surface is one of two completely
+    # different things, and the size of the gap is what tells them apart.
+    #
+    # Round-off, if it is a millionth of the face: a section endpoint sits on an
+    # END pole, which no reweight moves, but it sits there through a pcurve
+    # value and a UV box that were each rounded once, so it can land a hair
+    # inside the arc — where the reweight does move it, by a hair times k. That
+    # is a tolerance, and OCCT already has the word for "the curves meet here,
+    # within this much": the vertex's own tolerance. Widen it and carry on,
+    # rather than refusing a corner blend over a nanometre.
+    #
+    # Otherwise the blend is being cut across its section by something that had
+    # to be re-intersected (see the module docstring), and no tolerance can
+    # honestly cover that — the same corner walks millimetres as the profile
+    # sweeps. Refuse by name, here where the measurement is in hand, instead of
+    # letting MakeEdge report a bare DifferentsPointAndParameter that explains
+    # none of it. The two are orders of magnitude apart in practice: measured
+    # 1e-6 of the face for round-off against 0.2 of it for a real cut.
+    scale = _extent(newsurf)
+    for v, p, q in ((v1, a, start), (v2, b, end)):
+        gap = p.Distance(q)
+        if gap <= max(BRep_Tool.Tolerance_s(v), TOL):
+            continue
+        if gap > scale * 1e-4:
+            raise ConicNotApplicable(
+                "this blend is cut across its section by a neighbouring face, "
+                "so its trim would have to be recomputed rather than reweighted "
+                f"(a corner moves {gap:.4g}) — use profile 0 here")
+        BRep_Builder().UpdateVertex(TopoDS.Vertex_s(v), gap * 2.0)
+
     mk = BRepBuilderAPI_MakeEdge(pc, newsurf, v1, v2, p1, p2)
     if not mk.IsDone():
         raise ValueError(f"could not rebuild a blend section edge ({mk.Error()})")
@@ -245,7 +329,7 @@ def conic_blend(sharp, edges, radius, profile):
             # wider than a half turn, or a BSpline blend between curved supports.
             # Reweighting has no meaning there, and silently leaving it circular
             # would ship a feature that is conic on some edges and not others.
-            raise ValueError(
+            raise ConicNotApplicable(
                 "this edge's blend has no conic profile — use profile 0 for a "
                 "plain fillet here")
         for along_u in dirs:

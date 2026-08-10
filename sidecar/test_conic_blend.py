@@ -30,6 +30,7 @@ from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED, TopAbs_VERTEX
 from OCP.TopExp import TopExp
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS
+from OCP.gp import gp_Pnt
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
 
 from conic_blend import _sub, clamp_profile, conic_blend, weight_scale
@@ -83,6 +84,43 @@ def corner_edges(b):
     raise AssertionError("no three-edge vertex on a box")
 
 
+def _edge_between(shape, p, q):
+    """The edge running between two corner points, named rather than indexed."""
+    for e in _sub(shape, TopAbs_EDGE):
+        edge = TopoDS.Edge_s(e)
+        ends = [BRep_Tool.Pnt_s(v) for v in (TopExp.FirstVertex_s(edge),
+                                             TopExp.LastVertex_s(edge))]
+        for a, z in (ends, ends[::-1]):
+            if a.Distance(gp_Pnt(*p)) < 1e-9 and z.Distance(gp_Pnt(*q)) < 1e-9:
+                return edge
+    raise AssertionError(f"no edge from {p} to {q}")
+
+
+def drifting_corner():
+    """A box and three edges whose section endpoints land a hair off their pole.
+
+    The unlovely dimensions are the whole point, so do not tidy them. A section
+    of a blend ends on an arc END pole, which no reweight moves — but it gets
+    there through a pcurve value and a UV box that were each rounded once, and
+    on a box whose sides are round numbers those roundings cancel and the
+    endpoint sits exactly on the pole. Off the lattice it misses by about a
+    nanometre, the reweight multiplies the miss by k, and the rebuild used to
+    reject the edge outright: this blend was denied at -0.95, +0.6 and +0.95
+    while +0.25 built fine, which is precisely the "a sensible fillet got
+    denied" report. A nanometre is a tolerance, not a shape, and is now absorbed
+    as one.
+
+    Two of the three edges share a vertex and the third is parallel to one of
+    them, which is what puts a corner patch next to a plain tube; a tidy corner
+    triple does not reproduce it. Found by the fuzz at seed 12345, case 11.
+    """
+    l, w, h = 22.996807984, 31.343798952, 28.198014348
+    b = BRepPrimAPI_MakeBox(l, w, h).Shape()
+    return b, [_edge_between(b, (0, 0, 0), (l, 0, 0)),
+               _edge_between(b, (0, 0, h), (l, 0, h)),
+               _edge_between(b, (0, 0, h), (0, w, h))], 5.354428830336606
+
+
 CASES = []
 
 
@@ -98,6 +136,8 @@ def _cases():
         ("cylinder rim (torus blend)", cyl, [TopoDS.Edge_s(
             _sub(cyl, TopAbs_EDGE)[0])], 3.0),
     ])
+    drift_solid, drift_edges, drift_r = drifting_corner()
+    CASES.append(("corner off the lattice", drift_solid, drift_edges, drift_r))
     return CASES
 
 
@@ -217,10 +257,56 @@ def test_rebuilds_through_a_real_document():
           f"0 -> {24000 - vols[0]:.2f}, +0.6 -> {24000 - vols[0.6]:.2f})")
 
 
+def test_a_refused_profile_does_not_read_as_a_failed_fillet():
+    """A blend outside the conic family must reach the user saying so, not
+    wearing the generic "Fillet failed on Body1" jacket _blend_edges puts on
+    real breakage.
+
+    The distinction is the whole point of the exception: the radius is fine and
+    the plain fillet at it builds, so a message about the fillet failing sends
+    someone hunting for a size problem that does not exist. _blend_edges catches
+    Exception broadly to fall back to per-edge blending, which is right for
+    kernel failures and wrong for this one — the retry can only arrive at the
+    same refusal, and then hides why."""
+    import builder
+    from builder import rebuild
+    from conic_blend import ConicNotApplicable
+
+    doc = {"parameters": {},
+           "features": [
+               {"id": "f1", "type": "box", "length": 40, "width": 30, "height": 20},
+               {"id": "f2", "type": "fillet", "radius": 4, "profile": 0.6,
+                "edges": {"by": "nearest", "point": [20.0, 0.0, 10.0]}},
+           ]}
+
+    # Driven through the real rebuild rather than by handing _blend_edges a stub
+    # context: what is being checked is the sentence that reaches the toast, and
+    # that is decided by the whole chain of handlers between here and there. The
+    # geometry that genuinely provokes this is a boolean about one in thirty, so
+    # the refusal is injected instead — the message's journey is the subject, not
+    # the surface that produces it.
+    real = builder._conic_fillet
+    builder._conic_fillet = lambda *_a, **_k: (_ for _ in ()).throw(
+        ConicNotApplicable("this blend is cut across its section — use profile 0 here"))
+    try:
+        _part, errors, _bodies = rebuild(doc)
+    finally:
+        builder._conic_fillet = real
+
+    assert errors, "a refused profile reported no error at all"
+    said = " ".join(str(e) for e in errors)
+    assert "cut across its section" in said, f"refusal lost its own words: {said}"
+    assert "Fillet failed" not in said, (
+        f"refusal was dressed as a failed fillet, which sends the user hunting "
+        f"for a radius problem that is not there: {said}")
+    print("conic refusal keeps its own message OK")
+
+
 if __name__ == "__main__":
     test_weight_scale_anchors()
     test_zero_profile_is_the_plain_fillet()
     test_extremes_reach_chamfer_and_sharp()
     test_valid_and_monotone_across_the_range()
     test_rebuilds_through_a_real_document()
+    test_a_refused_profile_does_not_read_as_a_failed_fillet()
     print("\nall conic blend tests passed")
