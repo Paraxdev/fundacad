@@ -26,14 +26,21 @@ import {
   profileFromFraction,
   snapProfile,
 } from "./profileArcMath";
+import { themeColor } from "../viewport/themeColors";
 
-// Theme tokens (styles/_tokens.scss): graphite for the track, molten amber for
-// the knob. The app runs a single accent and has no blue at all — `--accent-blue`
-// is an alias for the amber — so the control has to sit in that one family.
-const TRACK = 0x4b525e; // between --line-strong and --text-mute: a scale, not a control
+// Painted from theme tokens, with these as the headless fallback (see
+// viewport/themeColors.ts). The track is deliberately a muted surface colour and
+// the knob the accent: the track is a scale, the knob is the control, and every
+// theme has to keep that reading.
+const TRACK = 0x4b525e; // --line-strong
 const TRACK_HOT = 0x6b7280; // --text-mute
 const KNOB = 0xff7a3c; // --accent
 const KNOB_HOT = 0xff9a5c; // --accent-hot
+
+const trackColor = () => themeColor("--line-strong", TRACK);
+const trackHotColor = () => themeColor("--text-mute", TRACK_HOT);
+const knobColor = () => themeColor("--accent", KNOB);
+const knobHotColor = () => themeColor("--accent-hot", KNOB_HOT);
 
 // Pixel geometry. The radius clears the handle's tip (52px) and its grab volume
 // (a 17px sphere centred at 38), so the two controls never compete for a press
@@ -102,8 +109,10 @@ export class ProfileArc {
     if (on === this.hot) return;
     this.hot = on;
     const km = this.knob?.material as THREE.MeshBasicMaterial | undefined;
-    km?.color.set(on ? KNOB_HOT : KNOB);
-    (this.track?.material as LineMaterial | undefined)?.color.set(on ? TRACK_HOT : TRACK);
+    km?.color.set(on ? knobHotColor() : knobColor());
+    (this.track?.material as LineMaterial | undefined)?.color.set(
+      on ? trackHotColor() : trackColor(),
+    );
     this.viewport.requestRender();
   }
 
@@ -121,7 +130,7 @@ export class ProfileArc {
     geo.setPositions(pts);
     const el = this.viewport.domElement;
     const mat = new LineMaterial({
-      color: TRACK,
+      color: trackColor(),
       linewidth: 3,
       worldUnits: false,
       depthTest: false,
@@ -133,7 +142,7 @@ export class ProfileArc {
     group.add(track);
 
     const knobMat = new THREE.MeshBasicMaterial({
-      color: KNOB,
+      color: knobColor(),
       depthTest: false,
       depthWrite: false,
     });

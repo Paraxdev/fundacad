@@ -1,0 +1,142 @@
+/* ============================================================================
+   THEMES
+   ============================================================================
+
+   Only the PALETTE varies. Radii, the spacing scale, easing and durations stay
+   in _tokens.scss and are shared: those are the app's proportions, not its
+   colour, and letting a theme move them would mean every layout has to be
+   checked against every theme. A theme is a repaint, never a relayout.
+
+   Each block below redefines the SAME complete set — surfaces, borders, text,
+   accent, semantics. Complete, not partial: a theme that overrode half the
+   tokens would inherit the rest from FORGE and produce a near-black panel under
+   a light-theme text colour the first time someone added a token. If you add a
+   token to _tokens.scss, add it to every block here.
+
+   `color-scheme` travels with the palette because native controls (a <select>
+   popup, scrollbars, focus rings) are drawn by the engine, not by us, and pick
+   their colours from it rather than from anything we declare.
+
+   The 3D viewport reads these too — see viewport/themeColors.ts, which resolves
+   the accent through the same custom properties so a manipulator can never
+   drift out of step with the chrome around it.
+   ============================================================================ */
+
+/* --- FORGE: the default. Deep graphite, a single molten-amber accent. -------
+   Defined on :root rather than [data-theme="forge"] so the app is themed before
+   any script runs — no flash of an unstyled palette on a cold load, and the
+   stylesheet stands on its own if the theme module never initialises. */
+
+/* --- SLATE: cooler graphite, steel-blue accent. The quiet one. ------------- */
+:root[data-theme="slate"] {
+  color-scheme: dark;
+
+  --bg: #0d1013;
+  --panel: #151a1f;
+  --panel-2: #1b2128;
+  --raised: #212932;
+  --raised-2: #2a333e;
+
+  --line: #242c34;
+  --line-strong: #333f4b;
+
+  --text: #e4e9ef;
+  --text-dim: #97a4b2;
+  --text-mute: #68757f;
+
+  --accent: #4c9be8;
+  --accent-hot: #74b4f2;
+  --accent-tint: rgba(76, 155, 232, 0.14);
+  --accent-tint-2: rgba(76, 155, 232, 0.22);
+  --accent-glow: rgba(76, 155, 232, 0.35);
+  --on-accent: #04121f;
+
+  --ok: #46c88a;
+  --warn: #f0c04a;
+  --error: #f2645f;
+  --error-tint: rgba(242, 100, 95, 0.14);
+
+  --accent-blue: var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-pill: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+
+/* --- MOSS: warm-dark with a green accent. Easier on long sessions. -------- */
+:root[data-theme="moss"] {
+  color-scheme: dark;
+
+  --bg: #101210;
+  --panel: #181b18;
+  --panel-2: #1e221e;
+  --raised: #252a25;
+  --raised-2: #2e342d;
+
+  --line: #272c27;
+  --line-strong: #363d35;
+
+  --text: #e8eae4;
+  --text-dim: #a2ab9c;
+  --text-mute: #6f776b;
+
+  --accent: #6fbf5e;
+  --accent-hot: #8ed67e;
+  --accent-tint: rgba(111, 191, 94, 0.14);
+  --accent-tint-2: rgba(111, 191, 94, 0.22);
+  --accent-glow: rgba(111, 191, 94, 0.35);
+  --on-accent: #081605;
+
+  --ok: #6fbf5e;
+  --warn: #e8c65a;
+  --error: #e8695f;
+  --error-tint: rgba(232, 105, 95, 0.14);
+
+  --accent-blue: var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-pill: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+
+/* --- PAPER: light. The one that actually needs different shadows. ---------
+   A shadow tuned for near-black surfaces disappears on white, so the elevation
+   ramp is rebuilt here rather than inherited — which is exactly why every block
+   restates the full set instead of trusting a cascade. */
+:root[data-theme="paper"] {
+  color-scheme: light;
+
+  --bg: #eceef1;
+  --panel: #f6f7f9;
+  --panel-2: #ffffff;
+  --raised: #e8ebef;
+  --raised-2: #dde1e7;
+
+  --line: #dce0e6;
+  --line-strong: #c2c8d1;
+
+  --text: #1b1f26;
+  --text-dim: #545c68;
+  --text-mute: #7b8492;
+
+  --accent: #e2622a;
+  --accent-hot: #f4813f;
+  --accent-tint: rgba(226, 98, 42, 0.12);
+  --accent-tint-2: rgba(226, 98, 42, 0.2);
+  --accent-glow: rgba(226, 98, 42, 0.3);
+  --on-accent: #fff6f1;
+
+  --ok: #2f9e5f;
+  --warn: #b5860d;
+  --error: #cf3b36;
+  --error-tint: rgba(207, 59, 54, 0.12);
+
+  --accent-blue: var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(16, 22, 32, 0.1);
+  --shadow-2: 0 4px 12px rgba(16, 22, 32, 0.1), 0 1px 2px rgba(16, 22, 32, 0.08);
+  --shadow-3: 0 12px 32px rgba(16, 22, 32, 0.16), 0 2px 8px rgba(16, 22, 32, 0.1);
+  --shadow-pill: 0 8px 24px rgba(16, 22, 32, 0.14), 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+}

@@ -7,6 +7,7 @@
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";
+import { themeColor } from "../viewport/themeColors";
 
 /** Signed distance along `dir` (unit) of the closest point on the axis
  *  (through `origin`) to the cursor `ray`. Ill-conditioned when the camera
@@ -152,10 +153,15 @@ export function fluentRelease(opts: {
 
 // --- the grab handle ------------------------------------------------------
 //
-// Molten amber, from the app's own accent tokens (styles/_tokens.scss) — the
-// theme runs a single accent on near-black graphite and has no blue at all
-// (`--accent-blue` is an alias for the amber), so a cool-toned manipulator would
-// belong to a different app.
+// Painted from the app's own accent tokens rather than from a palette of its
+// own. Each theme runs a single accent (styles/_themes.scss) and the manipulator
+// is the most-looked-at thing on screen, so it is the last place that should be
+// carrying colours the chrome no longer uses.
+
+// The literals are FALLBACKS, not the palette: each is read from its theme token
+// at paint time (viewport/themeColors.ts) so a manipulator can never be the one
+// part of the app still wearing the previous theme. They stay as the answer for
+// a headless context with no document to resolve against.
 
 /** `--accent` */
 export const HANDLE_IDLE = 0xff7a3c;
@@ -163,8 +169,19 @@ export const HANDLE_IDLE = 0xff7a3c;
 export const HANDLE_HOT = 0xff9a5c;
 /** `--error`, for a push that removes material rather than adding it */
 export const HANDLE_CUT = 0xff5c5c;
-/** Near-black outline, so the blob keeps its shape against a light face */
-const HANDLE_OUTLINE = 0x140f0c;
+/** `--bg`: the app's deepest surface, so the blob keeps its shape against a
+ *  light face — and stays an outline rather than a halo under a light theme. */
+const HANDLE_OUTLINE = 0x0e0f12;
+
+function idleColor() {
+  return themeColor("--accent", HANDLE_IDLE);
+}
+function hotColor() {
+  return themeColor("--accent-hot", HANDLE_HOT);
+}
+function cutColor() {
+  return themeColor("--error", HANDLE_CUT);
+}
 
 /** Which base colour a handle is wearing. */
 export type HandleTone = "idle" | "cut";
@@ -236,8 +253,8 @@ export function createDragHandle(tone: HandleTone = "idle"): DragHandle {
   // legible when the lights are behind it — and doubles as the "molten" of the
   // theme's molten amber.
   const body = new THREE.MeshLambertMaterial({
-    color: HANDLE_IDLE,
-    emissive: HANDLE_IDLE,
+    color: idleColor(),
+    emissive: idleColor(),
     emissiveIntensity: 0.5,
     depthTest: false,
     depthWrite: false,
@@ -251,7 +268,7 @@ export function createDragHandle(tone: HandleTone = "idle"): DragHandle {
   // A back-face shell a touch larger — an outline, so the blob holds its shape
   // over a pale face where amber-on-white would otherwise wash out.
   const outlineMat = new THREE.MeshBasicMaterial({
-    color: HANDLE_OUTLINE,
+    color: themeColor("--bg", HANDLE_OUTLINE),
     side: THREE.BackSide,
     depthTest: false,
     depthWrite: false,
@@ -278,11 +295,15 @@ export function createDragHandle(tone: HandleTone = "idle"): DragHandle {
 
   let hot = false;
   let currentTone: HandleTone = tone;
+  // Resolved on every repaint, not captured once: a theme change has to reach a
+  // handle that is already on screen, and repaint is the only moment its colour
+  // is allowed to move.
   const apply = () => {
-    const base = currentTone === "cut" ? HANDLE_CUT : HANDLE_IDLE;
-    const c = hot ? HANDLE_HOT : base;
+    const base = currentTone === "cut" ? cutColor() : idleColor();
+    const c = hot ? hotColor() : base;
     body.color.set(c);
     body.emissive.set(c);
+    outlineMat.color.set(themeColor("--bg", HANDLE_OUTLINE));
   };
   apply();
 

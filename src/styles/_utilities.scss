@@ -109,6 +109,17 @@ button.finish:hover {
   font-weight: 700;
   cursor: pointer;
   box-shadow: var(--shadow-2);
+  /* Explicit, because these hold an <svg stroke="currentColor"> and a <button>
+     does NOT inherit colour — it defaults to the UA's `buttontext`, which on a
+     dark surface resolved to almost the background and drew the confirm/cancel
+     marks as two empty boxes. Text glyphs got away with it; an icon does not. */
+  color: var(--text);
+}
+.dim-btn.dim-ok {
+  color: var(--ok);
+}
+.dim-btn.dim-no {
+  color: var(--error);
 }
 .dim-ok {
   color: #7fe08a;
