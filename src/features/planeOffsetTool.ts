@@ -12,11 +12,9 @@ import type { SketchPlane } from "../sketch/plane";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
 import { snap } from "../ui/units";
-import { axisDragDistance } from "./manipulator";
+import { axisDragDistance, createDragHandle, type DragHandle } from "./manipulator";
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
-const HANDLE_IDLE = 0xffc83d; // amber
-const HANDLE_HOT = 0xffe9a8;
 
 export class PlaneOffsetTool {
   active = false;
@@ -27,7 +25,7 @@ export class PlaneOffsetTool {
   private value = 0; // offset distance in mm (signed)
 
   private gizmo: THREE.Group | null = null;
-  private gizmoMat: THREE.MeshBasicMaterial | null = null;
+  private handle: DragHandle | null = null;
   private ghost: THREE.Mesh | null = null;
   private hovering = false;
   private grabbing = false;
@@ -137,7 +135,7 @@ export class PlaneOffsetTool {
     this.gizmo.position.copy(this.anchor);
     this.gizmo.quaternion.copy(this.quat);
     this.gizmo.scale.setScalar(k);
-    this.gizmoMat?.color.set(this.hovering || this.grabbing ? HANDLE_HOT : HANDLE_IDLE);
+    this.handle?.paint({ hot: this.hovering || this.grabbing });
     const s = this.viewport.projectToScreen(this.anchor);
     this.dim.position(s.x, s.y);
     if (!this.grabbing && this.dim.isUserDriven("offset")) {
@@ -178,17 +176,8 @@ export class PlaneOffsetTool {
   }
 
   private buildGizmo() {
-    const mat = new THREE.MeshBasicMaterial({ color: HANDLE_IDLE, depthTest: false, depthWrite: false });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 34, 12), mat);
-    shaft.position.y = 6 + 17;
-    const head = new THREE.Mesh(new THREE.ConeGeometry(5, 13, 18), mat);
-    head.position.y = 6 + 34 + 6.5;
-    const g = new THREE.Group();
-    g.add(shaft, head);
-    g.renderOrder = 999;
-    shaft.renderOrder = 999;
-    head.renderOrder = 999;
-    this.gizmoMat = mat;
+    this.handle = createDragHandle();
+    const g = this.handle.group;
     this.gizmo = g;
     this.viewport.addToScene(g);
   }
@@ -233,10 +222,9 @@ export class PlaneOffsetTool {
     this.dim.hide();
     if (this.gizmo) {
       this.viewport.removeFromScene(this.gizmo);
-      for (const c of this.gizmo.children) if (c instanceof THREE.Mesh) c.geometry.dispose();
-      this.gizmoMat?.dispose();
+      this.handle?.dispose();
       this.gizmo = null;
-      this.gizmoMat = null;
+      this.handle = null;
     }
     if (this.ghost) {
       this.viewport.removeFromScene(this.ghost);

@@ -417,8 +417,8 @@ export class ExtrudeTool {
       // Flag whichever op would then do nothing, so the choice is informed.
       const into = op === "cut";
       const opts: { value: Op; label: string; hint: string }[] = [
-        { value: "join", label: "Join", hint: into ? "⚠ likely no effect (profile is inside)" : "merge" },
-        { value: "cut", label: "Cut", hint: into ? "remove" : "⚠ nothing to cut here" },
+        { value: "join", label: "Join", hint: into ? "likely no effect (profile is inside)" : "merge" },
+        { value: "cut", label: "Cut", hint: into ? "remove" : "nothing to cut here" },
         { value: "new", label: "New Body", hint: isTextProfile ? "separate — assign its own print color" : "separate" },
         { value: "intersect", label: "Intersect", hint: "keep overlap" },
       ];
@@ -428,7 +428,7 @@ export class ExtrudeTool {
       if (!chosen) {
         // modal dismissed — the tool is STILL ALIVE; say so instead of leaving
         // the user staring at an unchanged screen ("nothing happened")
-        setPrompt("Extrude not committed — Enter/✓ to choose an operation · Esc to cancel");
+        setPrompt("Extrude not committed — Enter or the confirm button to choose an operation · Esc to cancel");
         return;
       }
       op = chosen;

@@ -3,11 +3,20 @@
 // treatments mid-gesture, and keeping the dragged number inside what the kernel
 // can plausibly build.
 //
+// The drag is SIGNED, and that is the whole design: one axis carries both
+// treatments, with "nothing" at the origin between them. Drag the arrow the way
+// it points and you get a fillet whose radius is how far you dragged; keep
+// pulling back through the origin and the same travel becomes a chamfer's
+// setback; stop at the origin and there is no feature at all. Changing your mind
+// therefore costs a mouse movement rather than an abort and a restart — which is
+// what the earlier one-sided drag (floored at a snap step, so it could neither
+// reach zero nor cross it) forced on you.
+//
 // Split out of edgeFeatureTool.ts on purpose. The tool itself is pointer
 // plumbing — listeners, a Three.js gizmo, a sidecar preview — none of which can
-// run in the headless test suite. These five functions are the part that can
-// actually be wrong in a way a user notices, so they live where vitest can
-// reach them with no viewport, camera or WebGL context.
+// run in the headless test suite. These functions are the part that can actually
+// be wrong in a way a user notices, so they live where vitest can reach them
+// with no viewport, camera or WebGL context.
 
 import { snap } from "../ui/units";
 
@@ -26,8 +35,9 @@ export interface ValueBounds {
 }
 
 /** Smallest value worth committing, in mm. Below this OCCT either refuses or
- *  produces a blend nobody can see, so it is the floor for a TYPED value; a
- *  DRAGGED one stops at a whole snap step (see dragBounds). */
+ *  produces a blend nobody can see — so it is both the floor for a TYPED value
+ *  and, for a dragged one, the test for "the user is sitting on the origin and
+ *  has asked for no feature at all". */
 export const MIN_EDGE_VALUE = 0.001;
 
 /** How much of the model's bounding-box diagonal a dragged value may reach.
@@ -54,20 +64,21 @@ export function treatmentLabel(kind: EdgeTreatment): string {
   return kind === "fillet" ? "Fillet" : "Chamfer";
 }
 
-/** Bounds for a DRAGGED value.
- *
- *  The floor is one snap step rather than zero: the step scales with zoom, so
- *  it is "one visible increment at the size you are looking at", and stopping
- *  there means dragging backwards past the edge parks the value at the smallest
- *  thing you could have meant instead of sliding through zero into a negative
- *  radius the kernel would reject. */
-export function dragBounds(step: number, modelDiagonal: number | null): ValueBounds {
-  const min = step > 0 && Number.isFinite(step) ? step : MIN_EDGE_VALUE;
-  const max =
-    modelDiagonal != null && modelDiagonal > 0 && Number.isFinite(modelDiagonal)
-      ? Math.max(min, modelDiagonal * MAX_DIAGONAL_FRACTION)
-      : Infinity;
-  return { min, max };
+/** How far a dragged value may travel from the origin, in mm — the same cap on
+ *  BOTH sides, since a chamfer that overruns the face is no more buildable than
+ *  a fillet that does. Infinity when the document has no geometry to measure. */
+export function dragLimit(modelDiagonal: number | null): number {
+  if (modelDiagonal == null || !(modelDiagonal > 0) || !Number.isFinite(modelDiagonal)) {
+    return Infinity;
+  }
+  return Math.max(MIN_EDGE_VALUE, modelDiagonal * MAX_DIAGONAL_FRACTION);
+}
+
+/** Bounds for a value the user is free to choose outright (a typed one, or one
+ *  carried across a Tab flip): anything the kernel might build, floored at the
+ *  smallest visible blend. */
+export function valueBounds(modelDiagonal: number | null): ValueBounds {
+  return { min: MIN_EDGE_VALUE, max: dragLimit(modelDiagonal) };
 }
 
 export function clampValue(v: number, bounds: ValueBounds): number {
@@ -76,32 +87,65 @@ export function clampValue(v: number, bounds: ValueBounds): number {
 }
 
 export interface Scrub {
-  /** value in mm when the handle was grabbed */
-  grabValue: number;
+  /** signed offset in mm when the handle was grabbed (see scrubSigned) */
+  grabSigned: number;
   /** axis projection (mm) at grab time */
   grabProj: number;
   /** axis projection (mm) now */
   proj: number;
   /** snap granularity in mm */
   step: number;
-  bounds: ValueBounds;
+  /** largest magnitude the drag may reach, either side of the origin */
+  limit: number;
 }
 
-/** Value for the current pointer position: the grab value plus how far the
- *  cursor has travelled along the handle's axis, snapped to a clean step so the
- *  readout says 2.5 rather than 2.4713, then clamped. Relative to the grab (not
- *  absolute along the axis) so grabbing the handle never makes the value jump. */
-export function scrubValue(s: Scrub): number {
-  return clampValue(snap(s.grabValue + (s.proj - s.grabProj), s.step), s.bounds);
-}
-
-/** Flip fillet ↔ chamfer, carrying the number across untouched.
+/** Signed offset for the current pointer position: where the drag started plus
+ *  how far the cursor has travelled along the handle's axis, snapped to a clean
+ *  step so the readout says 2.5 rather than 2.4713, then held inside ±limit.
+ *  Relative to the grab (not absolute along the axis) so taking hold of the
+ *  handle never makes the value jump.
  *
- *  This IS the interaction the whole gesture exists for: a fillet's radius and a
- *  chamfer's setback are the same drag magnitude off the same edge, so they are
- *  two renderings of one number rather than two commands. Re-clamped only
- *  because the caller may hand us a value from a different bounds regime (a
- *  typed one, or one dragged before the camera zoomed). */
+ *  Exactly 0 inside a one-step dead zone around the origin. Snapping alone would
+ *  already produce 0 within half a step, but half a step is ~4 px of mouse
+ *  travel — too fine a target for a state the user has to be able to stop in on
+ *  purpose, since it is how the gesture is abandoned. A whole step either side
+ *  makes the origin a detent you can feel, and the first value past it is one
+ *  clean increment rather than a jump. */
+export function scrubSigned(s: Scrub): number {
+  const raw = s.grabSigned + (s.proj - s.grabProj);
+  if (!Number.isFinite(raw)) return 0;
+  const dead = s.step > 0 && Number.isFinite(s.step) ? s.step : MIN_EDGE_VALUE;
+  if (Math.abs(raw) < dead) return 0;
+  const stepped = snap(raw, s.step);
+  const limit = s.limit > 0 ? s.limit : Infinity;
+  return Math.sign(stepped) * Math.min(Math.abs(stepped), limit);
+}
+
+/** Read a signed offset as a treatment: `positive` is the one the arrow's own
+ *  direction means, its opposite lives on the other side of the origin, and the
+ *  magnitude is the radius or setback either way.
+ *
+ *  A radius and a setback are the same drag off the same edge, which is why one
+ *  axis can carry both — the sign is the only thing that distinguishes them. At
+ *  exactly 0 the value is 0 and the reported kind is arbitrary; callers keep
+ *  showing whichever they had rather than let the label flicker at the
+ *  crossing. */
+export function treatmentAt(
+  positive: EdgeTreatment,
+  signed: number,
+): { kind: EdgeTreatment; value: number } {
+  return {
+    kind: signed < 0 ? otherTreatment(positive) : positive,
+    value: Math.abs(signed),
+  };
+}
+
+/** Flip fillet ↔ chamfer in place, carrying the number across untouched — what
+ *  Tab does, and the only way to switch a value that was TYPED rather than
+ *  dragged (a typed number has no side of the origin to be on).
+ *
+ *  Re-clamped only because the caller may hand us a value from a different
+ *  bounds regime (a typed one, or one dragged before the camera zoomed). */
 export function switchTreatment(
   kind: EdgeTreatment,
   value: number,
@@ -110,10 +154,14 @@ export function switchTreatment(
   return { kind: otherTreatment(kind), value: clampValue(value, bounds) };
 }
 
-/** Opening value for a fresh gesture. A 2 mm fillet / 1 mm chamfer is the
- *  familiar MCAD default, but on a model small enough that those overflow the
- *  drag bounds it is clamped — a default nobody can build is worse than a small
- *  one. */
+/** Opening value for a gesture that starts from a command rather than from the
+ *  handle — the tool has to show SOMETHING the moment it arms. (A gesture that
+ *  starts by grabbing the handle opens at 0 instead: there the drag itself is
+ *  the value, measured from where you pressed.)
+ *
+ *  A 2 mm fillet / 1 mm chamfer is the familiar MCAD default, but on a model
+ *  small enough that those overflow the drag bounds it is clamped — a default
+ *  nobody can build is worse than a small one. */
 export function seedValue(kind: EdgeTreatment, bounds: ValueBounds): number {
   return clampValue(kind === "fillet" ? 2 : 1, bounds);
 }

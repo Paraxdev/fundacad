@@ -71,7 +71,13 @@ export function constraintGlyphs(ents: ResolvedEntity[], constraints: SketchCons
       case "concentric": push(i, "◎", center(c.c1)); break;
       case "midpoint": push(i, "M", center(c.line)); break;
       case "symmetric": push(i, "⋈", center(c.line)); break;
-      case "fix": push(i, "⚓", refPos(c.e, c.p)); break;
+      // "F", not an anchor. Every other badge in this set is a letter or a
+      // mathematical operator that the UI font draws itself — one emoji among
+      // them came out in full colour, at a different weight, from whatever
+      // fallback the platform reached for, and jumped a pixel or two off the
+      // baseline its neighbours share. A letter matches the alphabet the rest
+      // of the set already speaks.
+      case "fix": push(i, "F", refPos(c.e, c.p)); break;
       // distance/diameter/p2pDistance/p2lDistance/radius/angle render as dimensions
       default: break;
     }

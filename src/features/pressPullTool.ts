@@ -1,5 +1,5 @@
-// Interactive Press/Pull (MCAD-style): pick a solid face, then grab a small
-// arrow handle on it and drag along the face normal to add material (boss / pull
+// Interactive Press/Pull (MCAD-style): pick a solid face, then grab the drag
+// handle on it and drag along the face normal to add material (boss / pull
 // out), cut material (pocket / push in), or resize a cylindrical face (hole/boss)
 // — with a LIVE preview. Same interaction as Fillet/Chamfer (EdgeFeatureTool): an
 // on-top, constant-screen-size gizmo you grab and scrub; a clean click commits.
@@ -18,18 +18,15 @@ import { setPrompt } from "../ui/prompt";
 import { snap } from "../ui/units";
 import {
   axisDragDistance,
-  createArrowHandle,
-  disposeArrowHandle,
+  createDragHandle,
   fluentRelease,
   HANDLE_UP,
+  type DragHandle,
 } from "./manipulator";
 
 type Phase = "pick" | "drag";
 
 const Y_AXIS = HANDLE_UP;
-const HANDLE_IDLE = 0xffc83d; // amber (pull / add)
-const HANDLE_HOT = 0xffe9a8; // brighter when hovered/grabbed
-const HANDLE_CUT = 0xff6b5c; // red when pushing in (cut)
 
 export class PressPullTool {
   active = false;
@@ -46,7 +43,7 @@ export class PressPullTool {
   private previewId = ""; // id shared by the live preview and the committed feature
 
   private gizmo: THREE.Group | null = null;
-  private gizmoMat: THREE.MeshBasicMaterial | null = null;
+  private handle: DragHandle | null = null;
   private hovering = false;
   private grabbing = false;
   /** true when this drag began on the passive selection handle rather than on
@@ -112,7 +109,7 @@ export class PressPullTool {
     }
   }
 
-  /** Take hold of the arrow at (x, y) without a fresh pointerdown of our own —
+  /** Take hold of the handle at (x, y) without a fresh pointerdown of our own —
    *  the press that started the gesture landed on the passive selection handle,
    *  before this tool existed. Everything after this point is the ordinary
    *  drag: the same onMove scrub, the same onUp release. */
@@ -297,8 +294,11 @@ export class PressPullTool {
       this.gizmo.position.copy(this.anchor);
       this.gizmo.quaternion.copy(this.quat);
       this.gizmo.scale.setScalar(k);
-      const base = sign < 0 ? HANDLE_CUT : HANDLE_IDLE;
-      this.gizmoMat?.color.set(this.hovering || this.grabbing ? HANDLE_HOT : base);
+      // Tone tracks the DIRECTION of the push: amber adds material, red cuts.
+      this.handle?.paint({
+        hot: this.hovering || this.grabbing,
+        tone: sign < 0 ? "cut" : "idle",
+      });
       const s = this.viewport.projectToScreen(this.anchor);
       this.dim.position(s.x, s.y);
       if (!this.grabbing && this.dim.isUserDriven("distance")) {
@@ -325,10 +325,9 @@ export class PressPullTool {
   }
 
   private buildGizmo() {
-    const { group, material } = createArrowHandle(HANDLE_IDLE);
-    this.gizmoMat = material;
-    this.gizmo = group;
-    this.viewport.addToScene(group);
+    this.handle = createDragHandle();
+    this.gizmo = this.handle.group;
+    this.viewport.addToScene(this.gizmo);
   }
 
   private hitGizmo(x: number, y: number): boolean {
@@ -366,7 +365,7 @@ export class PressPullTool {
     if (v != null && this.dim.isUserDriven("distance")) this.value = v;
     if (Math.abs(this.value) < 1e-3) {
       // keep the tool alive: silently cancelling here read as "nothing happened"
-      setPrompt("Nothing to commit — drag the arrow or type a distance first");
+      setPrompt("Nothing to commit — drag the handle or type a distance first");
       return;
     }
     const feature = this.buildFeature();
@@ -412,10 +411,10 @@ export class PressPullTool {
   }
 
   private disposeGizmo() {
-    if (!this.gizmo || !this.gizmoMat) return;
+    if (!this.gizmo || !this.handle) return;
     this.viewport.removeFromScene(this.gizmo);
-    disposeArrowHandle(this.gizmo, this.gizmoMat);
+    this.handle.dispose();
     this.gizmo = null;
-    this.gizmoMat = null;
+    this.handle = null;
   }
 }

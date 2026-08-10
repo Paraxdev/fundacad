@@ -45,6 +45,8 @@ import { contextMenu, dismissContextMenu, type CtxItem } from "../ui/menu";
 import { ConstraintTools, CONSTRAINT_TOOLS, type ConstraintHost } from "./constraintTools";
 import { PatternFlow, PATTERN_TOOLS, ENTITY_PATTERNS, type PatternHost } from "./patternFlow";
 import { ProjectPanel } from "./projectPanel";
+import { SketchPlaneGrid } from "./planeGrid";
+import { sketchLockHolds } from "./sketchView";
 
 export type SketchTool =
   | "select"
@@ -246,7 +248,11 @@ export class SketchMode {
    *  downgrades it from a live datum link to a baked placement. */
   private planeId: string | null = null;
   private store: DocumentStore | undefined;
-  private grid: THREE.GridHelper | null = null;
+  private grid: SketchPlaneGrid | null = null;
+  /** Where the grid's fade is centred, in sketch mm — the cursor, so the lattice
+   *  is densest under the point you are about to place, and the sketch origin
+   *  before the pointer has moved. */
+  private gridFocus = new THREE.Vector2();
   // Sketch Palette options
   private gridVisible = true;
   private gridSnap = true;
@@ -270,7 +276,23 @@ export class SketchMode {
   private textBoxStart: THREE.Vector2 | null = null;
   private textBoxEnd: THREE.Vector2 | null = null;
   private textBoxScreen: { x: number; y: number } | null = null;
-  private viewLocked = true; // lock the camera square to the sketch plane
+  private viewLocked = true; // the palette's "Lock to Plane" preference
+  // --- the sketch view's soft lock -------------------------------------------
+  // "Lock to Plane" used to mean a hard lock for the whole session: squared to
+  // the plane, orthographic, orbit disabled, full stop. That is right while you
+  // are drawing and wrong the moment you pull back to see where the sketch sits
+  // on the part — which is exactly what you do on a face at an awkward angle,
+  // where a flat straight-on projection shows you a silhouette with no depth to
+  // read. So the lock now measures itself against the framing the sketch opened
+  // at (see sketchView.sketchLockHolds) and lets go once you have zoomed out
+  // past it. Placement is unaffected either way: every point is raycast onto the
+  // sketch plane, so it works at any view angle.
+  /** view half-height when the sketch settled, the baseline the release is
+   *  measured against. Null until the camera has actually got there. */
+  private entryScale: number | null = null;
+  private lockReleased = false;
+  private releaseAnnounced = false; // say it once per session, not once per frame
+  private raf = 0;
   private dim: DimInput;
   private dims: SketchDimensions;
   private glyphs: SketchGlyphs;
@@ -279,6 +301,7 @@ export class SketchMode {
   private boundUp: (e: PointerEvent) => void;
   private boundKey: (e: KeyboardEvent) => void;
   private boundContext: (e: MouseEvent) => void;
+  private boundTick: () => void;
   // collaborators: the constraint-tool click flows and the pattern placement/edit
   // flow, each operating on a live accessor into this SketchMode (see their
   // Host interfaces) rather than a copy of its state.
@@ -315,6 +338,7 @@ export class SketchMode {
     this.boundUp = (e) => this.endDrag(e.pointerId);
     this.boundKey = (e) => this.onKey(e);
     this.boundContext = (e) => this.onContextMenu(e);
+    this.boundTick = () => this.tick();
     const constraintHost: ConstraintHost = {
       tool: () => this.tool,
       entities: () => this.entities,
@@ -388,7 +412,12 @@ export class SketchMode {
 
     this.viewport.suspendPicking = true;
     this.viewport.enterSketchView(this.plane.origin, this.plane.n, this.plane.v);
+    this.entryScale = null; // re-baselined on the first tick, once the camera lands
+    this.lockReleased = false;
+    this.releaseAnnounced = false;
+    this.gridFocus.set(0, 0); // the sketch origin, until the pointer says otherwise
     this.addGrid();
+    if (!this.raf) this.raf = requestAnimationFrame(this.boundTick);
 
     const el = this.viewport.domElement;
     el.addEventListener("pointerdown", this.boundDown);
@@ -458,6 +487,8 @@ export class SketchMode {
     el.removeEventListener("pointerup", this.boundUp);
     el.removeEventListener("contextmenu", this.boundContext);
     window.removeEventListener("keydown", this.boundKey, true);
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
     dismissContextMenu();
     this.selected.clear();
     this.dragFrom = null;
@@ -597,10 +628,79 @@ export class SketchMode {
     this.overlay.setActiveSketch(curveObjects(this.entities, this.plane, this.activeColor()));
   }
 
+  // --- per-frame reconcile (grid + view lock) --------------------------------
+  /** One loop for the two things that follow the CAMERA rather than the
+   *  document, neither of which has an event to hang off: the grid's spacing and
+   *  extent, and how far the view has drifted from the plane it opened on. Zoom
+   *  arrives from the wheel, the SpaceMouse, a fit and the ViewCube, so watching
+   *  the camera once a frame is both simpler and more complete than subscribing
+   *  to four input paths — the same argument SelectionNudge makes for its tick.
+   *  Cheap by construction: the grid rebuild is key-guarded and the release
+   *  check is one comparison. */
+  private tick() {
+    this.raf = requestAnimationFrame(this.boundTick);
+    if (!this.active) return;
+    const scale = this.viewport.rig.viewScale();
+    if (this.entryScale == null) {
+      // First frame of the session. enterSketchView's camera move is queued
+      // inside camera-controls and only commits on its next update(), which the
+      // viewport's own loop — registered a frame earlier, so it runs first —
+      // has just done. Reading it here reads the settled sketch view; reading it
+      // in enter() would have read the view we came FROM.
+      this.entryScale = scale;
+      return;
+    }
+    this.updateGrid();
+    if (this.viewLocked && !this.lockReleased && !sketchLockHolds(this.entryScale, scale)) {
+      this.releaseView();
+    }
+  }
+
+  /** The view has pulled back far enough that holding it square to the plane is
+   *  costing more than it buys: hand the camera back. Orbit is re-enabled and
+   *  the projection returns to whatever it was before the sketch forced flat,
+   *  so the part regains its depth and a face at an odd angle can be looked at
+   *  from an angle that suits it. The sketch itself does not change — the plane,
+   *  the snapping and every placement still go through the plane raycast. */
+  private releaseView() {
+    this.lockReleased = true;
+    this.viewport.rig.setOrbitLocked(false);
+    setSpaceMouseOrbitLocked(false);
+    this.viewport.setSketchFlat(false);
+    if (this.releaseAnnounced) return;
+    this.releaseAnnounced = true;
+    toast("View unlocked — orbit freely. Everything you draw still lands on the sketch plane. (Look At re-squares it.)");
+  }
+
+  /** Re-arm the lock and re-baseline it. Called by anything that deliberately
+   *  puts the camera back on the plane, so a released session can be recovered
+   *  without leaving and re-entering the sketch. */
+  private squareToPlane() {
+    this.viewport.enterSketchView(this.plane.origin, this.plane.n, this.plane.v);
+    this.lockReleased = false;
+    this.entryScale = null; // re-measured on the next tick, from the new framing
+  }
+
+  private updateGrid() {
+    const grid = this.grid;
+    if (!grid || !this.gridVisible) return;
+    // Floored at the snap step so every drawn line is a line the cursor catches
+    // on; free to go finer when snapping is off (see planeGrid.gridStep).
+    const rebuilt = grid.update(
+      this.plane,
+      this.gridFocus.x,
+      this.gridFocus.y,
+      this.viewport.pixelWorldSize(this.plane.origin),
+      this.gridSnap ? GRID_STEP : 0,
+    );
+    if (rebuilt) this.viewport.requestRender();
+  }
+
   // --- Sketch Palette options ---
   setGridVisible(on: boolean) {
     this.gridVisible = on;
-    if (this.grid) this.grid.visible = on;
+    this.grid?.setVisible(on);
+    this.viewport.requestRender();
   }
   setGridSnap(on: boolean) {
     this.gridSnap = on;
@@ -651,13 +751,23 @@ export class SketchMode {
    *  (mouse + SpaceMouse) so the view can't tilt off the plane. Unlock = free orbit. */
   setViewLocked(on: boolean) {
     this.viewLocked = on;
-    if (on) this.viewport.enterSketchView(this.plane.origin, this.plane.n, this.plane.v);
+    // Through squareToPlane, not enterSketchView: re-locking has to re-baseline
+    // the release check too, or a session the zoom already released would come
+    // back square with the lock still disarmed and drift straight off again.
+    if (on) this.squareToPlane();
     this.viewport.rig.setOrbitLocked(on);
     setSpaceMouseOrbitLocked(on);
   }
-  /** re-square the camera to the active sketch plane (palette "Look At") */
+  /** re-square the camera to the active sketch plane (palette "Look At").
+   *  This is the recovery the release toast points at, so it re-arms the lock
+   *  rather than only moving the camera. */
   lookAt() {
-    this.viewport.enterSketchView(this.plane.origin, this.plane.n, this.plane.v);
+    this.squareToPlane();
+    if (this.viewLocked) {
+      this.viewport.rig.setOrbitLocked(true);
+      setSpaceMouseOrbitLocked(true);
+      this.viewport.setSketchFlat(true);
+    }
   }
 
   /** Apply an edited dimension value (mm) to an entity. Line length and circle
@@ -1998,7 +2108,7 @@ export class SketchMode {
   }
 
   /** Freeze the label position (`place`) at the cursor. Does NOT commit —
-   *  Enter / ✓ in the value box does, so nothing reaches setDrivingDimension
+   *  Enter / the confirm button in the value box does, so nothing reaches setDrivingDimension
    *  without passing through the box. */
   private dimPlaceClick(p: THREE.Vector2, ev: PointerEvent) {
     if (!this.dimPlan) {
@@ -2018,7 +2128,7 @@ export class SketchMode {
       : null; // distance/diameter render through entityDims — no place slot
     this.dimPlaced = true; // NOT `dimPlace != null` — that is null for those two
     this.positionDimBox(ev);
-    this.dim.setClickThrough(false); // ✓ / ✕ / the field are live from here on
+    this.dim.setClickThrough(false); // confirm / cancel / the field are live from here on
     this.dim.focus(); // the canvas click blurred the input
   }
 
@@ -2046,12 +2156,12 @@ export class SketchMode {
     this.dim.updateFromCursor({ [plan.field]: plan.measure() });
     this.positionDimBox(ev);
     // Until the label is placed the box must not intercept the click that
-    // places it — that click landed on ✓ and committed the measured value.
+    // places it — that click landed on confirm and committed the measured value.
     this.dim.setClickThrough(!this.dimPlaced);
     this.dim.focus();
   }
 
-  /** Enter / ✓ : evaluate what was typed, build the constraint and hand it to
+  /** Enter / confirm: evaluate what was typed, build the constraint and hand it to
    *  the shared placement path (which stamps driven from the Reference toggle or
    *  the plan), then re-arm. The raw text goes through the SAME evaluator as a
    *  dimension label's inline editor, so `w/2` and `name=expr` work here too and
@@ -2136,7 +2246,7 @@ export class SketchMode {
     if (!already) this.constraints.push({ type: "concentric", c1, c2 });
   }
 
-  /** Esc / ✕ : abandon the in-progress dimension, staying armed on the tool. */
+  /** Esc / cancel: abandon the in-progress dimension, staying armed on the tool. */
   private cancelDim() {
     this.dim.hide();
     this.resetDimPicks();
@@ -2154,7 +2264,7 @@ export class SketchMode {
    *
    *  It used to be repositioned on every pointer move, to the side of the anchor
    *  away from the cursor, so it could never swallow the click-to-place. That
-   *  made the box flee an approaching pointer and rendered ✓ unclickable. The
+   *  made the box flee an approaching pointer and rendered confirm unclickable. The
    *  box is click-through until the dimension is placed (see
    *  DimInput.setClickThrough), so it no longer needs to dodge anything —
    *  a stationary box is worth far more than a clever one. */
@@ -2729,14 +2839,13 @@ export class SketchMode {
    *  way to say "measure to the EDGE of this circle, not its centre". */
   private openDimensionMenu(e: MouseEvent) {
     e.preventDefault();
-    const check = (on: boolean, label: string) => `${on ? "✓ " : "    "}${label}`;
     const plan = this.dimPlan;
     // radius/diameter only means something while a lone round is picked
     const lone = this.dimPicks.length === 1 && this.dimPicks[0] !== undefined && isRoundTarget(this.dimPicks[0]);
     const isDia = plan?.kind === "diameter";
     const items: CtxItem[] = [
       {
-        label: check(this.dimTangentArmed, "Pick Circle/Arc Tangent"),
+        label: "Pick Circle/Arc Tangent", checked: this.dimTangentArmed,
         onClick: () => {
           this.dimTangentArmed = !this.dimTangentArmed;
           setPrompt(this.dimTangentArmed
@@ -2746,16 +2855,16 @@ export class SketchMode {
       },
       { separator: true, label: "" },
       {
-        label: check(lone && !isDia, "Radius"), disabled: !lone,
+        label: "Radius", checked: lone && !isDia, disabled: !lone,
         onClick: () => this.setDimRoundPref("radius"),
       },
       {
-        label: check(lone && isDia, "Diameter"), disabled: !lone,
+        label: "Diameter", checked: lone && isDia, disabled: !lone,
         onClick: () => this.setDimRoundPref("diameter"),
       },
       { separator: true, label: "" },
       {
-        label: check(this.referenceMode, "Driven (reference)"),
+        label: "Driven (reference)", checked: this.referenceMode,
         onClick: () => { this.setReferenceDim(!this.referenceMode); this.onState?.(); },
       },
       { separator: true, label: "" },
@@ -2773,7 +2882,7 @@ export class SketchMode {
     const pick = this.offsetPick;
     contextMenu(e.clientX, e.clientY, [
       {
-        label: `${this.offsetChainMode ? "✓ " : "    "}Chain Selection`,
+        label: "Chain Selection", checked: this.offsetChainMode,
         onClick: () => {
           this.offsetChainMode = !this.offsetChainMode;
           setPrompt(this.offsetChainMode
@@ -3758,23 +3867,20 @@ export class SketchMode {
   // --- grid --------------------------------------------------------------
   private addGrid() {
     this.removeGrid();
-    const grid = new THREE.GridHelper(400, 80, 0x44505c, 0x2c333a);
-    // GridHelper lies in XZ; orient it onto the sketch plane (XY local)
-    grid.quaternion.copy(this.plane.orientation()).multiply(
-      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2),
-    );
-    grid.position.copy(this.plane.origin);
-    (grid.material as THREE.Material).depthWrite = false;
-    grid.renderOrder = 1;
-    grid.visible = this.gridVisible;
+    // No transform set here: SketchPlaneGrid builds its lattice in world space
+    // from the plane it is handed, because the fade is baked into vertex colours
+    // and so has to know where the cursor is in the plane's own coordinates. All
+    // this owns is lifetime; updateGrid() on the tick owns placement.
+    const grid = new SketchPlaneGrid();
+    grid.setVisible(this.gridVisible);
     this.grid = grid;
-    this.viewport.addToScene(grid);
+    this.viewport.addToScene(grid.object);
+    this.updateGrid(); // build it now rather than showing an empty frame
   }
   private removeGrid() {
     if (this.grid) {
-      this.viewport.removeFromScene(this.grid);
-      this.grid.geometry.dispose();
-      (this.grid.material as THREE.Material).dispose();
+      this.viewport.removeFromScene(this.grid.object);
+      this.grid.dispose();
       this.grid = null;
     }
   }

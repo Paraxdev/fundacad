@@ -19,16 +19,13 @@ import type { Feature, Selector } from "../types";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
 import { snap } from "../ui/units";
-import { axisDragDistance } from "./manipulator";
+import { axisDragDistance, createDragHandle, type DragHandle } from "./manipulator";
 
 export type FaceOffsetMode = "offsetFace" | "thicken";
 
 type Phase = "pick" | "drag";
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
-const HANDLE_IDLE = 0xffc83d;
-const HANDLE_HOT = 0xffe9a8;
-const HANDLE_IN = 0xff6b5c; // pushing inward
 
 const LABEL: Record<FaceOffsetMode, string> = { offsetFace: "Offset Face", thicken: "Thicken" };
 
@@ -47,7 +44,7 @@ export class FaceOffsetTool {
   private previewId = "";
 
   private gizmo: THREE.Group | null = null;
-  private gizmoMat: THREE.MeshBasicMaterial | null = null;
+  private handle: DragHandle | null = null;
   private hovering = false;
   private grabbing = false;
   private grabValue = 0;
@@ -177,7 +174,7 @@ export class FaceOffsetTool {
   private prompt() {
     const n = this.faces.length > 1 ? `${this.faces.length} faces — ` : "";
     const sym = this.mode === "thicken" ? ` · S = symmetric${this.symmetric ? " (on)" : ""}` : "";
-    setPrompt(`${n}drag the arrow or type a distance${sym} · click empty space to commit · Esc to cancel`);
+    setPrompt(`${n}drag the handle or type a distance${sym} · click empty space to commit · Esc to cancel`);
   }
 
   private beginDrag(
@@ -213,9 +210,12 @@ export class FaceOffsetTool {
       this.gizmo.position.copy(this.anchor);
       this.gizmo.quaternion.copy(this.quat);
       this.gizmo.scale.setScalar(k);
-      this.gizmoMat?.color.set(
-        this.hovering || this.grabbing ? HANDLE_HOT : sign < 0 ? HANDLE_IN : HANDLE_IDLE,
-      );
+      // Tone tracks the DIRECTION of the offset: amber grows the face, red
+      // pulls it in.
+      this.handle?.paint({
+        hot: this.hovering || this.grabbing,
+        tone: sign < 0 ? "cut" : "idle",
+      });
       const s = this.viewport.projectToScreen(this.anchor);
       this.dim.position(s.x, s.y);
       // The field is the truth once typed — including its SIGN. While dragging
@@ -236,20 +236,10 @@ export class FaceOffsetTool {
     this.store.setPreview(Math.abs(this.value) < 1e-6 ? null : this.buildFeature());
   }
 
-  /** A small arrow built in pixel units; tick() scales it to constant screen size.
-   *  depthTest off + high renderOrder so it's always visible and grabbable. */
+  /** The shared drag handle; tick() scales it to a constant screen size. */
   private buildGizmo() {
-    const mat = new THREE.MeshBasicMaterial({ color: HANDLE_IDLE, depthTest: false, depthWrite: false });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 34, 12), mat);
-    shaft.position.y = 6 + 17;
-    const head = new THREE.Mesh(new THREE.ConeGeometry(5, 13, 18), mat);
-    head.position.y = 6 + 34 + 6.5;
-    const g = new THREE.Group();
-    g.add(shaft, head);
-    g.renderOrder = 999;
-    shaft.renderOrder = 999;
-    head.renderOrder = 999;
-    this.gizmoMat = mat;
+    this.handle = createDragHandle();
+    const g = this.handle.group;
     this.gizmo = g;
     this.viewport.addToScene(g);
   }
@@ -288,7 +278,7 @@ export class FaceOffsetTool {
     if (v != null && this.dim.isUserDriven("distance")) this.value = v;
     if (Math.abs(this.value) < 1e-3) {
       // keep the tool alive: silently cancelling reads as "nothing happened"
-      setPrompt("Nothing to commit — drag the arrow or type a distance first");
+      setPrompt("Nothing to commit — drag the handle or type a distance first");
       return;
     }
     const feature = this.buildFeature();
@@ -327,11 +317,8 @@ export class FaceOffsetTool {
   private disposeGizmo() {
     if (!this.gizmo) return;
     this.viewport.removeFromScene(this.gizmo);
-    for (const child of this.gizmo.children) {
-      if (child instanceof THREE.Mesh) child.geometry.dispose();
-    }
-    this.gizmoMat?.dispose();
+    this.handle?.dispose();
     this.gizmo = null;
-    this.gizmoMat = null;
+    this.handle = null;
   }
 }

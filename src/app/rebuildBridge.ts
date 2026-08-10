@@ -133,7 +133,7 @@ export function installRebuildBridge(e: Engine): void {
           const action = amb?.at
             ? { label: "Re-pick face", onClick: () => e.starters.repickReference(id, amb.at!) }
             : { label: "Show", onClick: () => e.selectFeature(id) };
-          toast(`⚠ ${label} failed: ${err.message}`, { kind: "error", action });
+          toast(`${label} failed: ${err.message}`, { kind: "error", action });
           if (id === lastCommittedId) e.selectFeature(id);
         }
         prevErrorIds = ids;
@@ -142,7 +142,7 @@ export function installRebuildBridge(e: Engine): void {
     }
     e.syncDatumPlanes();
     if (s.errorMessage) {
-      e.setStatus(`⚠ ${s.errorFeatureId ?? ""}: ${s.errorMessage}`, "error");
+      e.setStatus(`${s.errorFeatureId ?? ""}: ${s.errorMessage}`, "error");
     } else if (!s.building) {
       e.setStatus("ready", "connected");
     }

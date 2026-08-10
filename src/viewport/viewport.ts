@@ -70,9 +70,12 @@ const FLUSH_SEAM_MAX_EDGES = 20_000;
 import { Highlighter } from "./highlight";
 import { ProgressiveModel } from "./progressive";
 import { nearestEdgeByMid, midMatchTol, edgeSelectorFrom, polylineMid } from "./edgeMatch";
+import { mergeScope, pickScope, type ScopeDecision, type ScopeView } from "./pickScope";
+import { edgesOnFace, faceEdgeTol, faceSurface, type Tri } from "./faceEdges";
 import { remapSelection } from "./selectionMemo";
 import type { Plane3, PlaneDef, RebuildResult, Selector } from "../types";
 import { niceStep } from "../ui/units";
+import { faceSketchPlane } from "../sketch/sketchView";
 
 /** Shallow equality for the flat id→hex paint maps. Cheap enough to run on every
  *  build (microseconds at 3,000 entries) and it saves a full GPU colour upload
@@ -445,11 +448,22 @@ export class Viewport {
     }
     if (!this.model) return;
     // Ctrl/Cmd-click adds to the selection; a plain click replaces it (mainstream MCAD).
-    const add = e.ctrlKey || e.metaKey;
+    //
+    // SHIFT adds too, and on an EDGE it means something more besides: "exactly
+    // this one, no tangent chain" (see pickScope.ts). One modifier for both
+    // halves of that is deliberate — "add this edge" and "add ONLY this edge"
+    // are the same intent, and asking for the second with a second key would
+    // mean holding two of them to build an exact set one edge at a time.
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
     if (this.highlighter) {
-      if (!add) this.highlighter.clearSelection();
-      if (hit?.kind === "edge") this.highlighter.toggleSelectEdge(hit.edge);
-      else if (hit?.kind === "face") this.highlighter.toggleSelectFace(hit.faceId);
+      if (!add) {
+        this.highlighter.clearSelection();
+        this.edgeScope = { scope: "chain", reason: "tangent" }; // a replaced selection carries nothing over
+      }
+      if (hit?.kind === "edge") {
+        this.highlighter.toggleSelectEdge(hit.edge);
+        this.noteEdgePickScope(hit.edge, e.shiftKey, add);
+      } else if (hit?.kind === "face") this.highlighter.toggleSelectFace(hit.faceId);
       this.requestRender();
     }
     this.onHit?.(hit, e.shiftKey);
@@ -784,6 +798,113 @@ export class Viewport {
     return this.highlighter?.getSelectedEdges() ?? [];
   }
 
+  // --- how much of the model the edge selection stands for --------------------
+  // Which edges are selected is only half of what a fillet needs to know; the
+  // other half is whether each was picked as itself or as a handle on its
+  // tangent chain. That is decided at PICK time (it reads the shift key and the
+  // camera — see pickScope.ts) and consumed much later, when a tool finally arms
+  // on the selection, so it is stored here beside the selection it describes and
+  // carried across a rebuild with it.
+
+  /** Scope of the CURRENT edge selection, with the reason it came out that way.
+   *  Replaced wholesale by a plain click, folded by mergeScope on an additive
+   *  one. */
+  private edgeScope: ScopeDecision = { scope: "chain", reason: "tangent" };
+
+  /** Record what a fresh edge pick means. `additive` folds into what the
+   *  selection already carried (single wins); a replacing click starts over. */
+  private noteEdgePickScope(edge: EdgeRef, shift: boolean, additive: boolean) {
+    const decided = pickScope({ shift, view: this.edgeScopeView(edge) });
+    if (!additive) {
+      this.edgeScope = decided;
+      return;
+    }
+    // Keep the REASON belonging to whichever pick won the merge, so the prompt
+    // explains the set the user is looking at rather than their last click.
+    const scope = mergeScope(this.edgeScope.scope, decided.scope);
+    if (scope === decided.scope) this.edgeScope = decided;
+  }
+
+  /** What the current edge selection means — "chain" to expand each member
+   *  across its tangent neighbours, "single" for exactly these edges. */
+  selectedEdgeScope(): ScopeDecision {
+    return this.edgeScope;
+  }
+
+  /** The camera's relationship to one edge, for the zoom heuristic. Public
+   *  because the edge tool picks edges of its own once it is armed, and those
+   *  picks have to be scoped by the same rule as the pick that armed it. */
+  edgeScopeView(edge: EdgeRef): ScopeView {
+    const rect = this.canvas.getBoundingClientRect();
+    const viewportPx = Math.max(1, Math.min(rect.width, rect.height));
+    const pts = edge.points as [number, number, number][];
+    const mid = polylineMid(pts);
+    return {
+      edgePx: this.screenExtent(pts),
+      viewportPx,
+      pixelWorldSize: mid ? this.pixelWorldSize(new THREE.Vector3(mid[0], mid[1], mid[2])) : null,
+      modelDiagonal: this.model ? this.model.box.getSize(new THREE.Vector3()).length() : null,
+    };
+  }
+
+  /** Diagonal of a polyline's projected bounding box, in CSS pixels — its
+   *  on-screen size however it is oriented, and non-zero for a closed edge whose
+   *  two ends coincide. Sampled rather than walked in full: a deviation-sampled
+   *  arc carries hundreds of points and eight of them bound it just as well. */
+  private screenExtent(points: [number, number, number][]): number | null {
+    if (points.length < 2) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const step = Math.max(1, Math.floor((points.length - 1) / 7));
+    for (let i = 0; i < points.length; i += step) {
+      const p = points[i]!;
+      const s = this.projectToScreen(new THREE.Vector3(p[0], p[1], p[2]));
+      if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) return null;
+      if (s.x < minX) minX = s.x;
+      if (s.x > maxX) maxX = s.x;
+      if (s.y < minY) minY = s.y;
+      if (s.y > maxY) maxY = s.y;
+    }
+    const d = Math.hypot(maxX - minX, maxY - minY);
+    return Number.isFinite(d) ? d : null;
+  }
+
+  /** Every drawn edge that lies on one of the SELECTED faces — what "fillet this
+   *  face" means (features/toolCapabilities.ts is what says a face is a kind the
+   *  edge tools can consume; this is how they get from one to the other).
+   *
+   *  Derived geometrically because there is no topology to ask: the rebuild reply
+   *  carries faces and edges side by side and never says which bounds which (see
+   *  faceEdges.ts). Candidates are narrowed to the owning body first — an edge of
+   *  another body that happens to lie on this face is not an edge OF it, and on
+   *  an assembly that is also most of the work skipped. */
+  edgesOfSelectedFaces(): EdgeRef[] {
+    if (!this.highlighter || !this.model) return [];
+    const faces = this.highlighter.getSelectedFaces();
+    if (!faces.length) return [];
+    const tol = faceEdgeTol(this.model.box.getSize(new THREE.Vector3()).length());
+    const all = this.visibleEdgeLines();
+    const out: EdgeRef[] = [];
+    const seen = new Set<EdgeRef>();
+    for (const fid of faces) {
+      const tris = this.faceTriangles(fid).map(
+        (t): Tri => [
+          [t.a.x, t.a.y, t.a.z],
+          [t.b.x, t.b.y, t.b.z],
+          [t.c.x, t.c.y, t.c.z],
+        ],
+      );
+      if (!tris.length) continue;
+      const bodyId = this.faceIdToBodyId(fid);
+      const candidates = bodyId ? all.filter((e) => !e.body || e.body === bodyId) : all;
+      for (const edge of edgesOnFace(candidates, faceSurface(tris), tol)) {
+        if (seen.has(edge)) continue;
+        seen.add(edge);
+        out.push(edge);
+      }
+    }
+    return out;
+  }
+
   /** Selectors for the currently selected edges (for pre-selected fillet/chamfer). */
   selectedEdgeSelectors(): Selector[] {
     if (!this.highlighter) return [];
@@ -904,6 +1025,45 @@ export class Viewport {
       anchor: this.faceCentroidWorld(first),
       bodyId: this.faceIdToBodyId(first),
     };
+  }
+
+  /** The sketch plane of the currently selected face, or null when nothing is
+   *  selected and when what IS selected is curved.
+   *
+   *  This is what lets "click a face, press S" skip the plane picker entirely:
+   *  a selected planar face has already answered the only question the picker
+   *  was there to ask. The derivation is sketchView.faceSketchPlane — pure,
+   *  tested, and reading nothing but the face's own normal, so re-entering the
+   *  sketch later lands on exactly the same axes.
+   *
+   *  No interior reference is passed. The face normal is the area-weighted
+   *  triangle normal of a sewn solid, so its winding already points out of the
+   *  material; a "centre of the body" test would agree with it almost
+   *  everywhere and then invert the underside of an overhang, which is worse
+   *  than not testing at all.
+   *
+   *  Curved faces are rejected rather than flattened: a sketch on a mean plane
+   *  through a cylinder wall is geometry the user did not ask for, and the
+   *  picker (which offers base planes too) is the right answer there. */
+  selectedFaceSketchPlane(): PlaneDef | null {
+    if (!this.highlighter || !this.model) return null;
+    const faceId = this.highlighter.getSelectedFaces()[0];
+    if (faceId === undefined) return null;
+    const n = this.faceNormalWorld(faceId);
+    const c = this.faceCentroidWorld(faceId);
+    const tris = this.faceTriangles(faceId);
+    if (tris.length === 0) return null;
+    // Planar means "every vertex sits on the plane through the centroid". The
+    // tolerance scales with the model so a 2 m import is judged as leniently as
+    // a 20 mm part — the same rule selectCoplanarFaces uses.
+    const tol = 1e-3 * (this.model.box.getSize(new THREE.Vector3()).length() || 1) + 1e-4;
+    const d0 = n.dot(c);
+    for (const t of tris) {
+      for (const v of [t.a, t.b, t.c]) {
+        if (Math.abs(n.dot(v) - d0) > tol) return null;
+      }
+    }
+    return faceSketchPlane([n.x, n.y, n.z], [c.x, c.y, c.z]);
   }
 
   /** Start drawing a chunked reply as it arrives. `manifest` names every body,
@@ -1115,6 +1275,10 @@ export class Viewport {
     this.applyAnalysis(); // paints the analysis overlay, or assigned body colors when "none"
     if (this.zebra) this.applyZebra();
     if (this.combs) this.applyCombs();
+    // The cut survives the rebuild the same way: the bodies under it are new (or
+    // have just had their clipping reset by resetBodyAppearance), and the ghost
+    // meshes went with the meshes they were parented to.
+    if (this.section) this.applySection();
     if (fit) this.rig.fit(this.model.box, true);
   }
 
@@ -1368,6 +1532,7 @@ export class Viewport {
     this.highlighter = null;
     this.targetGridZ = 0; // no model → grid back on the world XY plane
     this.savedMats.clear(); // materials died with the model
+    this.ghostMeshes = []; // ...as did the meshes the ghosts hung off
     if (this.combsObj) {
       this.scene.modelGroup.remove(this.combsObj);
       this.combsObj.geometry.dispose();
@@ -1602,17 +1767,111 @@ export class Viewport {
     return count;
   }
 
-  /** Section/clip: clip the model (faces + edges) by a plane, or clear with null.
-   *  Lost on the next rebuild (materials are recreated) — fine for an interactive
-   *  section that you set, look at, then close. */
-  setClipPlane(plane: THREE.Plane | null) {
-    this.scene.renderer.localClippingEnabled = !!plane;
-    const planes = plane ? [plane] : null;
+  // --- cross-section mode ----------------------------------------------------
+  //
+  // Display-only view state, in the same family as zebra / curvature combs /
+  // the analysis overlays: owned here rather than by the tool, because it has to
+  // OUTLIVE a rebuild. The old section was documented as "lost on the next
+  // rebuild", which was honest when it was a one-shot you set, looked at and
+  // closed; a mode you keep working inside cannot evaporate the moment the
+  // fillet you were aiming at rebuilds the body. setModel re-applies it, exactly
+  // as it re-applies the other three.
+  //
+  // The near half is clipped, as before. The far half is drawn a SECOND time,
+  // faintly, by a per-body mesh that shares the body's own geometry (no copy, no
+  // upload) and carries the mirrored clip plane. That is the cheap route on this
+  // renderer: bodies already own separate meshes and materials, so ghosting is
+  // one extra draw call per visible body and one shared material — no render
+  // target, no depth prepass, no shader of our own. The ghosts are CHILDREN of
+  // the body meshes, which is what makes them inherit a move-ghost's live
+  // transform and disappear with a body that is hidden or replaced.
+  //
+  // Cost when the mode is off is zero: no objects, no material, and the plane
+  // assignment below only ever runs on a transition or a rebuild — nothing is
+  // added to the per-frame path, which matters because this viewport renders on
+  // demand and would otherwise be woken every frame by state nobody is looking at.
+  private section: { ghost: number } | null = null;
+  /** The live cut. Materials hold a REFERENCE to it, so moving the section is a
+   *  mutation here rather than a re-assignment across every material. */
+  private sectionPlane = new THREE.Plane();
+  /** The same cut, mirrored: what the ghost pass keeps. */
+  private ghostPlane = new THREE.Plane();
+  private ghostMat: THREE.MeshLambertMaterial | null = null;
+  private ghostMeshes: THREE.Mesh[] = [];
+
+  /** Enter/update cross-section mode: clip the model (faces + edges) by `plane`,
+   *  drawing what it cuts away at `ghost` alpha (0 = not drawn at all, the old
+   *  behaviour). Null leaves the mode. */
+  setSectionView(view: { plane: THREE.Plane; ghost: number } | null) {
+    if (!view) {
+      if (!this.section) return;
+      this.section = null;
+      this.applySection();
+      return;
+    }
+    // A dragged section changes its plane many times a second but its ghost
+    // level almost never; only the latter costs anything to re-apply.
+    const remount = !this.section || this.section.ghost !== view.ghost;
+    this.sectionPlane.copy(view.plane);
+    this.ghostPlane.copy(view.plane).negate();
+    this.section = { ghost: view.ghost };
+    if (remount) this.applySection();
+    else this.requestRender();
+  }
+
+  /** True while cross-section mode is on — for anything that has to draw or
+   *  behave differently underneath it. */
+  get sectioned(): boolean {
+    return !!this.section;
+  }
+
+  /** Push the current section state onto the model's materials and rebuild the
+   *  ghost pass. Called on a transition, on a ghost-level change, and after every
+   *  rebuild (a reused body has had its clipping planes reset by
+   *  resetBodyAppearance, and a fresh one never had any). */
+  private applySection() {
+    const on = !!this.section;
+    this.scene.renderer.localClippingEnabled = on;
+    const planes = on ? [this.sectionPlane] : null;
     if (this.model) {
       for (const b of this.model.bodies) (b.mesh.material as THREE.Material).clippingPlanes = planes;
       for (const d of edgeObjects(this.model)) d.material.clippingPlanes = planes;
     }
+    this.mountGhost();
     this.requestRender();
+  }
+
+  private mountGhost() {
+    for (const g of this.ghostMeshes) g.removeFromParent();
+    this.ghostMeshes = [];
+    // Always a FRESH material, never a cached one: a ghost hangs off the body
+    // mesh, and disposeBody's traversal disposes whatever it finds on the way
+    // down — so a rebuild that replaced one body has already disposed the
+    // material every OTHER body's ghost is still wearing. Recreating costs one
+    // object on a transition; reusing costs a silently dead material.
+    this.ghostMat?.dispose();
+    this.ghostMat = null;
+    const alpha = this.section?.ghost ?? 0;
+    // Nothing to draw: no material either, so "fully hidden" really is the old
+    // zero-cost cut rather than a fully transparent pass over the whole model.
+    if (!this.section || alpha <= 0 || !this.model) return;
+    const mat = (this.ghostMat = new THREE.MeshLambertMaterial({
+      color: BASE_COLOR,
+      transparent: true,
+      opacity: alpha,
+      // depthWrite off so several ghosted bodies read THROUGH each other — the
+      // point of the mode is the context an assembly's far side gives, and a
+      // ghost that occluded the ghost behind it would hide most of it.
+      depthWrite: false,
+      side: THREE.DoubleSide, // the cut leaves open shells: back faces are the interior
+      clippingPlanes: [this.ghostPlane],
+    }));
+    for (const b of this.model.bodies) {
+      const g = new THREE.Mesh(b.mesh.geometry, mat);
+      g.renderOrder = -1; // behind the solid half and behind every gizmo
+      b.mesh.add(g); // child: inherits the body's transform and its visibility
+      this.ghostMeshes.push(g);
+    }
   }
 
   /** The model's world bounding box (for placing the section plane), or null. */
@@ -1900,6 +2159,7 @@ export class Viewport {
 
   clearSelection() {
     this.highlighter?.clearSelection();
+    this.edgeScope = { scope: "chain", reason: "tangent" };
     this.onSelectionChange?.();
     this.requestRender();
   }
@@ -1908,6 +2168,7 @@ export class Viewport {
    *  right-click "Delete Face" menu so the face-delete path has a definite target. */
   selectOnlyFace(faceId: number) {
     this.highlighter?.clearSelection();
+    this.edgeScope = { scope: "chain", reason: "tangent" };
     this.highlighter?.toggleSelectFace(faceId);
     this.onSelectionChange?.();
     this.requestRender();
@@ -1918,6 +2179,11 @@ export class Viewport {
   selectOnlyEdge(line: EdgeRef) {
     this.highlighter?.clearSelection();
     this.highlighter?.toggleSelectEdge(line);
+    // A right-click on an edge IS a pick, so it is scoped like one — the menu's
+    // Fillet must mean the same thing there as a left-click does, zoom heuristic
+    // included, and the scope of whatever was selected before must not leak into
+    // a selection that has just been replaced.
+    this.noteEdgePickScope(line, false, false);
     this.onSelectionChange?.();
     this.requestRender();
   }
@@ -2093,24 +2359,33 @@ export class Viewport {
       if (d > bestDot) { bestDot = d; bestUp = cand; }
     }
     this.rig.lookAtPlane(origin, normal, bestUp);
-    // Flat, orthographic view for 2D precision (no perspective convergence). Force
-    // 'ortho' MODE (not just a camera swap) so 'auto' can't flip back to perspective
-    // on an off-axis sketch plane. Capture the prior mode ONCE so re-orienting
-    // (Look At) mid-sketch doesn't lose it.
-    if (!this.sketchOrtho) {
-      this.sketchPrevMode = this.rig.projectionMode();
-      this.rig.setProjectionMode("ortho");
-      this.sketchOrtho = true;
-    }
+    this.setSketchFlat(true);
     this.scene.grid.group.visible = false; // hide the world ground grid; only the sketch grid shows
     this.setModelDimmed(true);
     this.requestRender();
   }
-  exitSketchView() {
-    if (this.sketchOrtho) {
-      this.rig.setProjectionMode(this.sketchPrevMode); // restore projection mode
-      this.sketchOrtho = false;
+  /** Flat, orthographic view for 2D precision (no perspective convergence). It
+   *  forces the 'ortho' MODE rather than swapping the camera, so 'auto' can't
+   *  flip back to perspective on an off-axis sketch plane, and it captures the
+   *  prior mode ONCE so re-orienting (Look At) mid-sketch doesn't lose it.
+   *
+   *  Toggleable during a session, not just at its ends: a sketch that has let go
+   *  of its straight-on lock (the user pulled back to see the part) wants
+   *  perspective BACK, because at that distance a flat projection is exactly
+   *  what makes an awkwardly-angled face unreadable. */
+  setSketchFlat(on: boolean) {
+    if (on === this.sketchOrtho) return;
+    if (on) {
+      this.sketchPrevMode = this.rig.projectionMode();
+      this.rig.setProjectionMode("ortho");
+    } else {
+      this.rig.setProjectionMode(this.sketchPrevMode);
     }
+    this.sketchOrtho = on;
+    this.requestRender();
+  }
+  exitSketchView() {
+    this.setSketchFlat(false);
     this.scene.grid.group.visible = true;
     this.rig.restoreUp();
     this.setModelDimmed(false);

@@ -22,7 +22,7 @@ describe("constraintGlyphs", () => {
   it("places a fix glyph at the resolved endpoint", () => {
     const g = constraintGlyphs([line], [{ type: "fix", e: "l", p: 1 }]);
     expect(g.length).toBe(1);
-    expect(g[0]!.label).toBe("⚓");
+    expect(g[0]!.label).toBe("F");
     expect(g[0]!.pos.x).toBeCloseTo(10); // endpoint index 1
   });
 

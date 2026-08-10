@@ -404,7 +404,12 @@ export type Feature =
       // keep their exact behavior until re-saved through load-stamping).
       hiddenBodies?: string[];
     }
-  | { id: string; type: "fillet"; edges: Selector | Selector[]; radius: Num }
+  // `profile` shapes the blend's SECTION without moving where it meets the
+  // supporting faces: 0 (or absent) is the circular fillet, -1 flattens it to a
+  // chamfer's chord, +1 pulls it into the sharp corner, and it interpolates
+  // between. Absent means 0, so every fillet saved before this existed rebuilds
+  // byte-for-byte as it always did.
+  | { id: string; type: "fillet"; edges: Selector | Selector[]; radius: Num; profile?: Num }
   | { id: string; type: "chamfer"; edges: Selector | Selector[]; distance: Num }
   // Press/Pull one or more solid faces. `distance` is signed (the tool sets the
   // sign from the drag direction); `operation` is derived from the sign for the

@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { setPrompt } from "../ui/prompt";
 import { dismissContextMenu } from "../ui/menu";
 import { useBrowserStore } from "../stores/browser";
@@ -102,11 +103,11 @@ export function installViewportWiring(e: Engine): void {
   // would consume it. The handle puts the offer where the geometry is; the
   // prompt now explains the handle rather than substituting for it.
   //
-  // Three kinds of selection, one arrow — so this is also where they are ranked.
+  // Three kinds of selection, one handle — so this is also where they are ranked.
   // Edges first: an edge hit is the most specific thing the picker can return.
   // Then profiles, matching the picker's own sketch-over-solid priority (and
   // because a region pick deliberately does NOT clear the face selection
-  // underneath it, so without this rule the arrow would answer the wrong click).
+  // underneath it, so without this rule the handle would answer the wrong click).
   // Faces last.
   function refreshNudge() {
     const edges = e.viewport.selectedEdgeLines();
@@ -114,8 +115,23 @@ export function installViewportWiring(e: Engine): void {
     const faces = edges.length || regions.length ? null : e.viewport.selectedFacesForPressPull();
 
     if (edges.length) {
+      // The bbox centre decides which way is "out of the material" — read from
+      // the store, the same source EdgeFeatureTool reads, so the handle does not
+      // flip at the instant the tool takes the gesture over.
+      const bb = e.store.buildState.result?.bbox;
+      const centre = bb
+        ? new THREE.Vector3(
+            (bb.min[0] + bb.max[0]) / 2,
+            (bb.min[1] + bb.max[1]) / 2,
+            (bb.min[2] + bb.max[2]) / 2,
+          )
+        : null;
       e.nudge.show(
-        edgeNudgePlacement(edges, (x, y, tangent) => e.starters.grabEdgeHandle(x, y, tangent)),
+        edgeNudgePlacement(
+          edges,
+          (x, y, tangent) => e.starters.grabEdgeHandle(x, y, tangent),
+          centre,
+        ),
       );
     } else if (regions.length) {
       e.nudge.show(regionNudgePlacement(regions, (x, y) => e.starters.grabRegionHandle(x, y)));
@@ -127,17 +143,17 @@ export function installViewportWiring(e: Engine): void {
     const plural = (n: number, one: string) => `${n} ${one}${n > 1 ? "s" : ""}`;
     if (edges.length) {
       setPrompt(
-        `${plural(edges.length, "edge")} selected — drag the arrow to round it off ` +
-          `(Tab switches to a chamfer) · Esc to clear`,
+        `${plural(edges.length, "edge")} selected — drag the handle to round it off ` +
+          `(out fillets, back past zero chamfers) · Esc to clear`,
       );
     } else if (regions.length) {
       setPrompt(
-        `${plural(regions.length, "profile area")} selected — drag the arrow to pull it into a solid ` +
+        `${plural(regions.length, "profile area")} selected — drag the handle to pull it into a solid ` +
           `(in cuts) · Ctrl-click adds · Esc clears`,
       );
     } else if (faces?.faceIds.length) {
       setPrompt(
-        `${plural(faces.faceIds.length, "face")} selected — drag the arrow to push or pull ` +
+        `${plural(faces.faceIds.length, "face")} selected — drag the handle to push or pull ` +
           `(out adds, in cuts) · Del removes it and heals · Esc to clear`,
       );
     } else {

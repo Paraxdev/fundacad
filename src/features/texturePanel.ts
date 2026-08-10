@@ -2,7 +2,7 @@
 // noise/image heightmap). Unlike TextPanel (cursor-anchored, one text object)
 // this is DOCKED top-right: the tool can span a whole body, not one clicked
 // point, so there's no natural anchor to follow. Every edit fires onChange for a
-// live preview; ✓ Add/Apply commits, ✕ cancels.
+// live preview; Add/Apply commits, Cancel cancels.
 //
 // This is now a FACADE over stores/toolPanels.ts +
 // components/overlays/TextureToolPanel.vue. show/hide/setSummary/setMode/

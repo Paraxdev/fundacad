@@ -1,6 +1,6 @@
 // Where the drag handle stands on a selected EDGE, and what grabbing it does.
 //
-// The arrow itself, its hover behaviour and its per-frame loop live in
+// The handle itself, its hover behaviour and its per-frame loop live in
 // features/selectionNudge.ts, shared with faces. This file is only the two
 // edge-specific answers: the placement, and the hand-off to EdgeFeatureTool.
 
@@ -18,18 +18,21 @@ type Vec3 = [number, number, number];
  *
  *  `onGrab` receives the handle's own tangent so the tool can adopt it rather
  *  than recompute it: the tool arms inside the SAME pointerdown, and an axis
- *  that differed by a hair would make the arrow jump at the exact moment the
- *  user commits to the gesture. */
+ *  that differed by a hair would make the handle jump at the exact moment the
+ *  user commits to the gesture. `centre` is what "outward" is measured against
+ *  and must come from the same place the tool reads it, for the same reason. */
 export function edgeNudgePlacement(
   edges: EdgeRef[],
   onGrab: (clientX: number, clientY: number, tangent: THREE.Vector3 | null) => void,
+  centre?: THREE.Vector3 | null,
 ): NudgePlacement | null {
   const place = handlePlacement(edges.map((e) => e.points as Vec3[]));
   if (!place) return null;
   const tangent = place.tangent && new THREE.Vector3(...place.tangent);
+  const anchor = new THREE.Vector3(...place.anchor);
   return {
-    anchor: new THREE.Vector3(...place.anchor),
-    axis: (viewport: Viewport) => edgeHandleAxis(viewport, tangent),
+    anchor,
+    axis: (viewport: Viewport) => edgeHandleAxis(viewport, tangent, anchor, centre ?? null),
     grab: (x, y) => onGrab(x, y, tangent),
   };
 }

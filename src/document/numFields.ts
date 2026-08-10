@@ -15,7 +15,10 @@ export type FieldKind = "length" | "angle" | "count";
 /** [field, label, kind] rows per feature type. */
 export const FEATURE_NUM_FIELDS: Partial<Record<Feature["type"], [string, string, FieldKind][]>> = {
   extrude: [["distance", "Distance", "length"]],
-  fillet: [["radius", "Radius", "length"]],
+  // profile is a dimensionless ratio in (-1, 1) — "count" is this file's kind for
+  // real-valued unitless fields (see scale.factor, texture.sharpness), not an
+  // integer claim; INTEGER_FIELDS below is what marks those.
+  fillet: [["radius", "Radius", "length"], ["profile", "Profile", "count"]],
   chamfer: [["distance", "Length", "length"]],
   "press-pull": [["distance", "Distance", "length"]],
   revolve: [["angle", "Angle", "angle"]],

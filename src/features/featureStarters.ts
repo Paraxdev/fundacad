@@ -82,10 +82,13 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
    *  tool, from the same pre-selection, but already holding the arrow — the
    *  press that summons the tool is the press that drags it.
    *
-   *  It opens on FILLET because that is much the more common answer and one Tab
-   *  reaches the other. Opening on a mode the user has to choose first would put
+   *  It opens on FILLET, which also decides the drag's geometry: the tool reads
+   *  the arrow's own direction as a fillet and the far side of the origin as a
+   *  chamfer, so the more common answer is the one you get by dragging the way
+   *  the arrow points. Opening on a mode the user has to choose first would put
    *  a decision back in front of the gesture, which is the thing this flow
-   *  exists to stop doing. */
+   *  exists to stop doing — and neither answer is a dead end, since the other is
+   *  one drag back through zero (or one Tab) away. */
   const grabEdgeHandle = (x: number, y: number, tangent: THREE.Vector3 | null) => {
     if (toolBusy()) return;
     edgeFeature.start("fillet", edgeFeatureDone, { tangent, grabAt: { x, y } });
@@ -170,7 +173,25 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     window.addEventListener("keydown", onEsc, true);
   }
 
+  /** Sketch. A SELECTED planar face wins outright: it is already an answer to
+   *  "which plane?", so asking again — with the whole model greyed out and the
+   *  base-plane quads back on screen — is a step that can only be got wrong.
+   *  Click the face, press S, draw. (Curved faces and empty selections fall
+   *  through to the picker, which is where base planes live anyway.)
+   *
+   *  The face selection is dropped on the way in. It has been CONSUMED: leaving
+   *  it lit would put a stale press/pull offer behind the sketch and leave the
+   *  face selected — and therefore re-consumable — when the sketch closes. */
   function startSketch(tool?: SketchTool) {
+    if (!toolBusy()) {
+      const face = viewport.selectedFaceSketchPlane();
+      if (face) {
+        viewport.clearSelection();
+        sketch.enter(face, store);
+        if (tool) sketch.setTool(tool);
+        return;
+      }
+    }
     pickPlaneInteractive("Select a plane or a planar face of a body to sketch on", (spec) => {
       sketch.enter(spec, store);
       if (tool) sketch.setTool(tool);

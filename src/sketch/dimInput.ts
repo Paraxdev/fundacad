@@ -6,6 +6,7 @@
 // Values cross this boundary in MILLIMETRES (the tools work in mm); length
 // fields are shown/parsed in the user's display unit, angles always in degrees.
 
+import { iconElement } from "../ui/icons";
 import { getUnit, displayValue, parseField } from "../ui/units";
 
 export interface DimFieldDef {
@@ -48,9 +49,9 @@ export class DimInput {
 
   /** While a tool is still deciding WHERE to drop something, the box is a
    *  heads-up readout sitting over the canvas, not a widget — a click aimed at
-   *  the canvas underneath must reach it instead of hitting ✓. Typing is
+   *  the canvas underneath must reach it instead of hitting confirm. Typing is
    *  unaffected: keystrokes go to the focused input regardless of pointer-events.
-   *  Turn it back off once the click-to-place is done, or ✓/✕ become unclickable. */
+   *  Turn it back off once the click-to-place is done, or confirm/cancel become unclickable. */
   setClickThrough(on: boolean) {
     this.root.style.pointerEvents = on ? "none" : "";
   }
@@ -91,7 +92,7 @@ export class DimInput {
     const ok = document.createElement("button");
     ok.className = "dim-btn dim-ok";
     ok.title = "Confirm (Enter)";
-    ok.textContent = "✓";
+    ok.appendChild(iconElement("check", 13));
     ok.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -102,7 +103,7 @@ export class DimInput {
       const no = document.createElement("button");
       no.className = "dim-btn dim-no";
       no.title = "Cancel (Esc)";
-      no.textContent = "✕";
+      no.appendChild(iconElement("close", 13));
       no.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         e.stopPropagation();

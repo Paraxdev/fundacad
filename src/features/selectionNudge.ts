@@ -1,8 +1,8 @@
-// The arrow that appears the moment you select something you could pull.
+// The handle that appears the moment you select something you could pull.
 //
 // Selecting used to be a dead end: the entity lit up and you were expected to
 // know that some command — Fillet, Chamfer, Press/Pull — would consume the
-// selection. This puts the offer on screen instead: an arrow standing off the
+// selection. This puts the offer on screen instead: a handle standing off the
 // thing you just pointed at, saying "pull me".
 //
 // It is deliberately NOT a tool:
@@ -16,12 +16,12 @@
 //    gesture to the real tool, which owns all of that already; this file's
 //    entire job is to be visible and to be grabbable.
 //
-// One class serves every entity type, because the arrow is the whole point:
-// pressing it arms a tool that mounts its OWN arrow at the same anchor inside
+// One class serves every entity type, because the handle is the whole point:
+// pressing it arms a tool that mounts its OWN handle at the same anchor inside
 // the same pointerdown, and if the two are not literally the same glyph on the
 // same axis the handover is a visible jump that steers the drag somewhere the
 // user did not aim. Keeping edges and faces on one implementation is what makes
-// that guarantee cheap to hold. What differs between them — where the arrow
+// that guarantee cheap to hold. What differs between them — where the handle
 // stands, which way it points, which tool takes over — arrives as a placement.
 //
 // Per-frame work stays out of Vue: the transform is written straight onto the
@@ -29,10 +29,8 @@
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";
-import { createArrowHandle, disposeArrowHandle, HANDLE_UP } from "./manipulator";
+import { createDragHandle, HANDLE_UP, type DragHandle } from "./manipulator";
 
-const HANDLE_IDLE = 0xffc83d; // amber — the manipulator handle colour
-const HANDLE_HOT = 0xffe9a8; // brighter when hovered
 // Dimmer than an armed tool's handle: this is an offer, not a live control,
 // and it must not compete with the selection itself for attention.
 const IDLE_OPACITY = 0.55;
@@ -40,7 +38,7 @@ const HOT_OPACITY = 1;
 
 /** Everything that varies between the things you can pull. */
 export interface NudgePlacement {
-  /** Where the arrow stands, world space. */
+  /** Where the handle stands, world space. */
   anchor: THREE.Vector3;
   /** Which way it points, recomputed EVERY FRAME. An edge handle's axis is
    *  defined against the camera — perpendicular to the edge, in the screen
@@ -57,8 +55,7 @@ export class SelectionNudge {
    *  Null = nothing to offer. */
   private want: NudgePlacement | null = null;
 
-  private group: THREE.Group | null = null;
-  private material: THREE.MeshBasicMaterial | null = null;
+  private handle: DragHandle | null = null;
   private axis = new THREE.Vector3(1, 0, 0);
   private quat = new THREE.Quaternion();
   private hovering = false;
@@ -117,36 +114,33 @@ export class SelectionNudge {
       this.unmount();
       return;
     }
-    if (!this.group || !this.material) this.mount();
-    if (!this.group || !this.material) return;
+    if (!this.handle) this.mount();
+    if (!this.handle) return;
     const { anchor } = this.want;
+    const group = this.handle.group;
     this.axis.copy(this.want.axis(this.viewport));
     this.quat.setFromUnitVectors(HANDLE_UP, this.axis);
-    this.group.position.copy(anchor);
-    this.group.quaternion.copy(this.quat);
-    this.group.scale.setScalar(this.viewport.pixelWorldSize(anchor));
+    group.position.copy(anchor);
+    group.quaternion.copy(this.quat);
+    group.scale.setScalar(this.viewport.pixelWorldSize(anchor));
     // The viewport renders on demand, and a raycast reads matrixWorld — which
     // is only refreshed by a render. Between two draws the handle would then be
     // hit-tested where it USED to be: visibly there, not grabbable. Two objects,
     // so composing it here every frame is cheaper than the bug.
-    this.group.updateMatrixWorld(true);
+    group.updateMatrixWorld(true);
   }
 
   private mount() {
-    const { group, material } = createArrowHandle(HANDLE_IDLE);
-    material.transparent = true;
-    material.opacity = IDLE_OPACITY;
-    this.group = group;
-    this.material = material;
-    this.viewport.addToScene(group);
+    this.handle = createDragHandle();
+    this.handle.paint({ opacity: IDLE_OPACITY });
+    this.viewport.addToScene(this.handle.group);
   }
 
   private unmount() {
-    if (!this.group || !this.material) return;
-    this.viewport.removeFromScene(this.group);
-    disposeArrowHandle(this.group, this.material);
-    this.group = null;
-    this.material = null;
+    if (!this.handle) return;
+    this.viewport.removeFromScene(this.handle.group);
+    this.handle.dispose();
+    this.handle = null;
     this.hovering = false;
   }
 
@@ -154,15 +148,12 @@ export class SelectionNudge {
     const hit = this.hitTest(e.clientX, e.clientY);
     if (hit === this.hovering) return;
     this.hovering = hit;
-    if (this.material) {
-      this.material.color.set(hit ? HANDLE_HOT : HANDLE_IDLE);
-      this.material.opacity = hit ? HOT_OPACITY : IDLE_OPACITY;
-    }
+    this.handle?.paint({ hot: hit, opacity: hit ? HOT_OPACITY : IDLE_OPACITY });
     // Only on a CHANGE: the viewport renders on demand, and repainting on every
     // pointermove that happened to miss the handle would defeat that.
     this.viewport.requestRender();
     // Cursor only while we own it — clearing it unconditionally would fight the
-    // viewport's own hover cursor every time the pointer left the arrow.
+    // viewport's own hover cursor every time the pointer left the handle.
     if (hit) this.viewport.domElement.style.cursor = "grab";
     else if (this.viewport.domElement.style.cursor === "grab") {
       this.viewport.domElement.style.cursor = "default";
@@ -177,7 +168,7 @@ export class SelectionNudge {
     e.stopImmediatePropagation();
     const grab = this.want.grab;
     // Drop the scene object before handing over — the tool mounts its own
-    // handle at the same anchor with the same axis, and two arrows in one place
+    // handle at the same anchor with the same axis, and two handles in one place
     // would z-fight. unmount(), not hide(): `want` survives, so the moment the
     // tool ends the tick puts the offer straight back. A rebuild in between is
     // fine now that setModel carries the selection over it — the placement is
@@ -187,7 +178,9 @@ export class SelectionNudge {
   }
 
   private hitTest(x: number, y: number): boolean {
-    if (!this.group) return false;
-    return this.viewport.rayFrom(x, y).intersectObjects(this.group.children, false).length > 0;
+    if (!this.handle) return false;
+    return (
+      this.viewport.rayFrom(x, y).intersectObjects(this.handle.group.children, false).length > 0
+    );
   }
 }
