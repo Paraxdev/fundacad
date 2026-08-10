@@ -38,6 +38,16 @@ import { setPrompt } from "../ui/prompt";
 import type { DocumentStore } from "../document/store";
 import type { ViewCubeSide } from "../types";
 
+/** A selection captured just before a rebuild replaces the Highlighter, held in
+ *  whichever terms are cheapest to resolve again — see selectionMemo.ts for why
+ *  each entity carries both an object reference AND a world-space anchor, and
+ *  why the anchor is allowed to be null. */
+interface SelectionMemo {
+  edges: { ref: EdgeRef; mid: [number, number, number] | null }[];
+  faces: { id: number; body: BodyMesh | null; point: [number, number, number] | null }[];
+  bodies: string[];
+}
+
 const EDGE_IDLE = new THREE.Color(0x1b1f24); // normal dark edge
 const EDGE_PICKABLE = new THREE.Color(0xd98a4a); // muted ember "selectable" edge (fillet/chamfer mode)
 
@@ -59,7 +69,8 @@ const FLUSH_SEAM_MAX_EDGES = 20_000;
 
 import { Highlighter } from "./highlight";
 import { ProgressiveModel } from "./progressive";
-import { nearestEdgeByMid, midMatchTol, edgeSelectorFrom } from "./edgeMatch";
+import { nearestEdgeByMid, midMatchTol, edgeSelectorFrom, polylineMid } from "./edgeMatch";
+import { remapSelection } from "./selectionMemo";
 import type { Plane3, PlaneDef, RebuildResult, Selector } from "../types";
 import { niceStep } from "../ui/units";
 
@@ -1035,6 +1046,13 @@ export class Viewport {
     // path): buildBodyMesh's own scan costs the same there.
     const partition = rebuilding.size > 1 ? partitionMesh(result, rebuilding) : undefined;
 
+    // Snapshot the selection before the Highlighter goes. Placed HERE, after
+    // `rebuilding` is settled, because that set is what decides whether a
+    // selected face needs an expensive world-space anchor computed for it at
+    // all — a face on a body that is being reused keeps its faceId, so there is
+    // nothing to re-find and no centroid worth walking its triangles for.
+    const memo = this.captureSelection(rebuilding);
+
     const bodies: BodyMesh[] = [];
     for (const meta of bodyMeta) {
       const prev = prevBodies.get(meta.id);
@@ -1087,11 +1105,81 @@ export class Viewport {
     for (const d of edgeObjects(this.model)) d.flush();
     this.picker.invalidate(); // edge geometry just changed — drop cached targets
     this.highlighter = new Highlighter(this.model);
+    // Before applyAnalysis, not after: setBase() reads the selected set so it
+    // can leave those faces' highlight alone while refreshing what they restore
+    // to, and re-applies body selections on top of the new base. Restoring
+    // afterwards would paint over a base that had already been written without
+    // knowing about it.
+    if (memo) this.restoreSelection(memo);
     this.targetGridZ = this.model.box.min.z; // drop the grid to the model's floor
     this.applyAnalysis(); // paints the analysis overlay, or assigned body colors when "none"
     if (this.zebra) this.applyZebra();
     if (this.combs) this.applyCombs();
     if (fit) this.rig.fit(this.model.box, true);
+  }
+
+  /** What is selected right now, in terms that can be found again after the
+   *  rebuild. Null when nothing is selected, which is the normal case and skips
+   *  the whole mechanism.
+   *
+   *  `rebuilding` names the bodies whose geometry is being replaced; everything
+   *  else is reused whole, so its BodyMesh and EdgeRef objects — and its faceId
+   *  numbering — are still valid on the far side and need no anchor. Only the
+   *  rebuilt ones pay for one. */
+  private captureSelection(rebuilding: ReadonlySet<string>): SelectionMemo | null {
+    const h = this.highlighter;
+    const model = this.model;
+    if (!h || !model) return null;
+    const selEdges = h.getSelectedEdges();
+    const selFaces = h.getSelectedFaces();
+    const selBodies = h.getSelectedBodies();
+    if (!selEdges.length && !selFaces.length && !selBodies.length) return null;
+    return {
+      // An edge's midpoint is cheap whatever happens (a polyline is a handful of
+      // samples), so it is taken unconditionally rather than gated on the body.
+      edges: selEdges.map((ref) => ({
+        ref,
+        mid: polylineMid(ref.points as [number, number, number][]) ?? null,
+      })),
+      faces: selFaces.map((id) => {
+        const body = bodyOfFace(model, id);
+        const c = body && rebuilding.has(body.id) ? this.faceCentroidWorld(id) : null;
+        return { id, body: body ?? null, point: c ? ([c.x, c.y, c.z] as [number, number, number]) : null };
+      }),
+      bodies: selBodies,
+    };
+  }
+
+  /** Put the captured selection back on the new model, and tell the app it
+   *  moved — including when NOTHING survived, because "the selection is gone"
+   *  is exactly the news the drag handle needs in order to take itself down. */
+  private restoreSelection(memo: SelectionMemo): void {
+    const h = this.highlighter;
+    if (!h || !this.model) return;
+    const liveBodies = new Set<BodyMesh>(this.model.bodies);
+    const liveEdges = new Set<EdgeRef>(this.model.edges);
+    const liveBodyIds = new Set(this.model.bodies.map((b) => b.id));
+
+    const edges = remapSelection(
+      memo.edges,
+      (m) => (liveEdges.has(m.ref) ? m.ref : null),
+      (m) => (m.mid ? this.edgeLineByMid(m.mid) : null),
+    );
+    const faces = remapSelection(
+      memo.faces,
+      (m) => (m.body && liveBodies.has(m.body) ? m.id : null),
+      (m) => (m.point ? this.faceIdNear(m.point) : null),
+    );
+    // Bodies are the easy case and always exact: ids ARE stable across a
+    // rebuild, so a body is either still here or genuinely gone.
+    const bodies = memo.bodies.filter((id) => liveBodyIds.has(id));
+
+    for (const l of edges) h.toggleSelectEdge(l);
+    for (const f of faces) h.toggleSelectFace(f);
+    for (const b of bodies) h.toggleSelectBody(b);
+
+    if (memo.edges.length || memo.faces.length) this.onSelectionChange?.();
+    if (memo.bodies.length) this.onBodySelectionChange?.();
   }
 
   /** Wall-clock cost of the last hideFlushSeams() pass, ms — surfaced in

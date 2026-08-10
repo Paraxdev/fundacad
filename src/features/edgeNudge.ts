@@ -173,10 +173,11 @@ export class EdgeNudge {
     const tangent = this.want.tangent;
     // Drop the scene object before handing over — the tool mounts its own
     // handle at the same anchor with the same axis, and two arrows in one place
-    // would z-fight. unmount(), not hide(): `want` survives, so if the tool
-    // ends without a rebuild the tick puts the offer straight back. (With a
-    // rebuild it does not, and should not — setModel builds a fresh Highlighter,
-    // so the edge selection this handle was drawn for no longer exists.)
+    // would z-fight. unmount(), not hide(): `want` survives, so the moment the
+    // tool ends the tick puts the offer straight back. A rebuild in between is
+    // fine now that setModel carries the selection over it — showFor() runs
+    // again off the rebuilt edge and replaces `want` with an anchor that
+    // matches the geometry actually on screen.
     this.unmount();
     this.deps.onGrab(e.clientX, e.clientY, tangent);
   }

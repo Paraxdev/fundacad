@@ -109,13 +109,15 @@ export function installViewportWiring(e: Engine): void {
     );
   };
 
-  // A completed rebuild replaces the mesh and renumbers topology, so the
-  // handle's anchor — and the edge selection it was drawn from — refer to
-  // objects that no longer exist. Same staleness reasoning as dismissing the
-  // context menu above, and the same fix: drop it rather than let it act on a
-  // stale target. Re-selecting the edge brings it back.
-  e.store.onBuild((s) => {
-    if (s.result && !s.building) e.edgeNudge.hide();
-  });
-  e.store.onDocChange(() => e.edgeNudge.hide());
+  // A rebuild used to be the end of the handle: setModel built a fresh
+  // Highlighter, the edge selection went with it, and the only safe response
+  // was to drop the handle rather than let it act on a stale anchor. Cancelling
+  // a fillet therefore left you looking at the sharp edge you started from with
+  // nothing selected and no arrow — the preview's OWN rebuild had eaten the
+  // selection the gesture was standing on.
+  //
+  // setModel now carries the selection across (viewport.ts captureSelection /
+  // restoreSelection) and fires onSelectionChange either way, so the handler
+  // above already re-places the handle on the rebuilt edge, or hides it when
+  // the edge genuinely did not survive. Nothing to do here.
 }
