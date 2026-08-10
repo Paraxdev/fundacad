@@ -645,6 +645,8 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     }
   }
 
+  const extrudeDone = (id: string | null) => { noteCommitted(id); if (id) selectFeature(id); };
+
   function startExtrude() {
     if (toolBusy()) return;
     // A SELECTED FACE wins: extrude-a-face = Press/Pull it (drag out to join, in to
@@ -663,7 +665,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
         return wr.plane.plane.distanceToPoint(sel.anchor) <= 0.01; // face on/behind the sketch plane
       });
       if (!underSketch) {
-        pressPull.start((id) => { noteCommitted(id); if (id) selectFeature(id); });
+        pressPull.start(pressPullDone);
         return;
       }
     }
@@ -671,8 +673,20 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       setStatus("Extrude: select a face, or create a sketch with a closed profile first", "");
       return;
     }
-    extrude.start((id) => { noteCommitted(id); if (id) selectFeature(id); });
+    extrude.start(extrudeDone);
   }
+
+  /** The handle offered on a selected sketch profile (features/regionNudge.ts)
+   *  was pressed: arm Extrude on that pre-selection, already holding the arrow.
+   *
+   *  Unlike startExtrude this does NOT arbitrate between a face and a profile.
+   *  That arbitration exists because the `E` key is one command aimed at
+   *  whatever you had selected, and it has to guess which you meant. A press on
+   *  a specific arrow standing on a specific profile is not a guess. */
+  const grabRegionHandle = (x: number, y: number) => {
+    if (toolBusy()) return;
+    extrude.start(extrudeDone, { grabAt: { x, y } });
+  };
 
   return {
     cancelPlanePick,
@@ -702,6 +716,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     startTexture,
     startPattern,
     startExtrude,
+    grabRegionHandle,
     repickReference,
   };
 }

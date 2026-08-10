@@ -15,7 +15,8 @@ import type { Feature } from "../types";
 import { pointInRegion } from "../sketch/region";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
-import { axisDragDistance } from "./manipulator";
+import { axisDragDistance, fluentRelease } from "./manipulator";
+import { regionAnchor } from "./regionNudge";
 import { choose } from "../ui/choice";
 
 type Phase = "pick" | "drag";
@@ -42,8 +43,18 @@ export class ExtrudeTool {
    *  (consumed sketches hide by default) — main.ts's isSketchVisible honors it. */
   forcedSketchId: string | null = null;
 
+  /** Fluent grab: the cursor's projection along the normal at the moment the
+   *  passive handle was pressed. Null for every other entry, where the depth
+   *  free-tracks the cursor's ABSOLUTE projection. Holding the button changes
+   *  what the gesture means — the depth has to grow from where you took hold,
+   *  not snap to wherever the arrow tip happened to project. */
+  private grabProj: number | null = null;
+  private fluentGrab = false;
+  private downPos = { x: 0, y: 0 };
+
   private boundMove: (e: PointerEvent) => void;
   private boundDown: (e: PointerEvent) => void;
+  private boundUp: (e: PointerEvent) => void;
   private boundKey: (e: KeyboardEvent) => void;
 
   constructor(
@@ -53,11 +64,22 @@ export class ExtrudeTool {
   ) {
     this.boundMove = (e) => this.onMove(e);
     this.boundDown = (e) => this.onDown(e);
+    this.boundUp = (e) => this.onUp(e);
     this.boundKey = (e) => this.onKey(e);
   }
 
-  start(onDone: (id: string | null) => void) {
+  /** `opts.grabAt` is the direct-manipulation entry (features/regionNudge.ts):
+   *  the user pressed the handle that appears the moment a profile is selected,
+   *  so we arm from that pre-selection AND begin scrubbing inside the same
+   *  pointerdown. */
+  start(onDone: (id: string | null) => void, opts?: { grabAt?: { x: number; y: number } }) {
     if (this.active) return;
+    // Read the pre-selection BEFORE installing anything: a handle whose regions
+    // have gone (the sketch was hidden or re-solved between the paint and the
+    // press) must not arm the pick phase, which would be a bait-and-switch into
+    // a tool nobody asked for, holding toolBusy() until noticed.
+    const pre = this.overlay.selectedRegions();
+    if (opts?.grabAt && !pre.length) return;
     this.active = true;
     this.phase = "pick";
     this.onDone = onDone;
@@ -65,14 +87,40 @@ export class ExtrudeTool {
     const el = this.viewport.domElement;
     el.addEventListener("pointermove", this.boundMove);
     el.addEventListener("pointerdown", this.boundDown);
+    el.addEventListener("pointerup", this.boundUp);
     window.addEventListener("keydown", this.boundKey, true);
     // honour any areas pre-selected in the sketch
-    this.selected = this.overlay.selectedRegions();
+    this.selected = pre;
     if (this.selected.length) {
       this.beginDrag();
+      if (opts?.grabAt) this.grabHandle(opts.grabAt.x, opts.grabAt.y);
     } else {
       setPrompt("Select a profile to extrude · Ctrl-click adds areas · Enter to confirm");
     }
+  }
+
+  /** Take hold of the arrow at (x, y) without a fresh pointerdown of our own —
+   *  the press that started the gesture landed on the passive selection handle,
+   *  before this tool existed. */
+  private grabHandle(clientX: number, clientY: number) {
+    const first = this.selected[0];
+    if (this.phase !== "drag" || !first) return;
+    this.fluentGrab = true;
+    this.downPos = { x: clientX, y: clientY };
+    this.grabProj = axisDragDistance(
+      this.viewport,
+      clientX,
+      clientY,
+      this.anchor(),
+      first.plane.n,
+    );
+    // Start at nothing rather than at beginDrag's default 10 mm: the depth is
+    // about to follow the hand that is already on the arrow, and a solid that
+    // sprang to 10 mm before the first movement would read as the grab itself
+    // having done something.
+    this.distance = 0;
+    this.updatePreview();
+    this.viewport.domElement.style.cursor = "grabbing";
   }
 
   /** Re-open a committed extrude for editing: the model rolls back to just
@@ -136,7 +184,10 @@ export class ExtrudeTool {
     const plane = first.plane;
     const anchor = this.anchor();
     if (!this.dim.isUserDriven("distance")) {
-      const d = axisDragDistance(this.viewport, e.clientX, e.clientY, anchor, plane.n);
+      const proj = axisDragDistance(this.viewport, e.clientX, e.clientY, anchor, plane.n);
+      // Relative once the handle has been grabbed, absolute otherwise — see
+      // grabProj. Both come off the same projection; only the origin differs.
+      const d = this.grabProj == null ? proj : proj - this.grabProj;
       this.distance = d;
       this.dim.updateFromCursor({ distance: Math.abs(d) });
     } else {
@@ -176,6 +227,26 @@ export class ExtrudeTool {
       e.preventDefault();
       void this.commit();
     }
+  }
+
+  /** Only the fluent gesture ends on a release. Every other entry keeps the
+   *  free-track-then-click flow, where a pointerup is just the tail of the
+   *  click that onDown already handled. */
+  private onUp(e: PointerEvent) {
+    if (e.button !== 0 || !this.fluentGrab || this.phase !== "drag") return;
+    const release = fluentRelease({
+      fluent: true,
+      moved: Math.abs(e.clientX - this.downPos.x) > 3 || Math.abs(e.clientY - this.downPos.y) > 3,
+      // The same threshold commit() uses to ignore a zero extrude.
+      meaningful: Math.abs(this.distance) >= 1e-3,
+    });
+    if (release === "commit") return void this.commit();
+    if (release === "cancel") return this.cancel();
+    // Stayed armed: a press that never travelled is the way IN to the full
+    // tool. The depth keeps tracking relative to where the arrow was taken
+    // hold of, which is exactly where the pointer still is, so nothing jumps.
+    this.fluentGrab = false;
+    this.viewport.domElement.style.cursor = "default";
   }
 
   private onKey(e: KeyboardEvent) {
@@ -231,11 +302,11 @@ export class ExtrudeTool {
     return best;
   }
 
-  /** average of the selected areas' interior points — the arrow anchor */
+  /** average of the selected areas' interior points — the arrow anchor.
+   *  Shared with the passive handle so the two arrows stand in the same place
+   *  across the hand-off (features/regionNudge.ts). */
   private anchor(): THREE.Vector3 {
-    const a = new THREE.Vector3();
-    for (const wr of this.selected) a.add(wr.interior3D);
-    return a.divideScalar(this.selected.length || 1);
+    return regionAnchor(this.selected);
   }
 
   private updatePreview() {
@@ -403,8 +474,11 @@ export class ExtrudeTool {
     const el = this.viewport.domElement;
     el.removeEventListener("pointermove", this.boundMove);
     el.removeEventListener("pointerdown", this.boundDown);
+    el.removeEventListener("pointerup", this.boundUp);
     window.removeEventListener("keydown", this.boundKey, true);
     el.style.cursor = "default";
+    this.fluentGrab = false;
+    this.grabProj = null;
     this.dim.hide();
     this.disposePreviewGeom();
     this.previewMat?.dispose();

@@ -3,6 +3,7 @@ import { dismissContextMenu } from "../ui/menu";
 import { useBrowserStore } from "../stores/browser";
 import { edgeNudgePlacement } from "../features/edgeNudge";
 import { faceNudgePlacement } from "../features/faceNudge";
+import { regionNudgePlacement } from "../features/regionNudge";
 import type { Engine } from "./engine";
 
 /** Viewport callbacks and the two Escape listeners that clear its selections.
@@ -60,15 +61,14 @@ export function installViewportWiring(e: Engine): void {
     const wr = e.overlay.committedRegionAtRay(e.viewport.rayFrom(x, y).ray);
     if (!wr) return false;
     e.overlay.toggleRegionSelection(wr, additive);
-    const n = e.overlay.selectedRegions().length;
-    setPrompt(n ? `${n} profile area${n > 1 ? "s" : ""} selected — Extrude (E) · Ctrl-click adds · Esc clears` : null);
+    refreshNudge();
     return true;
   };
   // Esc clears a pre-selected profile-area selection (when not in a tool/sketch)
   window.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && !e.toolBusy() && !e.sketch.active && e.overlay.selectedRegions().length) {
       e.overlay.clearRegionSelection();
-      setPrompt(null);
+      refreshNudge();
     }
   });
 
@@ -98,37 +98,63 @@ export function installViewportWiring(e: Engine): void {
 
   // --- selecting offers the drag handle straight away -----------------------
   // The old behaviour was a prompt line and nothing else: the entity lit up,
-  // and you were expected to know that Fillet, Chamfer or Press/Pull would
-  // consume it. The handle puts the offer where the geometry is; the prompt now
-  // explains the handle rather than substituting for it.
+  // and you were expected to know that Fillet, Chamfer, Press/Pull or Extrude
+  // would consume it. The handle puts the offer where the geometry is; the
+  // prompt now explains the handle rather than substituting for it.
   //
-  // Edges outrank faces when a Ctrl-click has managed to select both, matching
-  // the picker's own precedence — an edge hit is the more specific answer, so
-  // it is the one the user most likely meant to act on.
-  e.viewport.onSelectionChange = () => {
+  // Three kinds of selection, one arrow — so this is also where they are ranked.
+  // Edges first: an edge hit is the most specific thing the picker can return.
+  // Then profiles, matching the picker's own sketch-over-solid priority (and
+  // because a region pick deliberately does NOT clear the face selection
+  // underneath it, so without this rule the arrow would answer the wrong click).
+  // Faces last.
+  function refreshNudge() {
     const edges = e.viewport.selectedEdgeLines();
-    const faces = edges.length ? null : e.viewport.selectedFacesForPressPull();
-    e.nudge.show(
-      edges.length
-        ? edgeNudgePlacement(edges, (x, y, tangent) => e.starters.grabEdgeHandle(x, y, tangent))
-        : faceNudgePlacement(faces, (x, y) => e.starters.grabFaceHandle(x, y)),
-    );
-    if (e.toolBusy()) return;
+    const regions = edges.length ? [] : e.overlay.selectedRegions();
+    const faces = edges.length || regions.length ? null : e.viewport.selectedFacesForPressPull();
+
     if (edges.length) {
-      const n = edges.length;
-      setPrompt(
-        `${n} edge${n > 1 ? "s" : ""} selected — drag the arrow to round it off (Tab switches to a chamfer) · Esc to clear`,
+      e.nudge.show(
+        edgeNudgePlacement(edges, (x, y, tangent) => e.starters.grabEdgeHandle(x, y, tangent)),
       );
-      return;
+    } else if (regions.length) {
+      e.nudge.show(regionNudgePlacement(regions, (x, y) => e.starters.grabRegionHandle(x, y)));
+    } else {
+      e.nudge.show(faceNudgePlacement(faces, (x, y) => e.starters.grabFaceHandle(x, y)));
     }
-    const n = faces?.faceIds.length ?? 0;
-    setPrompt(
-      n
-        ? `${n} face${n > 1 ? "s" : ""} selected — drag the arrow to push or pull (out adds, in cuts) · ` +
-            `Del removes it and heals · Esc to clear`
-        : null,
-    );
-  };
+
+    if (e.toolBusy()) return;
+    const plural = (n: number, one: string) => `${n} ${one}${n > 1 ? "s" : ""}`;
+    if (edges.length) {
+      setPrompt(
+        `${plural(edges.length, "edge")} selected — drag the arrow to round it off ` +
+          `(Tab switches to a chamfer) · Esc to clear`,
+      );
+    } else if (regions.length) {
+      setPrompt(
+        `${plural(regions.length, "profile area")} selected — drag the arrow to pull it into a solid ` +
+          `(in cuts) · Ctrl-click adds · Esc clears`,
+      );
+    } else if (faces?.faceIds.length) {
+      setPrompt(
+        `${plural(faces.faceIds.length, "face")} selected — drag the arrow to push or pull ` +
+          `(out adds, in cuts) · Del removes it and heals · Esc to clear`,
+      );
+    } else {
+      setPrompt(null);
+    }
+  }
+  e.viewport.onSelectionChange = refreshNudge;
+
+  // Profile selection has no change notification of its own — it lives on the
+  // overlay, which tools clear directly (extrude's edit-mode cancel) and which
+  // the doc-change handler above rebuilds wholesale. Refreshing here catches
+  // both, and registration order matters: this runs after that rebuild, so it
+  // reads the regions that now exist rather than the ones that just went.
+  e.store.onDocChange(() => refreshNudge());
+  e.store.onBuild((s) => {
+    if (s.result && !s.building) refreshNudge();
+  });
 
   // A rebuild used to be the end of the handle: setModel built a fresh
   // Highlighter, the edge selection went with it, and the only safe response
