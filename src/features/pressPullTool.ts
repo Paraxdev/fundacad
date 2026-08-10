@@ -216,9 +216,13 @@ export class PressPullTool {
         // a "nothing to commit" prompt.
         meaningful: Math.abs(this.value) >= 1e-3,
       });
+      // Cleared BEFORE dispatching, not in cleanup: commit() can decline and
+      // leave the tool alive (an unreadable number in the field), and a stale
+      // flag would then make the NEXT release re-run this decision on a gesture
+      // that ended long ago.
+      this.fluentGrab = false;
       if (release === "commit") return this.commit();
       if (release === "cancel") return this.cancel();
-      this.fluentGrab = false;
       this.viewport.domElement.style.cursor = this.hovering ? "grab" : "default";
       return;
     }

@@ -240,12 +240,16 @@ export class ExtrudeTool {
       // The same threshold commit() uses to ignore a zero extrude.
       meaningful: Math.abs(this.distance) >= 1e-3,
     });
+    // Cleared BEFORE dispatching, not in cleanup: commit() can decline and
+    // leave the tool alive (the operation chooser was dismissed), and a stale
+    // flag would then make the NEXT release of any click re-run this decision
+    // on a gesture that ended long ago.
+    this.fluentGrab = false;
     if (release === "commit") return void this.commit();
     if (release === "cancel") return this.cancel();
     // Stayed armed: a press that never travelled is the way IN to the full
     // tool. The depth keeps tracking relative to where the arrow was taken
     // hold of, which is exactly where the pointer still is, so nothing jumps.
-    this.fluentGrab = false;
     this.viewport.domElement.style.cursor = "default";
   }
 
