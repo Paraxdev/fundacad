@@ -1,6 +1,8 @@
 import { setPrompt } from "../ui/prompt";
 import { dismissContextMenu } from "../ui/menu";
 import { useBrowserStore } from "../stores/browser";
+import { edgeNudgePlacement } from "../features/edgeNudge";
+import { faceNudgePlacement } from "../features/faceNudge";
 import type { Engine } from "./engine";
 
 /** Viewport callbacks and the two Escape listeners that clear its selections.
@@ -14,10 +16,12 @@ export function installViewportWiring(e: Engine): void {
 
   e.viewport.onHit = (hit) => {
     if (e.toolBusy()) return;
+    // No prompt here any more: onSelectionChange fires straight after this and
+    // owns the face line, now that a face selection offers a handle rather than
+    // a list of commands to go and find.
     if (hit?.kind === "face") {
       const owner = e.featureForFace(hit.faceId);
       if (owner) e.selectFeature(owner); // show which feature this face came from
-      setPrompt("Del to delete this face (removes it + heals) · Extrude to push/cut it");
     }
   };
 
@@ -92,19 +96,36 @@ export function installViewportWiring(e: Engine): void {
     if (!e.sketch.active) e.overlay.update(e.store.document);
   });
 
-  // --- selecting an edge offers the drag handle straight away ---------------
-  // The old behaviour was a prompt line and nothing else: the edge lit up, and
-  // you were expected to know that Fillet or Chamfer would consume it. The
-  // handle puts the offer where the edge is; the prompt now explains the handle
-  // rather than substituting for it.
+  // --- selecting offers the drag handle straight away -----------------------
+  // The old behaviour was a prompt line and nothing else: the entity lit up,
+  // and you were expected to know that Fillet, Chamfer or Press/Pull would
+  // consume it. The handle puts the offer where the geometry is; the prompt now
+  // explains the handle rather than substituting for it.
+  //
+  // Edges outrank faces when a Ctrl-click has managed to select both, matching
+  // the picker's own precedence — an edge hit is the more specific answer, so
+  // it is the one the user most likely meant to act on.
   e.viewport.onSelectionChange = () => {
     const edges = e.viewport.selectedEdgeLines();
-    e.edgeNudge.showFor(edges);
+    const faces = edges.length ? null : e.viewport.selectedFacesForPressPull();
+    e.nudge.show(
+      edges.length
+        ? edgeNudgePlacement(edges, (x, y, tangent) => e.starters.grabEdgeHandle(x, y, tangent))
+        : faceNudgePlacement(faces, (x, y) => e.starters.grabFaceHandle(x, y)),
+    );
     if (e.toolBusy()) return;
-    const n = edges.length;
+    if (edges.length) {
+      const n = edges.length;
+      setPrompt(
+        `${n} edge${n > 1 ? "s" : ""} selected — drag the arrow to round it off (Tab switches to a chamfer) · Esc to clear`,
+      );
+      return;
+    }
+    const n = faces?.faceIds.length ?? 0;
     setPrompt(
       n
-        ? `${n} edge${n > 1 ? "s" : ""} selected — drag the arrow to round it off (Tab switches to a chamfer) · Esc to clear`
+        ? `${n} face${n > 1 ? "s" : ""} selected — drag the arrow to push or pull (out adds, in cuts) · ` +
+            `Del removes it and heals · Esc to clear`
         : null,
     );
   };

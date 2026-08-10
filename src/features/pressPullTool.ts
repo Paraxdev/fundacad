@@ -16,7 +16,13 @@ import type { Feature, Selector } from "../types";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
 import { snap } from "../ui/units";
-import { axisDragDistance, createArrowHandle, disposeArrowHandle, HANDLE_UP } from "./manipulator";
+import {
+  axisDragDistance,
+  createArrowHandle,
+  disposeArrowHandle,
+  fluentRelease,
+  HANDLE_UP,
+} from "./manipulator";
 
 type Phase = "pick" | "drag";
 
@@ -43,6 +49,9 @@ export class PressPullTool {
   private gizmoMat: THREE.MeshBasicMaterial | null = null;
   private hovering = false;
   private grabbing = false;
+  /** true when this drag began on the passive selection handle rather than on
+   *  our own gizmo — a one-press gesture, so releasing it finishes (see onUp). */
+  private fluentGrab = false;
   private grabValue = 0; // value at grab start (relative drag)
   private grabProj = 0; // axis projection at grab start
   private downPos = { x: 0, y: 0 };
@@ -69,8 +78,22 @@ export class PressPullTool {
     this.boundTick = () => this.tick();
   }
 
-  start(onDone: (id: string | null) => void) {
+  /** `opts.grabAt` is the direct-manipulation entry (features/faceNudge.ts):
+   *  the user pressed the handle that appears the moment a face is selected, so
+   *  we arm from that pre-selection AND begin scrubbing inside the same
+   *  pointerdown. The handle derived its anchor and axis from the same
+   *  selectedFacesForPressPull() call this does, so there is nothing to adopt
+   *  and nothing that can disagree. */
+  start(onDone: (id: string | null) => void, opts?: { grabAt?: { x: number; y: number } }) {
     if (this.active) return;
+    // pre-selection: faces already selected → skip straight to the drag.
+    // Read BEFORE anything is installed, because the direct-manipulation entry
+    // needs the selection its handle was drawn for: if a rebuild landed between
+    // the paint and the press, arming into the pick phase would be a
+    // bait-and-switch into a tool nobody asked for — and it would hold
+    // toolBusy() until noticed.
+    const pre = this.viewport.selectedFacesForPressPull();
+    if (opts?.grabAt && !pre) return;
     this.active = true;
     this.phase = "pick";
     this.onDone = onDone;
@@ -81,13 +104,27 @@ export class PressPullTool {
     el.addEventListener("pointerup", this.boundUp);
     window.addEventListener("keydown", this.boundKey, true);
 
-    // pre-selection: faces already selected → skip straight to the drag
-    const pre = this.viewport.selectedFacesForPressPull();
     if (pre) {
       this.beginDrag(pre.selectors, pre.faceIds, pre.anchor, pre.normal, pre.bodyId);
+      if (opts?.grabAt) this.grabHandle(opts.grabAt.x, opts.grabAt.y);
     } else {
       setPrompt("Select a face to Press/Pull (Ctrl+click adds more)");
     }
+  }
+
+  /** Take hold of the arrow at (x, y) without a fresh pointerdown of our own —
+   *  the press that started the gesture landed on the passive selection handle,
+   *  before this tool existed. Everything after this point is the ordinary
+   *  drag: the same onMove scrub, the same onUp release. */
+  private grabHandle(clientX: number, clientY: number) {
+    if (this.phase !== "drag") return;
+    this.grabbing = true;
+    this.fluentGrab = true;
+    this.downOnGizmo = true;
+    this.downPos = { x: clientX, y: clientY };
+    this.grabValue = this.value;
+    this.grabProj = axisDragDistance(this.viewport, clientX, clientY, this.anchor, this.axis);
+    this.viewport.domElement.style.cursor = "grabbing";
   }
 
   private onMove(e: PointerEvent) {
@@ -169,6 +206,19 @@ export class PressPullTool {
     if (this.pickingTarget) return; // T-mode clicks are fully handled in onDown
     if (this.grabbing) {
       this.grabbing = false;
+      const release = fluentRelease({
+        fluent: this.fluentGrab,
+        moved:
+          Math.abs(e.clientX - this.downPos.x) > 3 || Math.abs(e.clientY - this.downPos.y) > 3,
+        // Same threshold commit() uses to decide there is nothing to commit —
+        // read here so a drag that ended back at the face cancels out of a tool
+        // the user never explicitly opened, instead of parking them in it with
+        // a "nothing to commit" prompt.
+        meaningful: Math.abs(this.value) >= 1e-3,
+      });
+      if (release === "commit") return this.commit();
+      if (release === "cancel") return this.cancel();
+      this.fluentGrab = false;
       this.viewport.domElement.style.cursor = this.hovering ? "grab" : "default";
       return;
     }
@@ -351,6 +401,7 @@ export class PressPullTool {
     this.viewport.suspendPicking = false;
     this.active = false;
     this.grabbing = false;
+    this.fluentGrab = false;
     this.hovering = false;
     this.value = 0;
     setPrompt(null);

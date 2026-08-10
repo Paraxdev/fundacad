@@ -22,6 +22,7 @@ import {
   createArrowHandle,
   disposeArrowHandle,
   edgeHandleAxis,
+  fluentRelease,
   HANDLE_UP,
 } from "./manipulator";
 import { fmtLength } from "../ui/units";
@@ -636,16 +637,15 @@ export class EdgeFeatureTool {
       const moved =
         Math.abs(e.clientX - this.downPos.x) > 3 || Math.abs(e.clientY - this.downPos.y) > 3;
       this.grabbing = false;
-      // A gesture that began on the selection handle is ONE press: press, drag,
-      // release, done — that is the whole point of the affordance, and leaving
-      // the tool armed after the release would strand the user in a modal state
-      // they never opted into. A press that never moved is not a drag though;
-      // it stays armed so a stray click on the arrow can't commit a default
-      // 2 mm fillet, and so clicking the handle is a way IN to the full tool.
-      if (this.fluentGrab && moved) {
-        this.commit();
-        return;
-      }
+      // Shared with Press/Pull, which offers the same handle over faces — see
+      // fluentRelease for what each outcome is protecting against.
+      const release = fluentRelease({
+        fluent: this.fluentGrab,
+        moved,
+        meaningful: this.value >= MIN_EDGE_VALUE,
+      });
+      if (release === "commit") return this.commit();
+      if (release === "cancel") return this.cancel();
       this.fluentGrab = false;
       this.viewport.domElement.style.cursor = this.hovering ? "grab" : "default";
       if (!moved) this.promptForPhase();

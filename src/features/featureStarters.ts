@@ -92,9 +92,18 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   };
   // Interactive Press/Pull: pick a solid face, then drag an arrow along its normal
   // to add/cut material (planar) or offset a curved face — with a live preview.
+  const pressPullDone = (id: string | null) => { noteCommitted(id); if (id) selectFeature(id); };
   const startPressPull = () => {
     if (toolBusy()) return;
-    pressPull.start((id) => { noteCommitted(id); if (id) selectFeature(id); });
+    pressPull.start(pressPullDone);
+  };
+  /** The same hand-off as grabEdgeHandle, for the arrow offered on a selected
+   *  FACE (features/faceNudge.ts). There is no treatment to choose here — a
+   *  face has exactly one thing you can do to it by dragging — so unlike the
+   *  edge handle this one has no default to defend. */
+  const grabFaceHandle = (x: number, y: number) => {
+    if (toolBusy()) return;
+    pressPull.start(pressPullDone, { grabAt: { x, y } });
   };
 
   /** Abort an in-flight interactive plane pick, if any.
@@ -670,6 +679,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     startFillet,
     startChamfer,
     grabEdgeHandle,
+    grabFaceHandle,
     startPressPull,
     startSketch,
     offsetPlane,

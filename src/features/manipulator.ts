@@ -83,6 +83,37 @@ export function edgeHandleAxis(viewport: Viewport, tangent: THREE.Vector3 | null
   return new THREE.Vector3().setFromMatrixColumn(viewport.camera.matrixWorld, 0).normalize();
 }
 
+/** What letting go of the arrow should do. */
+export type FluentRelease = "commit" | "cancel" | "stay";
+
+/** Releasing the handle: commit, throw the gesture away, or stay armed.
+ *
+ *  A gesture that began on the PASSIVE selection handle is one press — press,
+ *  drag, release, done. That is the entire point of the affordance, and leaving
+ *  the tool armed afterwards would strand the user in a modal state they never
+ *  opted into. A gesture that began on the tool's own gizmo is the classic
+ *  flow and keeps its explicit commit.
+ *
+ *  Two cases inside the fluent one are easy to get wrong:
+ *
+ *  `moved` — a press that never travelled is not a drag. It must not commit a
+ *  default value off a stray click on the arrow, so it stays armed instead,
+ *  which doubles as the way IN to the full tool from the handle.
+ *
+ *  `meaningful` — a drag that ended back at nothing (zero radius, zero
+ *  distance) has nothing to commit. Staying armed would strand exactly the user
+ *  who was trying to back out, so it cancels. The tools disagreed about this
+ *  before it lived in one place: one cancelled, the other set a prompt and
+ *  stayed. */
+export function fluentRelease(opts: {
+  fluent: boolean;
+  moved: boolean;
+  meaningful: boolean;
+}): FluentRelease {
+  if (!opts.fluent || !opts.moved) return "stay";
+  return opts.meaningful ? "commit" : "cancel";
+}
+
 /** The grab-me arrow: a shaft + cone modelled in PIXEL units along +Y, with a
  *  gap at the base so it doesn't bury itself in the face/edge it stands on. The
  *  owner scales it by viewport.pixelWorldSize(anchor) every frame to hold a
