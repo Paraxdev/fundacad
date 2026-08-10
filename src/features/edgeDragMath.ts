@@ -40,7 +40,8 @@ export interface ValueBounds {
  *  has asked for no feature at all". */
 export const MIN_EDGE_VALUE = 0.001;
 
-/** How much of the model's bounding-box diagonal a dragged value may reach.
+/** How much of the model's bounding-box diagonal a dragged value may reach,
+ *  when nothing better is known.
  *
  *  A blend can never exceed roughly half the shortest side of the faces it
  *  joins, and for a cube of side s the diagonal is s·√3 — so s/2 is ≈0.29 of
@@ -48,7 +49,13 @@ export const MIN_EDGE_VALUE = 0.001;
  *  still far larger than a sane fillet, which is the point: the clamp exists to
  *  stop a flick of the mouse from running the number to 10⁴ mm and firing a
  *  string of doomed OCCT rebuilds, not to second-guess the user. Typed values
- *  are deliberately NOT clamped by it. */
+ *  are deliberately NOT clamped by it.
+ *
+ *  It is a FALLBACK now, not the rule. One number for the whole document is
+ *  wrong in both directions at once — far too generous on the rim of a thin
+ *  plate, needlessly tight on a chunky part — so when the selection's own
+ *  neighbourhood can be measured (features/blendClearance.ts) that measurement
+ *  wins. This stands in only when it cannot be. */
 export const MAX_DIAGONAL_FRACTION = 0.25;
 
 export function treatmentField(kind: EdgeTreatment): TreatmentField {
@@ -66,8 +73,19 @@ export function treatmentLabel(kind: EdgeTreatment): string {
 
 /** How far a dragged value may travel from the origin, in mm — the same cap on
  *  BOTH sides, since a chamfer that overruns the face is no more buildable than
- *  a fillet that does. Infinity when the document has no geometry to measure. */
-export function dragLimit(modelDiagonal: number | null): number {
+ *  a fillet that does. Infinity when the document has no geometry to measure.
+ *
+ *  `localLimit` is what the picked edges' own neighbourhood permits
+ *  (blendClearance.clearanceLimit), and it REPLACES the diagonal fraction rather
+ *  than being combined with it. Combining would keep the failure it was brought
+ *  in to fix: on a thin plate the diagonal fraction is the larger of the two, so
+ *  a min() would help, but on a chunky part it is the smaller, and a min() would
+ *  go on refusing the fillets that were being refused. Once the neighbourhood
+ *  has actually been measured, the crude stand-in has nothing left to add. */
+export function dragLimit(modelDiagonal: number | null, localLimit?: number | null): number {
+  if (localLimit != null && Number.isFinite(localLimit) && localLimit > 0) {
+    return Math.max(MIN_EDGE_VALUE, localLimit);
+  }
   if (modelDiagonal == null || !(modelDiagonal > 0) || !Number.isFinite(modelDiagonal)) {
     return Infinity;
   }
@@ -77,8 +95,8 @@ export function dragLimit(modelDiagonal: number | null): number {
 /** Bounds for a value the user is free to choose outright (a typed one, or one
  *  carried across a Tab flip): anything the kernel might build, floored at the
  *  smallest visible blend. */
-export function valueBounds(modelDiagonal: number | null): ValueBounds {
-  return { min: MIN_EDGE_VALUE, max: dragLimit(modelDiagonal) };
+export function valueBounds(modelDiagonal: number | null, localLimit?: number | null): ValueBounds {
+  return { min: MIN_EDGE_VALUE, max: dragLimit(modelDiagonal, localLimit) };
 }
 
 export function clampValue(v: number, bounds: ValueBounds): number {

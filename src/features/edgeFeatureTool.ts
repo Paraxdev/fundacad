@@ -32,8 +32,10 @@ import {
   edgeHandleAxis,
   fluentRelease,
   HANDLE_UP,
+  leanOutOfView,
   type DragHandle,
 } from "./manipulator";
+import { clearanceLimit, localClearance } from "./blendClearance";
 import { fmtLength } from "../ui/units";
 import { ProfileArc } from "./profileArc";
 import {
@@ -87,7 +89,11 @@ export class EdgeFeatureTool {
   private kind: Kind = "fillet";
   private phase: Phase = "pick";
   private anchor = new THREE.Vector3(); // arrow origin = edge midpoint
-  private axis = new THREE.Vector3(1, 0, 0); // drag axis (unit), fixed for the drag
+  // Drag axis (unit). Frozen for the duration of a GESTURE — the drag and the
+  // arc both measure against it — but re-derived against the camera every idle
+  // frame, so an orbit cannot leave the handle pointing at the viewer (see
+  // refreshAxis).
+  private axis = new THREE.Vector3(1, 0, 0);
   private quat = new THREE.Quaternion(); // Y -> axis, for orienting the handle
   private tangent: THREE.Vector3 | null = null; // edge direction (null = pre-selection fallback)
   private value = 2; // radius / distance in mm — a MAGNITUDE, never negative
@@ -166,13 +172,38 @@ export class EdgeFeatureTool {
     return Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]);
   }
 
+  /** The largest blend the picked edges' own surroundings permit, measured once
+   *  per member set and held — the OPPOSITE of modelDiagonal's policy, and for a
+   *  reason that would otherwise be a nasty bug.
+   *
+   *  The measurement has to describe the model the blend is applied TO. Once the
+   *  drag starts, the displayed model is the preview: the blend is already in it,
+   *  and its new faces sit right where the clearance is being measured. Re-read
+   *  per frame, the bound would shrink as the value grew, chase it down and pin
+   *  the drag somewhere short of where it could have gone. So it is taken from
+   *  the geometry as it stands when the membership settles, and left alone. */
+  private clearanceLimitMm: number | null = null;
+
+  private measureClearance() {
+    const all = this.viewport.visibleEdgeLines().map((e) => ({ id: e.id, points: e.points }));
+    // The picked edges are identified by their own geometry rather than matched
+    // back to model edge ids, which the preview renumbers. Nothing is lost: an
+    // edge measures 0 from itself and from the chain-mates it shares vertices
+    // with, and localClearance already discards everything inside the touch
+    // tolerance as attached rather than nearby.
+    const selected = this.ghosts.map((g, i) => ({ id: `pick:${i}`, points: g.points }));
+    this.clearanceLimitMm = clearanceLimit(
+      localClearance({ selected, all, modelScale: this.modelDiagonal() ?? 0 }),
+    );
+  }
+
   /** How far the drag may travel either side of the origin. */
   private limit(): number {
-    return dragLimit(this.modelDiagonal());
+    return dragLimit(this.modelDiagonal(), this.clearanceLimitMm);
   }
 
   private bounds(): ValueBounds {
-    return valueBounds(this.modelDiagonal());
+    return valueBounds(this.modelDiagonal(), this.clearanceLimitMm);
   }
 
   /** `opts` is the direct-manipulation entry (features/edgeNudge.ts): the user
@@ -500,6 +531,10 @@ export class EdgeFeatureTool {
     this.anchor.copy(this.anchorFromSelectors(sels));
     this.axis.copy(this.computeAxis());
     this.quat.setFromUnitVectors(Y_AXIS, this.axis);
+    // Reached only once the rollback build has landed, so the displayed model is
+    // the one WITHOUT this feature — which is exactly the geometry the blend has
+    // to fit into, and the reason editing measures the same way creating does.
+    this.measureClearance();
     this.buildGizmo();
     this.mountInput();
     this.promptForPhase();
@@ -927,6 +962,10 @@ export class EdgeFeatureTool {
     this.phase = "drag";
     this.axis.copy(this.computeAxis());
     this.quat.setFromUnitVectors(Y_AXIS, this.axis);
+    // Must precede the seed value below, which is clamped to these bounds — and
+    // must precede pushPreview, which replaces the displayed model with one that
+    // already has the blend in it.
+    this.measureClearance();
     // The treatment we opened on is what the arrow's own direction means; its
     // opposite lives on the far side of the origin for the rest of the gesture.
     this.positiveKind = this.kind;
@@ -968,7 +1007,35 @@ export class EdgeFeatureTool {
     this.arc.update();
   }
 
+  /** Keep the handle standing across an orbit.
+   *
+   *  An edge handle's axis is defined against the CAMERA — perpendicular to the
+   *  edge and lying in the screen plane — so it is only right for the orbit it
+   *  was computed in. It used to be computed exactly once, when the tool armed,
+   *  and after that orbiting swung the camera around an axis that stayed put:
+   *  come round far enough and it pointed at the viewer, where a 52px blob
+   *  projects to nothing and reads as a squashed lump with no direction in it.
+   *  The PASSIVE handle recomputes every frame (selectionNudge), so the armed
+   *  tool was also drifting away from the handle it is supposed to be
+   *  indistinguishable from.
+   *
+   *  Not while a gesture is live, though. The axis is what the drag measures
+   *  along, and moving it under a hand that is already pressing would re-scale
+   *  travel already made — and it is what profileAt reads its angles against.
+   *  Mid-gesture only the DRAWN direction leans out of the view, which the
+   *  measurement never sees. */
+  private refreshAxis() {
+    if (!this.grabbing && !this.draggingArc) this.axis.copy(this.computeAxis());
+    const cam = this.viewport.camera;
+    const fwd = cam.getWorldDirection(new THREE.Vector3());
+    const camRight = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+    this.quat.setFromUnitVectors(Y_AXIS, leanOutOfView(this.axis, fwd, camRight));
+  }
+
   private tick() {
+    // Before syncArc: the arc takes the axis as its own reference direction, so
+    // a frame where the two disagreed would draw the track off the handle.
+    if (this.phase === "drag") this.refreshAxis();
     this.syncArc();
     if (this.phase === "drag" && this.gizmo) {
       const k = this.viewport.pixelWorldSize(this.anchor);
@@ -1033,6 +1100,9 @@ export class EdgeFeatureTool {
       this.axis.copy(this.computeAxis());
       this.quat.setFromUnitVectors(Y_AXIS, this.axis);
     }
+    // Before pushPreview, while the displayed model is still the one the blend
+    // would be applied to (see measureClearance).
+    this.measureClearance();
     this.pushPreview(); // clears itself back to the bare model at zero members
     this.promptForPhase();
   }

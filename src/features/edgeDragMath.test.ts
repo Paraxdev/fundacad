@@ -53,6 +53,26 @@ describe("dragLimit", () => {
   it("still leaves room for the smallest buildable blend on a tiny model", () => {
     expect(dragLimit(0.0001)).toBeGreaterThanOrEqual(MIN_EDGE_VALUE);
   });
+
+  it("lets a measured neighbourhood override the diagonal in BOTH directions", () => {
+    // The two halves of the same complaint. On a thin plate the diagonal is far
+    // too generous (35mm of travel on a 2mm rim); on a chunky part it is too
+    // tight and refuses fillets that build. A min() of the two would only ever
+    // fix the first, which is why the local measure replaces rather than joins.
+    expect(dragLimit(141, 1)).toBeCloseTo(1); // tighter than 141 * 0.25
+    expect(dragLimit(346, 100)).toBeCloseTo(100); // looser than 346 * 0.25
+  });
+
+  it("falls back to the diagonal when the neighbourhood could not be measured", () => {
+    // null is "not measured", and it must not read as "measured: no limit" —
+    // that would drop the clamp entirely and let a flick of the mouse run the
+    // value to 10^4 mm.
+    expect(dragLimit(100, null)).toBeCloseTo(100 * MAX_DIAGONAL_FRACTION);
+    expect(dragLimit(100, undefined)).toBeCloseTo(100 * MAX_DIAGONAL_FRACTION);
+    expect(dragLimit(100, 0)).toBeCloseTo(100 * MAX_DIAGONAL_FRACTION);
+    expect(dragLimit(100, Number.NaN)).toBeCloseTo(100 * MAX_DIAGONAL_FRACTION);
+    expect(dragLimit(100, Infinity)).toBeCloseTo(100 * MAX_DIAGONAL_FRACTION);
+  });
 });
 
 describe("valueBounds", () => {
@@ -64,6 +84,14 @@ describe("valueBounds", () => {
   it("never produces max < min", () => {
     const b = valueBounds(1e-9);
     expect(b.max).toBeGreaterThanOrEqual(b.min);
+    // ...including when the neighbourhood measures smaller than the smallest
+    // blend worth committing, which a sliver of a face genuinely can.
+    const local = valueBounds(100, 1e-9);
+    expect(local.max).toBeGreaterThanOrEqual(local.min);
+  });
+
+  it("carries the local limit through to a typed value's bounds too", () => {
+    expect(valueBounds(141, 1).max).toBeCloseTo(1);
   });
 });
 
