@@ -19,6 +19,7 @@ import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import type { Viewport } from "../viewport/viewport";
+import { screenPlaneOrientation } from "./manipulator";
 import {
   clampProfile,
   formatProfile,
@@ -224,23 +225,20 @@ export class ProfileArc {
     return -SPAN / 2 + SPAN * fractionFromProfile(profile) + OFFSET;
   }
 
-  /** Per-frame: face the camera, hold a constant on-screen size, and keep the
-   *  track a quarter turn off the drag axis so the arrow never covers it. */
+  /** Per-frame: lie flat against the screen with local +X along the drag axis —
+   *  so the whole control rotates WITH the handle rather than swimming against
+   *  it — and hold a constant on-screen size. */
   update() {
     if (!this.group) return;
     const cam = this.viewport.camera;
     const fwd = cam.getWorldDirection(new THREE.Vector3());
-    // Local +X follows the drag axis projected into the screen plane, so the
-    // whole control rotates WITH the arrow rather than swimming against it.
-    const right = this.axis.clone().projectOnPlane(fwd);
-    if (right.lengthSq() < 1e-9) {
-      right.setFromMatrixColumn(cam.matrixWorld, 0);
-    }
-    right.normalize();
-    const up = new THREE.Vector3().crossVectors(fwd, right).normalize();
-    const m = new THREE.Matrix4().makeBasis(right, up, fwd.clone().negate());
+    const camRight = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
     this.group.position.copy(this.anchor);
-    this.group.quaternion.setFromRotationMatrix(m);
+    // Not a hand-rolled makeBasis. Getting the handedness wrong there fails
+    // silently — setFromRotationMatrix does not object to a reflection, it just
+    // returns a rotation nobody asked for — and this control spent its whole
+    // life drawn edge-on because of it. See manipulator.screenPlaneOrientation.
+    this.group.quaternion.copy(screenPlaneOrientation(fwd, this.axis, camRight));
     this.group.scale.setScalar(this.viewport.pixelWorldSize(this.anchor));
     // A raycast reads matrixWorld, which only a render refreshes — without this
     // the knob is hit-tested where it was last drawn, not where it now is.

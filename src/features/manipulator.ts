@@ -120,6 +120,89 @@ export function edgeHandleAxis(
   return orientOutward(right, anchor ?? null, centre ?? null);
 }
 
+/** Orientation for a gizmo drawn FLAT AGAINST THE SCREEN: local +X along `axis`
+ *  as the screen sees it, local +Y up the screen, local +Z out of it toward the
+ *  camera. `fallbackRight` (the camera's own right) covers an axis pointing dead
+ *  at the viewer, which has no screen direction to line up with.
+ *
+ *  The obvious spelling of this is three cross products into makeBasis, and the
+ *  obvious spelling is what the profile arc shipped with — `up = fwd x right`,
+ *  with `-fwd` in the third column. That basis is LEFT-handed: `fwd x right`
+ *  points DOWN the screen, so its determinant is -1. Quaternion.setFromRotation-
+ *  Matrix assumes a proper rotation, and handed a reflection it returns a
+ *  non-unit quaternion standing for some unrelated rotation — which Object3D
+ *  then applies as a tilt AND a shrink. So the arc was drawn at an essentially
+ *  arbitrary angle, near enough edge-on at most orbits to disappear. Its knob is
+ *  a sphere and its readout a sprite, both orientation-blind, so those two went
+ *  on looking correct while the only part of the control that had to be oriented
+ *  collapsed to a stub.
+ *
+ *  Handedness is also what keeps a curved control's two halves agreeing. A hit
+ *  test reads screen angles with atan2 about a flipped y — i.e. +Y up — so a
+ *  mirrored basis sends the knob one way round its track while the cursor is
+ *  read the other way. */
+export function screenPlaneOrientation(
+  forward: THREE.Vector3,
+  axis: THREE.Vector3,
+  fallbackRight: THREE.Vector3,
+): THREE.Quaternion {
+  const fwd = forward.clone().normalize();
+  const back = fwd.clone().negate(); // out of the screen, toward the camera
+  const right = axis.clone().projectOnPlane(fwd);
+  if (right.lengthSq() < 1e-9) right.copy(fallbackRight).projectOnPlane(fwd);
+  // Only reachable if the caller's "right" was itself along the view direction;
+  // any perpendicular beats returning a basis that isn't one.
+  if (right.lengthSq() < 1e-9) right.set(1, 0, 0).projectOnPlane(fwd);
+  if (right.lengthSq() < 1e-9) right.set(0, 1, 0).projectOnPlane(fwd);
+  right.normalize();
+  const up = new THREE.Vector3().crossVectors(back, right).normalize();
+  return new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(right, up, back),
+  );
+}
+
+/** The smallest share of a handle's length that has to survive projection, as
+ *  the sine of the angle between its axis and the view direction. 0.4 leaves
+ *  about 21px of the glyph's 52 and costs at most 24 degrees of lean — enough
+ *  that it still reads as a body standing along a direction, little enough that
+ *  the direction it reads as is still the one the drag runs along. */
+export const MIN_SCREEN_AXIS = 0.4;
+
+/** The direction to DRAW a handle along when its own axis points at the camera.
+ *
+ *  The glyph is a 52px body standing along an axis. Stand it along the view
+ *  direction and it projects to a 20px disc: no length to read, no length to
+ *  aim at, and no hint of which way the gesture runs — the "squashed lump" a
+ *  handle becomes when the camera swings round behind its axis. This tips the
+ *  axis back out of the screen until at least `minScreen` of it survives,
+ *  keeping the screen direction it already had and the side of the camera it was
+ *  already on, so a slow orbit makes the handle lean rather than snap.
+ *
+ *  For DRAWING only, never for measuring. A press/pull distance means nothing
+ *  unless it is measured along the real face normal, and a fillet radius nothing
+ *  unless measured along the real drag axis. Nothing is lost by the split:
+ *  axisDragDistance already drives an axis this steep off vertical mouse travel
+ *  rather than off the axis's (by then nonexistent) screen extent. */
+export function leanOutOfView(
+  axis: THREE.Vector3,
+  forward: THREE.Vector3,
+  fallbackRight: THREE.Vector3,
+  minScreen: number = MIN_SCREEN_AXIS,
+): THREE.Vector3 {
+  const fwd = forward.clone().normalize();
+  const a = axis.clone().normalize();
+  const along = a.dot(fwd);
+  const flat = a.clone().addScaledVector(fwd, -along); // the part that shows on screen
+  if (flat.length() >= minScreen) return a;
+  // Dead-on: there is no screen direction to preserve, so borrow the camera's.
+  const dir =
+    flat.lengthSq() > 1e-12 ? flat.normalize() : fallbackRight.clone().projectOnPlane(fwd);
+  if (dir.lengthSq() < 1e-12) return a; // nothing to lean towards; leave it be
+  dir.normalize();
+  const depth = Math.sqrt(Math.max(0, 1 - minScreen * minScreen)) * (along < 0 ? -1 : 1);
+  return dir.multiplyScalar(minScreen).addScaledVector(fwd, depth).normalize();
+}
+
 /** What letting go of the handle should do. */
 export type FluentRelease = "commit" | "cancel" | "stay";
 

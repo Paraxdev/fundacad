@@ -5,8 +5,11 @@ import {
   HANDLE_CUT,
   HANDLE_HOT,
   HANDLE_IDLE,
+  MIN_SCREEN_AXIS,
   fluentRelease,
+  leanOutOfView,
   orientOutward,
+  screenPlaneOrientation,
 } from "./manipulator";
 
 describe("orientOutward", () => {
@@ -39,6 +42,166 @@ describe("orientOutward", () => {
     expect(orientOutward(perp.clone(), v(0, 5, 0), v(0, 0, 0)).y).toBeGreaterThan(0);
     const inward = v(0.2, -0.98, 0).normalize();
     expect(orientOutward(inward, v(0, 5, 0), v(0, 0, 0)).y).toBeGreaterThan(0);
+  });
+});
+
+/** A camera on a sphere around the origin, looking in — one orbit position. */
+function orbit(az: number, el: number): THREE.PerspectiveCamera {
+  const cam = new THREE.PerspectiveCamera(50, 1.6, 0.1, 1000);
+  cam.position.setFromSphericalCoords(200, Math.PI / 2 - el, az);
+  cam.lookAt(0, 0, 0);
+  cam.updateMatrixWorld(true);
+  return cam;
+}
+const forwardOf = (cam: THREE.Camera) => cam.getWorldDirection(new THREE.Vector3());
+const rightOf = (cam: THREE.Camera) =>
+  new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).normalize();
+const upOf = (cam: THREE.Camera) =>
+  new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).normalize();
+
+/** Every orbit position and axis the sweeps below cover. */
+function* orbits() {
+  for (let az = 0; az < 6.28; az += 0.37) {
+    for (let el = -1.4; el < 1.4; el += 0.29) {
+      const cam = orbit(az, el);
+      for (const axis of [
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0.3, -0.5, 0.81).normalize(),
+        forwardOf(cam).clone().negate(), // straight at the camera
+      ]) {
+        yield { cam, axis };
+      }
+    }
+  }
+}
+
+describe("screenPlaneOrientation", () => {
+  it("keeps the control facing the camera at every orbit", () => {
+    // The bug this exists for: the shipped basis put `fwd x right` — which
+    // points DOWN the screen — in the +Y column, making it left-handed.
+    // setFromRotationMatrix does not object to a reflection, it just returns a
+    // quaternion for some other rotation, so the profile arc was drawn at an
+    // arbitrary tilt: over a full orbit sweep its plane averaged 40 degrees off
+    // camera-facing and was frequently edge-on. An 84px arc then showed up on
+    // screen as a stub, while its sphere knob and sprite readout — neither of
+    // which has an orientation to get wrong — went on looking correct.
+    for (const { cam, axis } of orbits()) {
+      const q = screenPlaneOrientation(forwardOf(cam), axis, rightOf(cam));
+      const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      expect(normal.dot(forwardOf(cam))).toBeCloseTo(-1, 6); // +Z out of the screen
+    }
+  });
+
+  it("returns a unit quaternion", () => {
+    // A non-unit quaternion is not merely a wrong rotation: Object3D composes it
+    // straight into its matrix, so it silently scales the object by |q|^2 too.
+    // The old basis produced lengths as low as 0.7 — the control shrank as well
+    // as tilting.
+    for (const { cam, axis } of orbits()) {
+      expect(screenPlaneOrientation(forwardOf(cam), axis, rightOf(cam)).length()).toBeCloseTo(1, 6);
+    }
+  });
+
+  it("lines local +X up with the drag axis as the screen sees it", () => {
+    // The arc is a crossbar on the handle, so its zero angle has to be the
+    // handle's own direction on screen. Anything else reads as an unrelated
+    // widget that happens to be nearby.
+    for (const { cam, axis } of orbits()) {
+      const fwd = forwardOf(cam);
+      const flat = axis.clone().projectOnPlane(fwd);
+      if (flat.lengthSq() < 1e-6) continue; // no screen direction to line up with
+      const q = screenPlaneOrientation(fwd, axis, rightOf(cam));
+      const x = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+      expect(x.dot(flat.normalize())).toBeCloseTo(1, 6);
+    }
+  });
+
+  it("turns anticlockwise on screen, never mirrored", () => {
+    // Not cosmetic: the arc's hit test reads cursor angles with atan2 about a
+    // flipped y — the anticlockwise-is-positive convention. A mirrored frame
+    // still faces the camera and still lines +X up with the axis, so it looks
+    // right standing still; it only shows itself once the user drags, by running
+    // the knob the opposite way round the track from the cursor. Local +Y a
+    // quarter turn anticlockwise from +X is exactly that convention.
+    for (const { cam, axis } of orbits()) {
+      const q = screenPlaneOrientation(forwardOf(cam), axis, rightOf(cam));
+      const x = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+      const y = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+      const toViewer = forwardOf(cam).negate();
+      expect(new THREE.Vector3().crossVectors(x, y).dot(toViewer)).toBeCloseTo(1, 6);
+    }
+  });
+
+  it("borrows the camera's right when the axis points dead at the viewer", () => {
+    // Then there is no projected axis to align to, and the control still has to
+    // be somewhere rather than collapsing or jittering between frames.
+    const cam = orbit(0.9, 0.4);
+    const fwd = forwardOf(cam);
+    const q = screenPlaneOrientation(fwd, fwd.clone(), rightOf(cam));
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(q).dot(rightOf(cam))).toBeCloseTo(1, 6);
+  });
+});
+
+describe("leanOutOfView", () => {
+  const screenShare = (v: THREE.Vector3, fwd: THREE.Vector3) =>
+    v.clone().projectOnPlane(fwd).length();
+
+  it("leaves an axis with screen length of its own untouched", () => {
+    // The common case by far, and the handle must not wobble in it: an edge
+    // axis is built perpendicular to the view, so leaning it at all would be
+    // inventing a tilt nobody asked for.
+    const cam = orbit(0.9, 0.4);
+    const axis = rightOf(cam);
+    expect(leanOutOfView(axis, forwardOf(cam), rightOf(cam)).dot(axis)).toBeCloseTo(1, 9);
+  });
+
+  it("tips an axis aimed at the camera back out until the handle has length", () => {
+    // The squashed lump: a 52px blob standing along the view direction projects
+    // to a 20px disc with no direction in it. Orbiting past an armed handle used
+    // to reach exactly that — a sweep of the whole orbit sphere against a fixed
+    // axis found positions leaving 0.03px of the 52.
+    const cam = orbit(0.9, 0.4);
+    const fwd = forwardOf(cam);
+    for (const axis of [fwd.clone(), fwd.clone().negate()]) {
+      const leaned = leanOutOfView(axis, fwd, rightOf(cam));
+      expect(screenShare(leaned, fwd)).toBeCloseTo(MIN_SCREEN_AXIS, 6);
+      expect(leaned.length()).toBeCloseTo(1, 9);
+    }
+  });
+
+  it("keeps the side of the camera the axis was on", () => {
+    // A handle leaning towards the viewer must not flip to leaning away from
+    // it: that is a 180 degree jump in the middle of a slow orbit, and it says
+    // the drag now runs the other way.
+    const cam = orbit(2.1, -0.3);
+    const fwd = forwardOf(cam);
+    const away = fwd.clone().addScaledVector(rightOf(cam), 0.05).normalize();
+    const toward = away.clone().negate();
+    expect(leanOutOfView(away, fwd, rightOf(cam)).dot(fwd)).toBeGreaterThan(0);
+    expect(leanOutOfView(toward, fwd, rightOf(cam)).dot(fwd)).toBeLessThan(0);
+  });
+
+  it("keeps whatever screen direction the axis already had", () => {
+    // The lean is a rescue, not a re-aim. Whichever way the handle was pointing
+    // on screen is the way the drag runs, so that much has to survive.
+    const cam = orbit(2.1, -0.3);
+    const fwd = forwardOf(cam);
+    const flat = upOf(cam).clone().multiplyScalar(0.08);
+    const axis = fwd.clone().add(flat).normalize();
+    const leaned = leanOutOfView(axis, fwd, rightOf(cam));
+    expect(
+      leaned.clone().projectOnPlane(fwd).normalize().dot(flat.clone().normalize()),
+    ).toBeCloseTo(1, 6);
+  });
+
+  it("guarantees the floor from every direction", () => {
+    for (const { cam, axis } of orbits()) {
+      const fwd = forwardOf(cam);
+      const leaned = leanOutOfView(axis, fwd, rightOf(cam));
+      expect(screenShare(leaned, fwd)).toBeGreaterThan(MIN_SCREEN_AXIS - 1e-6);
+      expect(leaned.length()).toBeCloseTo(1, 9);
+    }
   });
 });
 

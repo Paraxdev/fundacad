@@ -29,7 +29,7 @@
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";
-import { createDragHandle, HANDLE_UP, type DragHandle } from "./manipulator";
+import { createDragHandle, HANDLE_UP, leanOutOfView, type DragHandle } from "./manipulator";
 
 // Dimmer than an armed tool's handle: this is an offer, not a live control,
 // and it must not compete with the selection itself for attention.
@@ -119,7 +119,17 @@ export class SelectionNudge {
     const { anchor } = this.want;
     const group = this.handle.group;
     this.axis.copy(this.want.axis(this.viewport));
-    this.quat.setFromUnitVectors(HANDLE_UP, this.axis);
+    // Drawn along a leaned axis, never measured along one. An EDGE handle's axis
+    // is rebuilt against the camera each frame and so always has screen length to
+    // spare, but a FACE handle's is the face normal and holds still by design —
+    // look straight down at a face and its 52px blob projects to a 20px disc with
+    // no direction in it. Leaning is safe here precisely because this axis only
+    // ever orients the glyph: the gesture it hands off to (want.grab) derives its
+    // own axis from the real geometry.
+    const cam = this.viewport.camera;
+    const fwd = cam.getWorldDirection(new THREE.Vector3());
+    const camRight = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+    this.quat.setFromUnitVectors(HANDLE_UP, leanOutOfView(this.axis, fwd, camRight));
     group.position.copy(anchor);
     group.quaternion.copy(this.quat);
     group.scale.setScalar(this.viewport.pixelWorldSize(anchor));
