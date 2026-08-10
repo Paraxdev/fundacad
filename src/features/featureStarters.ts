@@ -16,6 +16,7 @@ import type { LoftTool } from "./loftTool";
 import type { MoveTool } from "./moveTool";
 import type { PlaneOffsetTool } from "./planeOffsetTool";
 import type { TextureTool } from "./textureTool";
+import { pickPlaneTarget, planeSpecOf } from "./facePlanePick";
 import { choose } from "../ui/choice";
 import { setPrompt } from "../ui/prompt";
 import type { Feature, PlaneDef, PlaneSpec, Selector } from "../types";
@@ -129,22 +130,39 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     viewport.showAllPlanes(true);
     viewport.suspendPicking = true;
     setPrompt(promptText);
+    // Hover and click ask facePlanePick the SAME question, so the highlight is a
+    // promise: a face that lights up is a face the click will take. That matters
+    // now that a face can be refused — a fillet's blend implies no plane at all,
+    // and the old pair (hover anything, click takes the raw triangle's plane)
+    // both lit faces it had no plane for and answered, for the round ones it did
+    // take, with a plane through one tessellation triangle.
+    //
+    // A refused face gets no highlight, which on its own reads as "the app did
+    // not notice my cursor" rather than "this face has no plane" — so say which,
+    // once, on the transition. Rewriting the prompt every pointermove would
+    // thrash a line the user is trying to read.
+    let sayingWhy = false;
     const onMove = (e: PointerEvent) => {
-      // a face of the body takes priority over the base-plane quads behind it;
-      // highlight whichever the click would select so the target is obvious.
-      const face = viewport.pickFacePlane(e.clientX, e.clientY);
-      if (face) {
+      const target = pickPlaneTarget(viewport, e.clientX, e.clientY);
+      if (target?.kind === "face") {
         viewport.hoverFaceAt(e.clientX, e.clientY); // highlight a selectable body face
         viewport.hoverPlane(null);
       } else {
         viewport.clearHover();
-        viewport.hoverPlane(viewport.pickPlane(e.clientX, e.clientY));
+        viewport.hoverPlane(target?.kind === "base" ? target.spec : null);
+      }
+      const why = target?.kind === "unusable";
+      if (why !== sayingWhy) {
+        sayingWhy = why;
+        setPrompt(why ? `${promptText} — this face is neither flat nor round, so it implies no plane` : promptText);
       }
     };
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      // a face of the body takes priority over the base-plane quads behind it
-      const spec = viewport.pickFacePlane(e.clientX, e.clientY) ?? viewport.pickPlane(e.clientX, e.clientY);
+      // Nothing usable under the cursor: stay in the pick rather than take a
+      // guess. A body face with no plane in it deliberately does NOT fall
+      // through to the construction quad behind the part.
+      const spec = planeSpecOf(pickPlaneTarget(viewport, e.clientX, e.clientY));
       if (!spec) return;
       // consume this click fully and run on the NEXT frame, so it can't bleed
       // into the sketch's own first-corner placement.
@@ -192,7 +210,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
         return;
       }
     }
-    pickPlaneInteractive("Select a plane or a planar face of a body to sketch on", (spec) => {
+    pickPlaneInteractive("Select a plane or a face to sketch on · a round face gives its tangent plane", (spec) => {
       sketch.enter(spec, store);
       if (tool) sketch.setTool(tool);
     });
@@ -224,8 +242,15 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   // datum plane feature — it lands in the timeline + Planes folder and can be
   // reused as a sketch / split reference. We store the SOURCE plane + a scalar
   // offset (not a baked plane) so the offset stays editable in the inspector.
+  //
+  // A ROUND face is a legitimate source and gives its TANGENT plane at the point
+  // you clicked (planeMath.tangentPlaneOnCylinder) — a cylinder has no plane of
+  // its own, so the only two sensible answers are the tangent and something
+  // built off the axis, and the tangent is the one you can immediately sketch a
+  // flat on or offset away from the shaft. The offset then runs radially, which
+  // is what makes "a plane 5 mm off this boss" one gesture.
   function createDatumPlane() {
-    pickPlaneInteractive("Select a plane or face for the datum plane", (spec) => {
+    pickPlaneInteractive("Select a plane or face for the datum plane · a round face gives its tangent plane", (spec) => {
       const src = new SketchPlane(spec);
       planeOffset.start(src, (def) => {
         if (!def) return;

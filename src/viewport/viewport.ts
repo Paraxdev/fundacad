@@ -13,6 +13,7 @@ import {
 import {
   buildBodyMesh,
   buildEdgeLines,
+  buildSectionGhosts,
   bodyOfFace,
   disposeBody,
   disposeModel,
@@ -29,6 +30,11 @@ import {
   type BodyEdges,
   type EdgeRef,
 } from "./render";
+// Upward reach, deliberate and narrow: facePlanePick is the ONE derivation of
+// "which plane is that face", and a second copy here is exactly what this import
+// replaces. It is a pure function of a raycast plus planeMath — no tool state,
+// no document — so nothing cycles back.
+import { pickFacePlaneAt } from "../features/facePlanePick";
 import { FpsMeter } from "./fpsMeter";
 import { sceneStats } from "../diagnostics/sceneStats";
 import { makeZebraMaterial, buildCurvatureCombs } from "./overlays";
@@ -1580,48 +1586,27 @@ export class Viewport {
   }
 
   /**
-   * Raycast the solid; if a face is hit, derive a sketch plane from it
-   * (origin = the global origin projected onto the face's plane, normal = face
-   * normal, xdir = a tangent). Lets you sketch on a face of an existing body.
+   * The plane of the face under the cursor — for the right-click menu's "Sketch
+   * on this face" / "Offset plane from face" and the ViewCube's set-side-from-a-
+   * face override. Null when the cursor is over no face, or over one that
+   * implies no plane at all (a fillet's blend, a sphere, a cone, a spline).
    *
-   * The origin is NOT the face's own centroid. Grid snapping rounds in
-   * plane-LOCAL coordinates (see snap.ts), so the plane origin decides where the
-   * lattice falls in world space; anchoring on the face gave every sketch-on-face
-   * its own grid, offset from the model's by a tessellation-dependent fraction of
-   * a millimetre. Reported 2026-08-02: "sketch #1 was snapped to grid, went to
-   * draw #2 and the center of 1 was not on grid anymore" — that document has a
-   * sketch on the top face of a cylinder centred on the origin anchored at
-   * (3.4797, 1.0501, 10) instead of (0, 0, 10).
+   * The derivation is features/facePlanePick + planeMath, which is also what the
+   * interactive plane picker and cross-section mode ask. It used to be a private
+   * copy that read ONE triangle of the tessellation: correct on a flat face and
+   * quietly wrong on every curved one, where it answered with the plane of a
+   * chord — so "sketch on this face" on a cylinder placed the sketch through the
+   * material at a tessellation-dependent angle instead of refusing or giving the
+   * tangent plane. Sharing the derivation is what makes a round face a usable
+   * answer here rather than a plausible-looking wrong one.
    *
-   * Projecting the global origin is what datumPlaneDef (main.ts) and
-   * planeOffsetTool already do, so this makes face-picking consistent with every
-   * other way of getting a sketch plane, and every plane parallel to a base plane
-   * shares one lattice. For a plane through `p` with unit normal `n`, that
-   * projection is `n * (n · p)`.
+   * The origin is NOT the face's own centroid, and that rule (with the bug that
+   * produced it) is documented on planeMath.planeFromPointNormal: grid snapping
+   * rounds in plane-LOCAL coordinates, so the origin decides where the lattice
+   * falls in world space.
    */
   pickFacePlane(clientX: number, clientY: number): PlaneDef | null {
-    if (!this.model) return null;
-    const ray = this.rayFrom(clientX, clientY);
-    const hits = ray.intersectObjects(visibleBodyMeshes(this.model), false);
-    const hit = hits[0];
-    if (!hit || !hit.face) return null;
-    const mesh = hit.object as THREE.Mesh;
-    const pos = mesh.geometry.getAttribute("position");
-    const a = new THREE.Vector3().fromBufferAttribute(pos, hit.face.a);
-    const b = new THREE.Vector3().fromBufferAttribute(pos, hit.face.b);
-    const c = new THREE.Vector3().fromBufferAttribute(pos, hit.face.c);
-    const normal = b.sub(a).cross(c.sub(a)).normalize().transformDirection(mesh.matrixWorld).normalize();
-    // `hit.point` is world-space and lies on the picked surface, so it fixes the
-    // plane without walking every triangle of the face the way a centroid does.
-    const origin = normal.clone().multiplyScalar(normal.dot(hit.point));
-    const ref =
-      Math.abs(normal.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
-    const xdir = ref.sub(normal.clone().multiplyScalar(ref.dot(normal))).normalize();
-    return {
-      origin: [origin.x, origin.y, origin.z],
-      normal: [normal.x, normal.y, normal.z],
-      xdir: [xdir.x, xdir.y, xdir.z],
-    };
+    return pickFacePlaneAt(this, clientX, clientY)?.def ?? null;
   }
 
   /** Edge-only pick for the fillet/chamfer edge-selection tools. */
@@ -1841,37 +1826,21 @@ export class Viewport {
     this.requestRender();
   }
 
+  /** Rebuild the ghost pass from scratch. Cheap enough to do wholesale, and only
+   *  ever runs on a transition, a ghost-level change or a rebuild — never per
+   *  frame, which is what keeps a mode nobody is looking at off the render path.
+   *  The pass itself is render.ts's buildSectionGhosts, where it can be tested
+   *  without a canvas. */
   private mountGhost() {
     for (const g of this.ghostMeshes) g.removeFromParent();
-    this.ghostMeshes = [];
-    // Always a FRESH material, never a cached one: a ghost hangs off the body
-    // mesh, and disposeBody's traversal disposes whatever it finds on the way
-    // down — so a rebuild that replaced one body has already disposed the
-    // material every OTHER body's ghost is still wearing. Recreating costs one
-    // object on a transition; reusing costs a silently dead material.
     this.ghostMat?.dispose();
-    this.ghostMat = null;
-    const alpha = this.section?.ghost ?? 0;
-    // Nothing to draw: no material either, so "fully hidden" really is the old
-    // zero-cost cut rather than a fully transparent pass over the whole model.
-    if (!this.section || alpha <= 0 || !this.model) return;
-    const mat = (this.ghostMat = new THREE.MeshLambertMaterial({
-      color: BASE_COLOR,
-      transparent: true,
-      opacity: alpha,
-      // depthWrite off so several ghosted bodies read THROUGH each other — the
-      // point of the mode is the context an assembly's far side gives, and a
-      // ghost that occluded the ghost behind it would hide most of it.
-      depthWrite: false,
-      side: THREE.DoubleSide, // the cut leaves open shells: back faces are the interior
-      clippingPlanes: [this.ghostPlane],
-    }));
-    for (const b of this.model.bodies) {
-      const g = new THREE.Mesh(b.mesh.geometry, mat);
-      g.renderOrder = -1; // behind the solid half and behind every gizmo
-      b.mesh.add(g); // child: inherits the body's transform and its visibility
-      this.ghostMeshes.push(g);
-    }
+    const built = buildSectionGhosts(
+      this.model?.bodies ?? [],
+      this.ghostPlane,
+      this.section?.ghost ?? 0,
+    );
+    this.ghostMeshes = built.meshes;
+    this.ghostMat = built.material;
   }
 
   /** The model's world bounding box (for placing the section plane), or null. */

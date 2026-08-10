@@ -12,7 +12,7 @@
 // silently draws another body's vertex.
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { buildBodyMesh, bodyOfFace, partitionMesh } from "./render";
+import { buildBodyMesh, bodyOfFace, buildSectionGhosts, partitionMesh } from "./render";
 import type { ModelView } from "./render";
 import type { RebuildResult } from "../types";
 
@@ -298,4 +298,80 @@ describe("buildBodyMesh scaling", () => {
     }
     expect(partMs).toBeLessThan(scanMs);
   }, 120_000);
+});
+
+describe("buildSectionGhosts", () => {
+  // The half of cross-section mode that is easy to leave out and impossible to
+  // notice missing from a unit test of the arithmetic: the CUT is just a
+  // clipping plane and works whether or not this pass exists — it simply looks
+  // like the old vanishing section. These pin the properties that make the
+  // ghost readable rather than merely present.
+
+  /** Two bodies' worth of built meshes, which is what the pass consumes. */
+  function twoBodies() {
+    const r = sharedVertexReply();
+    return r.bodies!.map((m) => buildBodyMesh(r, m, [], RES, undefined));
+  }
+
+  const PLANE = new THREE.Plane(new THREE.Vector3(0, 0, -1), 4);
+
+  it("draws the cut-away half rather than nothing at all", () => {
+    // One ghost per body, carrying the MIRRORED plane — the body's own material
+    // keeps the near half, so a ghost sharing the same plane would draw exactly
+    // what is already there and the far side would still be gone.
+    const bodies = twoBodies();
+    const { meshes, material } = buildSectionGhosts(bodies, PLANE, 0.14);
+    expect(meshes.length).toBe(2);
+    expect(material!.clippingPlanes).toEqual([PLANE]);
+    expect(material!.transparent).toBe(true);
+    expect(material!.opacity).toBeCloseTo(0.14, 9);
+  });
+
+  it("shares each body's geometry instead of copying it", () => {
+    // A ghost is a second draw of the SAME buffers. Cloning would double the
+    // GPU residency of every model the moment the mode is switched on, and go
+    // stale the instant a body moved.
+    const bodies = twoBodies();
+    const { meshes } = buildSectionGhosts(bodies, PLANE, 0.3);
+    expect(meshes[0]!.geometry).toBe(bodies[0]!.mesh.geometry);
+    expect(meshes[1]!.geometry).toBe(bodies[1]!.mesh.geometry);
+  });
+
+  it("hangs each ghost off its own body", () => {
+    // Parenting is what makes a ghost follow a move-ghost's live transform and
+    // vanish with a hidden or replaced body, with nothing tracking it.
+    const bodies = twoBodies();
+    const { meshes } = buildSectionGhosts(bodies, PLANE, 0.3);
+    expect(meshes[0]!.parent).toBe(bodies[0]!.mesh);
+    expect(meshes[1]!.parent).toBe(bodies[1]!.mesh);
+  });
+
+  it("writes no depth, so ghosted bodies read through each other", () => {
+    // An assembly's far side is the context the mode exists to keep. A ghost
+    // that occluded the ghost behind it would hide most of it, and the pass
+    // would cost a draw call to show one silhouette.
+    const { material } = buildSectionGhosts(twoBodies(), PLANE, 0.06);
+    expect(material!.depthWrite).toBe(false);
+    expect(material!.side).toBe(THREE.DoubleSide); // a cut leaves open shells
+  });
+
+  it("builds nothing at all when the ghost is dialled to hidden", () => {
+    // "Hidden" has to stay genuinely free — it is the tool's previous behaviour,
+    // and a fully transparent pass over the whole model instead of no pass at
+    // all would make the clean cut the expensive option.
+    const bodies = twoBodies();
+    const { meshes, material } = buildSectionGhosts(bodies, PLANE, 0);
+    expect(meshes).toEqual([]);
+    expect(material).toBeNull();
+    expect(bodies[0]!.mesh.children).toEqual([]);
+  });
+
+  it("gives every ghost the SAME material", () => {
+    // One material per mount, shared: disposeBody's traversal disposes whatever
+    // hangs off a body, so a rebuild that replaced one body would otherwise
+    // leave every other ghost wearing a disposed material. The mount recreates
+    // it wholesale for that reason, and this is what makes that cheap.
+    const { meshes } = buildSectionGhosts(twoBodies(), PLANE, 0.3);
+    expect(meshes[0]!.material).toBe(meshes[1]!.material);
+  });
 });

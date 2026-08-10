@@ -45,6 +45,7 @@ import { contextMenu, dismissContextMenu, type CtxItem } from "../ui/menu";
 import { ConstraintTools, CONSTRAINT_TOOLS, type ConstraintHost } from "./constraintTools";
 import { PatternFlow, PATTERN_TOOLS, ENTITY_PATTERNS, type PatternHost } from "./patternFlow";
 import { ProjectPanel } from "./projectPanel";
+import { sketchEscapeAction } from "./escapeLayers";
 import { SketchPlaneGrid } from "./planeGrid";
 import { sketchLockHolds } from "./sketchView";
 
@@ -2517,8 +2518,20 @@ export class SketchMode {
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      if (this.offsetPick) { this.cancelOffset(); return; }
-      if (this.dragFrom || this.moveDrag) {
+      // Which rung of the stack this press lands on is decided next door, where
+      // the ORDER can be tested without a canvas — see escapeLayers.ts.
+      const action = sketchEscapeAction({
+        offsetPick: !!this.offsetPick,
+        dragging: !!(this.dragFrom || this.moveDrag),
+        pendingGeometry:
+          !!this.base || !!this.arcStart || this.filletFirst != null || this.splinePts.length > 0 ||
+          this.clickPts.length > 0 || this.dimPicks.length > 0 || !!this.dimPlan ||
+          this.constraintTools.hasPending(),
+        selection: this.selected.size > 0,
+        tool: this.tool,
+      });
+      if (action === "cancel-offset") { this.cancelOffset(); return; }
+      if (action === "cancel-drag") {
         // cancel an in-progress drag: revert geometry to its pre-drag positions
         if (this.dragSnapshot) this.entities = this.dragSnapshot;
         this.dragSnapshot = null;
@@ -2530,8 +2543,7 @@ export class SketchMode {
         this.onState?.();
         return;
       }
-      if (this.base || this.arcStart || this.filletFirst != null || this.splinePts.length ||
-          this.clickPts.length || this.dimPicks.length || this.dimPlan || this.constraintTools.hasPending()) {
+      if (action === "cancel-geometry") {
         this.base = null;
         this.chainStart = null;
         this.arcStart = null;
@@ -2546,11 +2558,27 @@ export class SketchMode {
         this.constraintTools.resetPending();
         this.dim.hide();
         this.overlay.setPreview([]);
-      } else if (this.selected.size) {
+      } else if (action === "clear-selection") {
         this.selected.clear();
         this.refreshActive();
-      } else {
+      } else if (action === "arm-select") {
         this.setTool("select");
+      } else {
+        // Nothing left to cancel: the press means "I'm done here".
+        //
+        // It COMMITS rather than discards. Escape cancels a tool everywhere else
+        // in the app, but a sketch is not a tool — it is a document edit the user
+        // has been building for minutes, and the same key that walked them out of
+        // a half-drawn line must not also be the key that silently deletes the
+        // twenty entities behind it. This is the same finish(true) every 3D
+        // command already performs on an open sketch, so leaving by Escape and
+        // leaving by pressing Extrude put the same feature in the timeline.
+        //
+        // And the press stops here. It has been spent: without this the SAME
+        // keydown reaches the global handler, which — seeing a sketch that is no
+        // longer active — would go on to clear the model selection underneath it.
+        e.stopPropagation();
+        this.finish(true);
       }
       return;
     }

@@ -14,7 +14,7 @@
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";
-import type { PlaneDef, Selector, Vec3 } from "../types";
+import type { Plane3, PlaneDef, PlaneSpec, Selector, Vec3 } from "../types";
 import { planeFromPickedFace, type FacePlaneKind } from "./planeMath";
 
 export interface FacePlanePick {
@@ -41,7 +41,16 @@ export function pickFacePlaneAt(
   clientY: number,
 ): FacePlanePick | null {
   const hit = viewport.pickFaceForPressPull(clientX, clientY);
-  if (!hit) return null;
+  return hit ? facePlaneFromHit(viewport, hit) : null;
+}
+
+/** The raycast half of the pick, already done. Split out so a caller that has to
+ *  know whether a face was hit AT ALL (as opposed to which plane it implies)
+ *  pays for one raycast rather than two — this runs on every pointermove of a
+ *  plane pick. */
+type FaceHit = NonNullable<ReturnType<Viewport["pickFaceForPressPull"]>>;
+
+function facePlaneFromHit(viewport: Viewport, hit: FaceHit): FacePlanePick | null {
   const tris = viewport.faceTriangles(hit.faceId);
   if (!tris.length) return null;
   const points: Vec3[] = [];
@@ -77,4 +86,42 @@ export function pickFacePlaneAt(
     faceId: hit.faceId,
     at,
   };
+}
+
+/** What the cursor is over during a "pick a plane" step — the one arbitration
+ *  shared by Sketch, Datum Plane, Offset Plane and Split, so hovering and
+ *  clicking can never disagree about what the click would take.
+ *
+ *  `unusable` is the case worth having a name for. A body face is under the
+ *  cursor but it implies no plane — a fillet's blend, a sphere, a spline, a cone
+ *  — and the base-plane quads are switched on and sitting BEHIND the model
+ *  during this step. Collapsing that to "nothing here" would let the ray sail
+ *  through the part and pick the XY quad two hundred millimetres behind the face
+ *  the user was aiming at, which is a wrong answer delivered silently. The
+ *  caller refuses the click instead. */
+export type PlanePickTarget =
+  | { kind: "face"; spec: PlaneDef; face: FacePlanePick }
+  | { kind: "base"; spec: Plane3 }
+  | { kind: "unusable" }
+  | null;
+
+/** Resolve the plane under the cursor. A body face wins over the construction
+ *  quads behind it — the quads are scenery for this step, the part is the thing
+ *  the user is looking at. */
+export function pickPlaneTarget(viewport: Viewport, clientX: number, clientY: number): PlanePickTarget {
+  const hit = viewport.pickFaceForPressPull(clientX, clientY);
+  if (hit) {
+    const face = facePlaneFromHit(viewport, hit);
+    return face ? { kind: "face", spec: face.def, face } : { kind: "unusable" };
+  }
+  const base = viewport.pickPlane(clientX, clientY);
+  return base ? { kind: "base", spec: base } : null;
+}
+
+/** The plane spec a target yields, or null when there is nothing to take. Sugar
+ *  for the callers that only want the answer and treat "unusable" the same as
+ *  "refuse the click". */
+export function planeSpecOf(target: PlanePickTarget): PlaneSpec | null {
+  if (!target) return null;
+  return target.kind === "unusable" ? null : target.spec;
 }

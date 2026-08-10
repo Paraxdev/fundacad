@@ -23,6 +23,7 @@ import type { Viewport } from "../viewport/viewport";
 import type { PlaneDef, Vec3 } from "../types";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
+import { isEditableTarget } from "../ui/focus";
 import { snap } from "../ui/units";
 import { axisDragDistance, createDragHandle, HANDLE_UP, type DragHandle } from "./manipulator";
 import { pickFacePlaneAt } from "./facePlanePick";
@@ -290,6 +291,19 @@ export class SectionTool {
     // Our keys are bare letters, and the mode outlives every other tool — so
     // while one of those is running, they are ITS keys.
     if (this.standing) return;
+    // …and while the user is typing they are the FIELD's keys. This matters more
+    // here than for a normal tool: the mode stays up across renames, parameter
+    // edits and every dimension box in the app, so an unguarded "f" would flip
+    // the kept half of the model from inside a text input the section has
+    // nothing to do with.
+    //
+    // Escape aimed at OUR OWN offset box is the one carve-out, and it is not
+    // optional: showChrome focuses that box the instant the mode arms, so
+    // without it the very first Escape a user presses lands in an input and the
+    // mode would have no way out at all. (DimInput deliberately leaves Escape to
+    // the owning tool; sketchMode.onKey makes the identical carve-out.)
+    const escInOwnDim = e.key === "Escape" && this.dim.isActive && this.dim.ownsTarget(e.target);
+    if (!escInOwnDim && isEditableTarget(e.target)) return;
     if (e.key === "Escape") this.stop();
     else if (e.key === "f" || e.key === "F") {
       this.side = this.side === 1 ? -1 : 1;
@@ -386,8 +400,20 @@ export class SectionTool {
   }
 
   stop() {
+    const wasPicking = this.picking;
     this.endPick();
-    if (!this.active) return;
+    if (!this.active) {
+      // Stopped from the AIMING step (the Section button pressed again, say).
+      // The caller is still owed its completion callback — the same one Escape
+      // during the pick delivers — or a caller that armed us and waited would
+      // wait forever, and the stale closure would fire on some later stop.
+      if (wasPicking) {
+        const done = this.onDone;
+        this.onDone = null;
+        done?.();
+      }
+      return;
+    }
     const el = this.viewport.domElement;
     el.removeEventListener("pointermove", this.boundMove);
     el.removeEventListener("pointerdown", this.boundDown, true);

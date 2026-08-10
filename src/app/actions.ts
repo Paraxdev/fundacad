@@ -173,7 +173,11 @@ export function createActions(e: Engine): (action: string) => void {
         openParamsDialog();
         break;
       case "section":
-        if (e.tools.section.active) {
+        // The button is the way OUT of the mode as well as in — including out of
+        // the aiming step, which would otherwise be a state you could only leave
+        // with Escape (pressing Section again during a pick did nothing at all,
+        // because start() refuses to re-enter).
+        if (e.tools.section.active || e.tools.section.picking) {
           e.tools.section.stop();
           break;
         }
@@ -181,13 +185,19 @@ export function createActions(e: Engine): (action: string) => void {
           e.setStatus("Section: create or import a body first", "");
           break;
         }
+        // "Pick" leads, and is what the user's own words asked for: cut along a
+        // face or a datum plane they choose. The three world axes stay because
+        // they need no aiming at all — on a part with no face facing the way you
+        // want to look, Z is one click away and a pick is not.
         void (async () => {
-          const ax = await choose<"X" | "Y" | "Z">("Section — cut along which axis?", [
+          const src = await choose<"pick" | "X" | "Y" | "Z">("Section — cut along what?", [
+            { value: "pick", label: "Face or plane", hint: "click one" },
             { value: "Z", label: "Z", hint: "horizontal cut" },
             { value: "X", label: "X" },
             { value: "Y", label: "Y" },
           ]);
-          if (ax) e.tools.section.start(ax);
+          if (src === "pick") e.tools.section.start({ kind: "pick" });
+          else if (src) e.tools.section.start(src);
         })();
         break;
       case "component-colors":

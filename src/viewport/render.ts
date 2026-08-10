@@ -399,6 +399,58 @@ export function faceIdOfHit(hit: THREE.Intersection): number {
   return owner?.faceIds[hit.faceIndex ?? 0] ?? 0;
 }
 
+/** The faint second pass that makes cross-section mode readable: what the cut
+ *  takes away, drawn again at low alpha instead of simply not being there.
+ *
+ *  A hard clip alone answers "what is inside this part" and destroys the answer
+ *  to "where inside it am I looking" — half an assembly vanishes and the half
+ *  left has nothing to sit in. So the cut-away half is drawn a second time, by a
+ *  per-body mesh that SHARES the body's geometry (no copy, no upload) and
+ *  carries the mirrored clip plane, i.e. keeps exactly what the body's own
+ *  material throws away.
+ *
+ *  The three material settings are each load-bearing:
+ *
+ *  · depthWrite OFF, so several ghosted bodies read through each other. A ghost
+ *    that occluded the ghost behind it would hide most of the context the pass
+ *    exists to provide.
+ *  · DoubleSide, because a cut leaves open shells — the inside of the far half
+ *    is back faces, and culling them would leave a hollow outline.
+ *  · ONE material shared by every ghost, recreated on each mount rather than
+ *    cached: a ghost hangs off a body mesh and disposeBody's traversal disposes
+ *    whatever it finds on the way down, so a rebuild that replaced one body has
+ *    already disposed the material every OTHER body's ghost is wearing.
+ *
+ *  At alpha 0 nothing is built at all — "hidden" then costs no draw call rather
+ *  than a fully transparent pass over the whole model, which is what keeps the
+ *  clean uncluttered cut (the tool's entire previous behaviour) free.
+ *
+ *  The ghosts are CHILDREN of the body meshes: that is what makes them inherit a
+ *  move-ghost's live transform and disappear with a body that is hidden or
+ *  replaced, without this pass having to track any of it. */
+export function buildSectionGhosts(
+  bodies: BodyMesh[],
+  plane: THREE.Plane,
+  alpha: number,
+): { meshes: THREE.Mesh[]; material: THREE.MeshLambertMaterial | null } {
+  if (!(alpha > 0)) return { meshes: [], material: null };
+  const material = new THREE.MeshLambertMaterial({
+    color: BASE_COLOR,
+    transparent: true,
+    opacity: alpha,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    clippingPlanes: [plane],
+  });
+  const meshes = bodies.map((b) => {
+    const g = new THREE.Mesh(b.mesh.geometry, material);
+    g.renderOrder = -1; // behind the solid half and behind every gizmo
+    b.mesh.add(g);
+    return g;
+  });
+  return { meshes, material };
+}
+
 /** faceId -> owning body, built lazily per ModelView and thrown away with it
  *  (a new reply always makes a new ModelView, so this can never go stale).
  *  Bodies own contiguous faceId ranges, so a sorted range table + binary search

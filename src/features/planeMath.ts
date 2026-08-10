@@ -10,13 +10,16 @@
 // sagitta puts the sketch inside the material. Neither shows up as an error;
 // both show up as a part that does not fit.
 //
-// And it has to agree, to the digit, with a SECOND implementation: the sidecar
-// rebuilds a face-referenced datum plane from the real B-rep (builder.py,
-// _plane_from_face), while the frontend derives the same plane from the
-// tessellation so the sketch can be placed without a round trip. The two are
-// only interchangeable if they pick the same origin and the same x direction
-// from the same face, so those rules live in one named function each, with the
-// reasoning attached, on both sides.
+// And its answer is what gets WRITTEN DOWN. There is no face-referenced plane
+// spec on the wire — a datumPlane feature carries a resolved {origin, normal,
+// xdir}, which the sidecar simply rebuilds with (builder.py, `_plane_of`) — so
+// whatever these functions return is the plane, permanently, for every rebuild
+// and every reopen of the file. Nothing downstream re-derives it and nothing
+// corrects it. That also means the rules below are the ones a future
+// face-following datum would have to reproduce on the sidecar side to stay
+// compatible with the planes already saved in people's documents, which is why
+// each lives in one named function with its reasoning attached rather than
+// inline where it is used.
 //
 // Everything here is plain tuples: no THREE, no viewport, no camera — so vitest
 // can reach it, which is the same bargain edgeDragMath.ts struck.
@@ -66,11 +69,22 @@ export function unit(v: Vec3): Vec3 | null {
 /** The in-plane x axis a bare normal implies.
  *
  *  A plane needs an x direction and a normal alone does not supply one, so SOME
- *  arbitrary choice has to be made. It must be the same arbitrary choice
- *  everywhere: this rule is duplicated in viewport.pickFacePlane and in the
- *  sidecar's `_plane_x_dir`, and a plane whose x axis is derived one way at pick
- *  time and another way at rebuild time is a sketch that rotates about its own
- *  normal when the document is reopened.
+ *  arbitrary choice has to be made, and it has to be the same one every time:
+ *  a plane whose x axis is derived one way at pick time and another way later is
+ *  a sketch that rotates about its own normal, moving every coordinate stored in
+ *  it. viewport.pickFacePlane used to carry a second copy of this rule and now
+ *  calls through here, which is the only way to keep that promise.
+ *
+ *  KNOWN DIVERGENCE, recorded rather than fixed: sketchView.sketchXdir answers
+ *  the same question by a different rule (the normal's dominant world axis, so a
+ *  +X face sketches like the YZ plane and the axis never jumps as the face
+ *  tilts). It serves the "select a face, press S" route; this serves the "press
+ *  S, click a face" one. Both are stable and both are recorded IN the plane they
+ *  produce — a saved sketch carries its own xdir — so the only symptom is that
+ *  the same face can open with its sketch axes a quarter turn apart depending on
+ *  the route taken, never a plane in the wrong place. Unifying is safe for
+ *  existing documents for exactly that reason; it is left alone here because
+ *  picking the winner is a decision about feel, not correctness.
  *
  *  World +Z, projected into the plane, except when the plane is nearly
  *  horizontal (where +Z has almost nothing to project) — then world +X. */
