@@ -1,0 +1,170 @@
+/* ============================================================================
+   LEFT TOOL RAIL  (the primary tool surface — icon-only, one button per family)
+   ============================================================================
+
+   A grid column of #main rather than something floating over the canvas: the
+   viewport already carries the view-control pill in its bottom-left corner, and
+   an overlay rail would either sit on top of it or push it somewhere nobody
+   looks for it. A column also means the rail can never cover geometry, which is
+   the whole complaint people have about floating palettes.
+
+   Everything here is token-driven. The one thing worth checking by hand after a
+   change is the PAPER theme: the corner mark and the flyout's elevation are the
+   two places where a value tuned against a near-black panel disappears on
+   white. */
+
+#toolrail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 48px;
+  padding: var(--s-2) 0 var(--s-4);
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  /* Grid items default to min-height:auto, so without this a long sketch rail
+     grows the row instead of scrolling and pushes the timeline off-screen —
+     the same trap #browser and #inspector document next door. */
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* The rail is a press-and-HOLD surface: a hold that selects the label under
+     the cursor, or that the browser turns into a scroll gesture, is a hold that
+     never reaches the flyout. */
+  user-select: none;
+}
+/* No scrollbar track eating 10px of a 48px column — the rail is scrolled with
+   the wheel, and a visible track would shove the icons off centre. Both
+   properties are needed: the standard one covers Firefox/WebKitGTK, the
+   -webkit- pseudo-element covers the Chromium-family webview. */
+#toolrail {
+  scrollbar-width: none;
+}
+#toolrail::-webkit-scrollbar {
+  width: 0;
+}
+
+.rail-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--text-dim);
+  cursor: pointer;
+  /* Stops a touch hold from being read as a pan or a long-press selection
+     before the flyout has a chance to open. */
+  touch-action: none;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+.rail-btn:hover {
+  background: var(--raised);
+  border-color: var(--line);
+  color: var(--text);
+}
+.rail-btn:hover svg {
+  color: var(--accent-hot);
+}
+.rail-btn:active {
+  background: var(--raised-2);
+}
+/* The armed tool. Same amber vocabulary as .ribbon-btn.active, because it is
+   the same state seen twice. */
+.rail-btn.active {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent-hot);
+}
+/* Held open: the button is the anchor of a menu, so it stays visibly engaged
+   even while the pointer is 200px away over a flyout row. */
+.rail-btn.open {
+  background: var(--raised-2);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+/* "There is more here." A corner wedge rather than a caret glyph: at 38px there
+   is no room for an arrow that would still read as an arrow, and this costs no
+   icon and no layout. */
+.rail-btn.variants::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-bottom: 4px solid var(--text-mute);
+  transition: border-color var(--t-fast) var(--ease);
+}
+.rail-btn.variants:hover::after,
+.rail-btn.variants.active::after,
+.rail-btn.variants.open::after {
+  border-bottom-color: var(--accent-hot);
+}
+
+/* ---- the variant flyout ---- */
+.rail-flyout {
+  z-index: 3000;
+  min-width: 176px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--s-1);
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  user-select: none;
+  animation: rail-flyout-in var(--t-fast) var(--ease);
+}
+/* Slides out of the rail it belongs to, not down from nowhere. */
+@keyframes rail-flyout-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+.rail-flyout-label {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.rail-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rail-flyout-item svg {
+  flex: none;
+}
+.rail-flyout-item:hover {
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+}
+/* The variant currently on the button face. Quiet on purpose — it is a
+   reminder of what a plain click would do, not a selection. */
+.rail-flyout-item.current {
+  color: var(--accent-hot);
+}
+.rail-flyout-check {
+  margin-left: auto;
+  color: var(--accent);
+}

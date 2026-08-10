@@ -1,9 +1,12 @@
 /* ============================================================================
-   MAIN — browser | viewport | inspector
+   MAIN — tool rail | browser | viewport | inspector
    ============================================================================ */
 #main {
   display: grid;
-  grid-template-columns: 232px 1fr 252px;
+  /* The rail's column is `auto`: its width is one number, and it lives with the
+     rail in _toolrail.scss rather than being restated here where a change to
+     one would silently clip the other. */
+  grid-template-columns: auto 232px 1fr 252px;
   /* The single row must be capped at #main's own height. Left implicit it is
      auto-sized, so the tallest panel's CONTENT set the row height (measured:
      #main 723px, row 811px) and the browser, viewport and canvas all stretched

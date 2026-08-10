@@ -31,6 +31,9 @@
 // than _main so it can't be confused with this entry file, which Sass would
 // otherwise refuse to disambiguate.
 @use "layout";
+// After _layout on purpose: the rail is a column of #main, and its buttons have
+// to beat the bare `button` rule that section ends with.
+@use "toolrail";
 @use "timeline";
 @use "inspector";
 @use "utilities";

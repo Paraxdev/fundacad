@@ -7,6 +7,7 @@ import PrintStatusPill from "./components/overlays/PrintStatusPill.vue";
 import ShortcutHud from "./components/overlays/ShortcutHud.vue";
 import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
 import InspectorPane from "./components/shell/InspectorPane.vue";
+import LeftToolbar from "./components/shell/LeftToolbar.vue";
 import CommandPalette from "./components/overlays/CommandPalette.vue";
 import RibbonBar from "./components/shell/RibbonBar.vue";
 import TimelineBar from "./components/shell/TimelineBar.vue";
@@ -44,6 +45,12 @@ const toolPanels = useToolPanelStore();
   <TitleBar />
   <RibbonBar />
   <div id="main">
+    <!-- The tool rail is a COLUMN of #main, not an overlay on the viewport: it
+         must never cover geometry, and the viewport's bottom-left corner is
+         already spoken for by the view-control pill. It is additive — the
+         ribbon above still carries every tool, including the ones the rail
+         folds into a hold-to-open flyout. -->
+    <LeftToolbar />
     <BrowserPane />
     <ViewportPane />
     <InspectorPane />
