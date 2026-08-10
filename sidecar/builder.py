@@ -104,6 +104,7 @@ from geom_select import (
     REL_DRIFT,
 )
 import texture
+from conic_blend import PROFILE_EPS, clamp_profile, conic_blend
 
 PLANES = {"XY": Plane.XY, "XZ": Plane.XZ, "YZ": Plane.YZ}
 AXES = {"X": Axis.X, "Y": Axis.Y, "Z": Axis.Z}
@@ -1867,8 +1868,11 @@ def _group_sels_by_body(sel, ctx, label):
 def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
     """Shared fillet/chamfer body: blend every selected edge, per owning body.
 
-    `combined(edges) -> shape` runs the kernel op on a whole group at once;
-    `one_edge(edge) -> shape` does a single edge (the fallback + failure probe).
+    `combined(shape, edges) -> shape` runs the kernel op on a whole group at
+    once; `one_edge(shape, edge) -> shape` does a single edge (the fallback +
+    failure probe). Both take the body they are blending: build123d's own
+    fillet/chamfer infer it from the edges, but a conic profile has to rebuild
+    the solid itself and so needs it handed over.
 
     ALL-OR-NOTHING across bodies: every group's new shape is computed first and
     only assigned once they ALL succeed. Otherwise a two-body fillet whose
@@ -1887,31 +1891,60 @@ def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
         if not edges:
             raise ValueError(f"no edge found to {label.lower()} on {body['name']}")
         try:
-            new_shape = combined(edges)
+            new_shape = combined(body["shape"], edges)
         except Exception as combined_err:
             # Combined call failed: fall back to per-edge blending on the evolving body.
             new_shape, unresolved = _sequential_blend(
-                body["shape"], edges, lambda s, e: one_edge(e), blend_size, body["shape"]
+                body["shape"], edges, one_edge, blend_size, body["shape"]
             )
             if unresolved:
                 # Hard no-silent-degradation rule: any edge we could not blend means
                 # the feature FAILS — never a partial solid, never a smaller radius.
                 # Paint exactly the offenders red, then re-raise the original error.
-                _report_edge_failures(f, ctx, unresolved, one_edge)
+                _report_edge_failures(f, ctx, unresolved,
+                                      lambda e: one_edge(body["shape"], e))
                 raise ValueError(f"{label} failed on {body['name']}: {combined_err}") from combined_err
         staged.append((body, new_shape))
     for body, shape in staged:
         body["shape"] = shape
 
 
+def _conic_fillet(shape, edges, radius, profile):
+    """A fillet whose section is a conic rather than a circular arc.
+
+    Same tangency, same setback, different fullness — see conic_blend.py. Raw
+    TopoDS in and out of the blend itself, because it rebuilds the solid's faces
+    and edges directly; build123d only ever sees the wrapped result.
+    """
+    out = conic_blend(shape.wrapped, [e.wrapped for e in edges], radius, profile)
+    wrapped = _wrap_topods(out)
+    if wrapped is None:
+        raise ValueError("Fillet: the conic profile produced no usable solid")
+    return wrapped
+
+
 def _handle_fillet(f, ctx):
     r = ctx.val(f["radius"])
-    _blend_edges(f, ctx, "Fillet", lambda es: fillet(es, radius=r), lambda e: fillet([e], radius=r), r)
+    # `profile` slides the section between a chamfer (-1) and a sharp corner
+    # (+1), with 0 the circular fillet every existing document already means.
+    # Absent or 0 keeps the plain build123d path, so nothing that worked before
+    # now routes through the reweighting machinery.
+    p = clamp_profile(ctx.val(f["profile"])) if f.get("profile") is not None else 0.0
+    if abs(p) < PROFILE_EPS:
+        _blend_edges(f, ctx, "Fillet",
+                     lambda s, es: fillet(es, radius=r),
+                     lambda s, e: fillet([e], radius=r), r)
+        return
+    _blend_edges(f, ctx, "Fillet",
+                 lambda s, es: _conic_fillet(s, es, r, p),
+                 lambda s, e: _conic_fillet(s, [e], r, p), r)
 
 
 def _handle_chamfer(f, ctx):
     d = ctx.val(f["distance"])
-    _blend_edges(f, ctx, "Chamfer", lambda es: chamfer(es, length=d), lambda e: chamfer([e], length=d), d)
+    _blend_edges(f, ctx, "Chamfer",
+                 lambda s, es: chamfer(es, length=d),
+                 lambda s, e: chamfer([e], length=d), d)
 
 
 def _handle_press_pull(f, ctx):
