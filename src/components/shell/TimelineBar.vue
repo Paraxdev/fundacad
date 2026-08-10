@@ -11,6 +11,7 @@ import { useDocValue, useBuildValue } from "../../app/useDoc";
 import { useSelectionStore } from "../../stores/selection";
 import { useTimelineStore } from "../../stores/timeline";
 import { FEATURE_META } from "../../ui/featureMeta";
+import Icon from "./Icon.vue";
 import { contextMenu } from "../../ui/menu";
 import { buildProgress, CANCEL_DELAY_MS } from "../../ui/buildProgress";
 
@@ -95,14 +96,17 @@ function metaFor(type: string) {
   // Unknown feature types must render, not crash: a document from a newer
   // version with a type this build doesn't know would otherwise throw
   // mid-render and make File→Open silently do nothing.
-  return FEATURE_META[type as keyof typeof FEATURE_META] ?? { glyph: "•", label: type };
+  return FEATURE_META[type as keyof typeof FEATURE_META] ?? { icon: "dot", label: type };
 }
 
 function chipTitle(f: { id: string; type: string }, i: number) {
   const err = errors.value.get(f.id);
   return (
     `${i + 1} · ${metaFor(f.type).label}` +
-    (err ? `\n⚠ ${err}` : "") +
+    // A plain-text word, not a warning sign: this is a `title` attribute, and
+    // the browser draws it in the OS tooltip font where a symbol lands as
+    // whatever fallback glyph — or tofu — that font happens to carry.
+    (err ? `\nFailed: ${err}` : "") +
     "\ndouble-click to edit · right-click for more"
   );
 }
@@ -235,10 +239,10 @@ function openMenu(e: MouseEvent, id: string, i: number) {
 <template>
   <footer id="timeline" class="timeline-shell">
     <div class="timeline-transport">
-      <button class="tl-btn" title="Roll back to the start" :disabled="rollback <= 0" @click="store.setRollback(0)">⏮</button>
-      <button class="tl-btn" title="Step one feature back" :disabled="rollback <= 0" @click="store.setRollback(Math.max(0, rollback - 1))">◂</button>
-      <button class="tl-btn" title="Step one feature forward" :disabled="rollback >= features.length" @click="store.setRollback(Math.min(features.length, rollback + 1))">▸</button>
-      <button class="tl-btn" title="Roll forward to the end" :disabled="rollback >= features.length" @click="store.setRollback(features.length)">⏭</button>
+      <button class="tl-btn" title="Roll back to the start" :disabled="rollback <= 0" @click="store.setRollback(0)"><Icon name="skipStart" /></button>
+      <button class="tl-btn" title="Step one feature back" :disabled="rollback <= 0" @click="store.setRollback(Math.max(0, rollback - 1))"><Icon name="stepBack" /></button>
+      <button class="tl-btn" title="Step one feature forward" :disabled="rollback >= features.length" @click="store.setRollback(Math.min(features.length, rollback + 1))"><Icon name="stepForward" /></button>
+      <button class="tl-btn" title="Roll forward to the end" :disabled="rollback >= features.length" @click="store.setRollback(features.length)"><Icon name="skipEnd" /></button>
     </div>
 
     <div ref="scroller" class="timeline-scroll" @wheel="onWheel" @dragover="onDragOverScroller">
@@ -274,7 +278,7 @@ function openMenu(e: MouseEvent, id: string, i: number) {
               @dragleave="dropTarget = null"
               @drop="onDrop(f.id, i, $event)"
             >
-              <span class="glyph">{{ metaFor(f.type).glyph }}</span>
+              <span class="glyph"><Icon :name="metaFor(f.type).icon" :size="18" /></span>
             </div>
           </template>
           <div
@@ -311,6 +315,6 @@ function openMenu(e: MouseEvent, id: string, i: number) {
       :class="{ hidden: errors.size === 0 }"
       title="Failing features — click to jump to the next one"
       @click="jumpToNextError()"
-    >⚠ {{ errors.size }}</button>
+    ><Icon name="warning" :size="14" /> {{ errors.size }}</button>
   </footer>
 </template>

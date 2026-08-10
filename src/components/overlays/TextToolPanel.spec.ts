@@ -63,7 +63,7 @@ describe("TextToolPanel", () => {
     expect(handlers.onChange.mock.lastCall![0].text).toBe("abc");
   });
 
-  it("commits on ✓ and closes the panel", async () => {
+  it("commits on Add and closes the panel", async () => {
     const { handlers } = open({ text: "Hi" });
     document.querySelectorAll("button")[0]!
       .dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
@@ -83,7 +83,7 @@ describe("TextToolPanel", () => {
     expect(useToolPanelStore().text).toBeNull(); // still closes
   });
 
-  it("cancels on ✕", async () => {
+  it("cancels on Cancel", async () => {
     const { handlers } = open({ text: "Hi" });
     document.querySelectorAll("button")[1]!
       .dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));

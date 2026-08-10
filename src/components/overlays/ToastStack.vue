@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from "../shell/Icon.vue";
 import { useToastStore } from "../../stores/toasts";
 
 const toasts = useToastStore();
@@ -24,7 +25,9 @@ const toasts = useToastStore();
           class="toast-action"
           @click="t.action.onClick(); toasts.dismiss(t.id)"
         >{{ t.action.label }}</button>
-        <button class="toast-close" @click="toasts.dismiss(t.id)">✕</button>
+        <button class="toast-close" aria-label="Dismiss" @click="toasts.dismiss(t.id)">
+          <Icon name="close" :size="12" />
+        </button>
       </div>
     </div>
   </Teleport>

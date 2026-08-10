@@ -1,35 +1,44 @@
-// Display metadata for feature types (glyphs + labels), shared by the timeline,
+// Display metadata for feature types (icon name + label), shared by the timeline,
 // browser tree, and toolbar.
+//
+// `icon` is a name in the icon registry (ui/icons.ts), not a character. It used
+// to be a Unicode glyph, which cost nothing to write and everything to look at:
+// the marks came from four different Unicode blocks, so they rendered at four
+// different weights and baselines out of whatever fallback font the platform
+// happened to reach for, and a few (Clean Up, Remove Body) were emoji that the
+// OS drew in full colour in the middle of a monochrome timeline. A name into a
+// hand-drawn 24×24 set is the same amount of typing and renders identically on
+// every machine.
 import type { FeatureType } from "../types";
 
-export const FEATURE_META: Record<FeatureType, { glyph: string; label: string }> = {
-  sketch: { glyph: "✎", label: "Sketch" },
-  extrude: { glyph: "⬆", label: "Extrude" },
-  fillet: { glyph: "◜", label: "Fillet" },
-  chamfer: { glyph: "◣", label: "Chamfer" },
-  "press-pull": { glyph: "⤒", label: "Press/Pull" },
-  deleteFace: { glyph: "⌫", label: "Delete Face" },
-  mirror: { glyph: "⇋", label: "Mirror" },
-  revolve: { glyph: "↻", label: "Revolve" },
-  loft: { glyph: "≋", label: "Loft" },
-  sweep: { glyph: "⤳", label: "Sweep" },
-  datumPlane: { glyph: "▱", label: "Datum Plane" },
-  import: { glyph: "⤓", label: "Import" },
-  split: { glyph: "✂", label: "Split Body" },
-  combine: { glyph: "⊕", label: "Combine" },
-  box: { glyph: "▢", label: "Box" },
-  cylinder: { glyph: "⬭", label: "Cylinder" },
-  sphere: { glyph: "◯", label: "Sphere" },
-  shell: { glyph: "⬚", label: "Shell" },
-  offsetFace: { glyph: "⇥", label: "Offset Face" },
-  thicken: { glyph: "▤", label: "Thicken" },
-  draft: { glyph: "◹", label: "Draft" },
-  patternRect: { glyph: "⁙", label: "Rect Pattern" },
-  patternCircular: { glyph: "❋", label: "Circular Pattern" },
-  simplifyMesh: { glyph: "⬡", label: "Simplify Mesh" },
-  cleanUp: { glyph: "🧹", label: "Clean Up" },
-  scale: { glyph: "⤢", label: "Scale" },
-  move: { glyph: "✥", label: "Move" },
-  removeBody: { glyph: "🗑", label: "Remove Body" },
-  texture: { glyph: "▦", label: "Texture" },
+export const FEATURE_META: Record<FeatureType, { icon: string; label: string }> = {
+  sketch: { icon: "sketch", label: "Sketch" },
+  extrude: { icon: "extrude", label: "Extrude" },
+  fillet: { icon: "fillet", label: "Fillet" },
+  chamfer: { icon: "chamfer", label: "Chamfer" },
+  "press-pull": { icon: "presspull", label: "Press/Pull" },
+  deleteFace: { icon: "deleteFace", label: "Delete Face" },
+  mirror: { icon: "mirror", label: "Mirror" },
+  revolve: { icon: "revolve", label: "Revolve" },
+  loft: { icon: "loft", label: "Loft" },
+  sweep: { icon: "sweep", label: "Sweep" },
+  datumPlane: { icon: "datumPlane", label: "Datum Plane" },
+  import: { icon: "import", label: "Import" },
+  split: { icon: "split", label: "Split Body" },
+  combine: { icon: "combine", label: "Combine" },
+  box: { icon: "box", label: "Box" },
+  cylinder: { icon: "cylinder", label: "Cylinder" },
+  sphere: { icon: "sphere", label: "Sphere" },
+  shell: { icon: "shell", label: "Shell" },
+  offsetFace: { icon: "offsetFace", label: "Offset Face" },
+  thicken: { icon: "thicken", label: "Thicken" },
+  draft: { icon: "draft", label: "Draft" },
+  patternRect: { icon: "patternRect", label: "Rect Pattern" },
+  patternCircular: { icon: "patternCircular", label: "Circular Pattern" },
+  simplifyMesh: { icon: "simplifyMesh", label: "Simplify Mesh" },
+  cleanUp: { icon: "cleanUp", label: "Clean Up" },
+  scale: { icon: "scale", label: "Scale" },
+  move: { icon: "move", label: "Move" },
+  removeBody: { icon: "removeBody", label: "Remove Body" },
+  texture: { icon: "texture", label: "Texture" },
 };

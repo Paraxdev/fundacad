@@ -222,7 +222,7 @@ function title(it: ToolItem) {
                   class="ribbon-split-arrow"
                   :title="`More ${it.label} tools`"
                   @click.stop="toggleSplit($event, it)"
-                >▾</button>
+                ><Icon name="caretDown" :size="11" /></button>
               </div>
               <button
                 v-else

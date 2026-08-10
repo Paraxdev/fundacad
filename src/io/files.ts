@@ -308,7 +308,7 @@ export async function exportModel(store: DocumentStore, geometry: GeometryBacken
   const written = res.paths?.length ? res.paths : res.path ? [res.path] : [];
   const lines = [...written];
   for (const w of res.warnings ?? []) {
-    lines.push(`⚠ ${w.feature_id ?? "feature"} failed — its result is NOT in the export: ${w.message}`);
+    lines.push(`Warning: ${w.feature_id ?? "feature"} failed — its result is NOT in the export: ${w.message}`);
   }
   if (lines.length) {
     const { listModal } = await import("../ui/choice");
@@ -398,7 +398,7 @@ export async function exportPrintProject(
   // the silent-staging path (Stage D) shouldn't pop a dialog on the happy path.
   if (res.warnings?.length) {
     const lines = res.warnings.map(
-      (w) => `⚠ ${w.feature_id ?? "feature"} failed — its result is NOT in the export: ${w.message}`,
+      (w) => `Warning: ${w.feature_id ?? "feature"} failed — its result is NOT in the export: ${w.message}`,
     );
     const { listModal } = await import("../ui/choice");
     await listModal("Exported project — with warnings", [res.path ?? path, ...lines]);

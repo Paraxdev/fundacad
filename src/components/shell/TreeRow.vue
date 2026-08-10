@@ -8,6 +8,7 @@
 // "Bracket & Plate" as "Bracket &amp; Plate".
 
 import { computed, nextTick, useTemplateRef, watch } from "vue";
+import Icon from "./Icon.vue";
 import InlineLabel from "./InlineLabel.vue";
 import { indent } from "../../ui/browserTree";
 import { contextMenu, type CtxItem } from "../../ui/menu";
@@ -15,6 +16,7 @@ import { useBrowserStore } from "../../stores/browser";
 
 const props = defineProps<{
   label: string;
+  /** An icon NAME from ui/icons.ts, not a character — see featureMeta.ts. */
   icon: string;
   depth: number;
   /** Stable id — a row with one can be renamed programmatically (the viewport's
@@ -36,7 +38,7 @@ const props = defineProps<{
   rename?: ((name: string) => void) | undefined;
   /** "Delete" action. */
   remove?: (() => void) | undefined;
-  /** Menu items prepended to the row's own (Cut all bodies, Color ▸). */
+  /** Menu items prepended to the row's own (Cut all bodies, Color). */
   extraMenu?: CtxItem[] | undefined;
 }>();
 
@@ -109,13 +111,13 @@ function openMenu(e: MouseEvent) {
     @dblclick="onDblClick"
     @contextmenu="openMenu"
   >
-    <span class="feature-icon">{{ icon }}</span>
+    <span class="feature-icon"><Icon :name="icon" :size="14" /></span>
     <span v-if="swatch" class="tree-swatch" :style="{ ...swatchStyle, background: swatch }"></span>
     <InlineLabel ref="labelEl" :text="label" :rename="rename" :label-style="labelStyle" />
     <span style="flex: 1"></span>
     <!-- .stop so the eye neither selects nor edits the row it sits in -->
-    <span v-if="toggleVis" class="tree-eye" title="Show/hide" @click.stop="toggleVis()">{{
-      visible === false ? "○" : "◉"
-    }}</span>
+    <span v-if="toggleVis" class="tree-eye" title="Show/hide" @click.stop="toggleVis()">
+      <Icon :name="visible === false ? 'hidden' : 'visible'" :size="13" />
+    </span>
   </div>
 </template>

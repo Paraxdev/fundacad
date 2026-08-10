@@ -4,6 +4,7 @@
 // handed the reporter its engine handles, because a report with nothing to
 // report on is worse than no button.
 
+import Icon from "../shell/Icon.vue";
 import { useDialogStore } from "../../stores/dialogs";
 
 const dialogs = useDialogStore();
@@ -17,6 +18,6 @@ const dialogs = useDialogStore();
       title="Report a bug"
       aria-label="Report a bug"
       @click="dialogs.bugReport = true"
-    >🐞</button>
+    ><Icon name="bug" :size="18" /></button>
   </Teleport>
 </template>

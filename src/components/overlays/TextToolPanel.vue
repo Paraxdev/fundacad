@@ -2,8 +2,8 @@
 // Floating panel for the sketch Text tool. DimInput is numeric-only, so text
 // gets its own small panel: a multi-line string, a system-font picker (fonts
 // come from the sidecar's listFonts op), size, bold/italic, alignment and
-// rotation. On every edit it fires onChange for a live preview; ✓/Enter commits,
-// ✕/Esc cancels.
+// rotation. On every edit it fires onChange for a live preview; Add/Enter
+// commits, Cancel/Esc cancels.
 //
 // Replaces the DOM half of sketch/textPanel.ts, which stays as the facade
 // SketchMode calls. The inline styles are carried over verbatim rather than
@@ -11,6 +11,7 @@
 // one in the same commit as the port would make the port unreviewable.
 
 import { onMounted, onUnmounted, reactive, useTemplateRef, type CSSProperties } from "vue";
+import Icon from "../shell/Icon.vue";
 import { initialTextForm, textPanelPos, toTextValues } from "../../sketch/textForm";
 import { useToolPanelStore, type TextReq } from "../../stores/toolPanels";
 
@@ -127,8 +128,10 @@ const noBtn: CSSProperties = { ...btn, background: "#555" };
       <!-- pointerdown, not click: the buttons have to act before the field next
            to them can blur, or a commit loses the last keystroke. -->
       <div :style="btnRow">
-        <button :style="okBtn" @pointerdown.prevent.stop="commit">✓ Add</button>
-        <button :style="noBtn" @pointerdown.prevent.stop="panels.cancelText()">✕</button>
+        <button :style="okBtn" @pointerdown.prevent.stop="commit"><Icon name="check" :size="13" /> Add</button>
+        <button :style="noBtn" aria-label="Cancel" @pointerdown.prevent.stop="panels.cancelText()">
+          <Icon name="close" :size="13" />
+        </button>
       </div>
     </div>
   </Teleport>

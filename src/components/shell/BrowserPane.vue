@@ -23,6 +23,7 @@ import { useEngine } from "../../app/engineKey";
 import { useBuildValue, useDocValue } from "../../app/useDoc";
 import { useSelectionStore } from "../../stores/selection";
 import { useBrowserStore } from "../../stores/browser";
+import Icon from "./Icon.vue";
 import InlineLabel from "./InlineLabel.vue";
 import TreeFolder from "./TreeFolder.vue";
 import TreeRow from "./TreeRow.vue";
@@ -192,12 +193,12 @@ const nodes = useDocValue((doc): TreeNode[] => {
   };
 
   // --- Origin ---
-  folder("Origin", "⌖", (["XY", "XZ", "YZ"] as Plane3[]).map((p) => ({
+  folder("Origin", "origin", (["XY", "XZ", "YZ"] as Plane3[]).map((p) => ({
     kind: "row" as const,
     k: `o:${p}`,
     depth: 0,
     label: `${p} plane`,
-    icon: "▱",
+    icon: "plane",
     dim: true,
     activate: () => sketchOnPlane(p),
     title: `Start a sketch on the ${p} plane`,
@@ -205,12 +206,12 @@ const nodes = useDocValue((doc): TreeNode[] => {
 
   // --- Construction / datum planes (only when present) ---
   if (datums.length) {
-    folder("Planes", "▱", datums.map((f, i) => ({
+    folder("Planes", "plane", datums.map((f, i) => ({
       kind: "row" as const,
       k: `p:${f.id}`,
       depth: 0,
       label: f.name || `Plane${i + 1}`,
-      icon: "▱",
+      icon: "plane",
       selected: selection.featureId === f.id,
       error: errId === f.id,
       visible: store.isPlaneVisible(f.id),
@@ -246,7 +247,7 @@ const nodes = useDocValue((doc): TreeNode[] => {
       id: b.id,
       depth,
       label: store.bodyName(b.id) ?? b.name,
-      icon: "◆",
+      icon: "body",
       ...(chip ? { swatch: chip } : {}),
       selected: selectedIds.has(b.id),
       visible: store.isBodyVisible(b.id),
@@ -273,7 +274,7 @@ const nodes = useDocValue((doc): TreeNode[] => {
     const anyVisible = ids.some((id) => store.isBodyVisible(id));
     const collapsed = browser.isCollapsed(g.key);
     out.push({
-      kind: "folder", k: g.key, key: g.key, label: g.label, icon: "▣",
+      kind: "folder", k: g.key, key: g.key, label: g.label, icon: "assembly",
       count: g.total, depth, collapsed, visible: anyVisible,
       // ONE batched write: a per-body loop would re-render the whole model once
       // per body (setModel plus the flush-seam pass each time).
@@ -287,11 +288,11 @@ const nodes = useDocValue((doc): TreeNode[] => {
   const groups = buildAssemblyGroups(bodies, importTrees(doc));
   if (!groups) {
     // no imported assembly tree in this document — exactly the flat list as before
-    folder("Bodies", "◆", bodies.map((b) => bodyRow(b, 0)));
+    folder("Bodies", "body", bodies.map((b) => bodyRow(b, 0)));
   } else {
     const collapsed = browser.isCollapsed("f:Bodies");
     out.push({
-      kind: "folder", k: "f:Bodies", key: "f:Bodies", label: "Bodies", icon: "◆",
+      kind: "folder", k: "f:Bodies", key: "f:Bodies", label: "Bodies", icon: "body",
       count: bodies.length, depth: 0, collapsed,
     });
     if (!collapsed) {
@@ -301,12 +302,12 @@ const nodes = useDocValue((doc): TreeNode[] => {
   }
 
   // --- Sketches ---
-  folder("Sketches", "✎", sketches.map((f, i) => ({
+  folder("Sketches", "sketch", sketches.map((f, i) => ({
     kind: "row" as const,
     k: `s:${f.id}`,
     depth: 0,
     label: f.name || `Sketch${i + 1}`,
-    icon: "✎",
+    icon: "sketch",
     selected: selection.featureId === f.id,
     error: errId === f.id,
     visible: engine.isSketchVisible(f.id),
@@ -358,7 +359,7 @@ const dotStyle = computed(() => ({
 }));
 const dotTitle = computed(() =>
   stale.value
-    ? `Printer filaments changed since sync (slot${staleSlots.value.length > 1 ? "s" : ""} ${staleSlots.value.map((i) => i + 1).join(", ")}) — click ⇅ to re-sync`
+    ? `Printer filaments changed since sync (slot${staleSlots.value.length > 1 ? "s" : ""} ${staleSlots.value.map((i) => i + 1).join(", ")}) — click the sync button to re-sync`
     : "Printer connection",
 );
 
@@ -532,8 +533,8 @@ onUnmounted(() => root.value?.removeEventListener("wheel", onWheel));
            button sit where a folder's eye would, and its label deliberately has
            no .tree-label class (the e2e panel dump reads that). -->
       <div v-else-if="n.kind === 'palette-head'" class="tree-folder" @click="browser.toggle('Palette')">
-        <span class="tree-caret">{{ n.collapsed ? "▸" : "▾" }}</span>
-        <span class="feature-icon">◳</span>
+        <span class="tree-caret"><Icon :name="n.collapsed ? 'caretRight' : 'caretDown'" :size="11" /></span>
+        <span class="feature-icon"><Icon name="filament" :size="14" /></span>
         <span>Palette</span>
         <span style="flex: 1"></span>
         <span class="pal-dot" :title="dotTitle" :style="dotStyle"></span>
@@ -543,7 +544,7 @@ onUnmounted(() => root.value?.removeEventListener("wheel", onWheel));
           title="Sync filaments from printer"
           style="background: none; border: none; color: inherit; cursor: pointer; font-size: 13px; padding: 0 4px; margin-right: 6px"
           @click.stop="syncFilamentsFromPrinter()"
-        >⇅</button>
+        ><Icon name="sync" :size="14" /></button>
         <span class="tree-count">{{ n.count }}</span>
       </div>
 

@@ -19,6 +19,7 @@ import {
   KIND_OPTIONS, basename, initialTextureForm, sharpnessLabel, textureRows, toTextureValues,
   type TextureMode,
 } from "../../features/textureForm";
+import Icon from "../shell/Icon.vue";
 import { useToolPanelStore, type TextureReq } from "../../stores/toolPanels";
 
 const props = defineProps<{ req: TextureReq }>();
@@ -167,7 +168,7 @@ const noBtn: CSSProperties = { ...btn, background: "#555" };
       <div v-show="rows.seed" :style="row">
         <label :style="lbl">Seed</label>
         <input v-model="form.seed" type="number" step="1" :style="num" @input="emitChange" @change="emitChange" />
-        <button :style="smallBtn" @click="randomize">🎲 Randomize</button>
+        <button :style="smallBtn" @click="randomize"><Icon name="dice" :size="13" /> Randomize</button>
       </div>
 
       <div v-show="rows.image" :style="row">
@@ -207,9 +208,9 @@ const noBtn: CSSProperties = { ...btn, background: "#555" };
 
       <div :style="btnRow">
         <button :style="okBtn" @pointerdown.prevent.stop="panels.commitTexture(toTextureValues(form))">
-          {{ req.editing ? "✓ Apply" : "✓ Add" }}
+          <Icon name="check" :size="13" /> {{ req.editing ? "Apply" : "Add" }}
         </button>
-        <button :style="noBtn" @pointerdown.prevent.stop="panels.cancelTexture()">✕ Cancel</button>
+        <button :style="noBtn" @pointerdown.prevent.stop="panels.cancelTexture()"><Icon name="close" :size="13" /> Cancel</button>
       </div>
     </div>
   </Teleport>

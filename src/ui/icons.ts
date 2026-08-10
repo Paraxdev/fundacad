@@ -1,7 +1,37 @@
-// Minimal stroke icons (24×24, currentColor) for the MCAD-style ribbon.
-// Each entry is the inner SVG markup; icon() wraps it.
+// Minimal stroke icons (24×24, currentColor) for the whole app — ribbon,
+// browser tree, timeline, modals, panels. Each entry is the INNER SVG markup;
+// Icon.vue and iconElement() wrap it in the <svg> that carries the shared
+// viewBox / stroke / linecap so no single icon can drift off the house weight.
+//
+// Everything here is a compile-time string constant. That is not a style note,
+// it is the security invariant: the markup reaches the DOM through v-html /
+// innerHTML, and it is only safe to do that because no document data, file name
+// or network payload can ever be interpolated into this table. See
+// components/vHtmlPolicy.test.ts, which enforces the Vue half.
+//
+// --- why packs -------------------------------------------------------------
+//
+// The set below is one visual voice: hairline strokes, open counters, nothing
+// filled that doesn't have to be. That is a taste call, and taste calls in a
+// tool people stare at for eight hours are exactly the ones worth making
+// swappable. A pack is a whole named table; the user picks one, and any name
+// the chosen pack doesn't define resolves against the default pack instead.
+//
+// The fallback is what makes a pack cheap to write. A variant does NOT have to
+// redraw all ~120 marks to be usable — it redraws the ones whose weight it
+// actually wants to change and inherits the rest, so a half-finished pack is a
+// legitimate pack rather than a screen full of holes.
 
-const PATHS: Record<string, string> = {
+/** A named, self-contained icon table. `paths` maps a semantic icon name to the
+ *  inner SVG markup drawn inside the shared 24×24 stroke wrapper. */
+export interface IconPack {
+  id: string;
+  /** Shown in the settings menu. */
+  label: string;
+  paths: Readonly<Record<string, string>>;
+}
+
+const FORGE_PATHS: Record<string, string> = {
   // sketch create
   line: `<line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="1.6" fill="currentColor"/><circle cx="20" cy="4" r="1.6" fill="currentColor"/>`,
   rectangle: `<rect x="4" y="6" width="16" height="12" rx="0.5"/>`,
@@ -101,17 +131,209 @@ const PATHS: Record<string, string> = {
   midpoint: `<line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="2" fill="currentColor"/>`,
   collinear: `<line x1="3" y1="12" x2="10" y2="12"/><line x1="14" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>`,
   fix: `<line x1="12" y1="4" x2="12" y2="14"/><path d="M8 4h8"/><path d="M9 14h6l-3 6z" fill="currentColor"/>`,
+
+  // --- primitives & body ops -----------------------------------------------
+  box: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5"/><line x1="12" y1="12" x2="12" y2="21"/>`,
+  cylinder: `<ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v11a7 3 0 0 0 14 0v-11"/>`,
+  sphere: `<circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="8.5" ry="3.4"/>`,
+  // Delete Face: a solid with one facet lifted away
+  deleteFace: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5" stroke-dasharray="2 2"/><path d="M9 10l6 6M15 10l-6 6"/>`,
+  removeBody: `<path d="M5 7h14"/><path d="M10 7V4.6a.6.6 0 0 1 .6-.6h2.8a.6.6 0 0 1 .6.6V7"/><path d="M6.5 7l.9 12a1 1 0 0 0 1 .95h7.2a1 1 0 0 0 1-.95l.9-12"/><line x1="10.5" y1="10.5" x2="10.5" y2="16.5"/><line x1="13.5" y1="10.5" x2="13.5" y2="16.5"/>`,
+
+  // --- browser tree --------------------------------------------------------
+  // The origin datum: a survey mark, not a crosshair cursor — it names a
+  // location the model is measured from.
+  origin: `<circle cx="12" cy="12" r="5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>`,
+  plane: `<path d="M3 9l9-4 9 4-9 4z"/>`,
+  body: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5"/><line x1="12" y1="12" x2="12" y2="21"/>`,
+  // An assembly node: a container holding parts, so a crate rather than a folder
+  assembly: `<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18"/><path d="M9 5v5M15 5v5"/>`,
+  // The filament palette head — swatch strips, matching what the section holds
+  filament: `<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M8.5 4v16M15.5 4v16"/>`,
+
+  // --- eye / disclosure ----------------------------------------------------
+  // Named for what they MEAN, not what they look like, so a pack is free to
+  // draw "hidden" as a struck eye, a dimmed eye, or no eye at all.
+  visible: `<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.9"/>`,
+  hidden: `<path d="M4.2 7.4A13.8 13.8 0 0 0 2.5 12S6 18.5 12 18.5c1.9 0 3.5-.65 4.8-1.5"/><path d="M9.9 6a8.4 8.4 0 0 1 2.1-.5c6 0 9.5 6.5 9.5 6.5a15.7 15.7 0 0 1-2.6 3.4"/><path d="M9.9 9.9a2.9 2.9 0 0 0 4.1 4.1"/><line x1="3.5" y1="3.5" x2="20.5" y2="20.5"/>`,
+  caretRight: `<path d="M9.5 5.5l6.5 6.5-6.5 6.5"/>`,
+  caretDown: `<path d="M5.5 9.5l6.5 6.5 6.5-6.5"/>`,
+  caretUp: `<path d="M5.5 14.5l6.5-6.5 6.5 6.5"/>`,
+
+  // --- general chrome ------------------------------------------------------
+  close: `<path d="M6 6l12 12M18 6L6 18"/>`,
+  // A dot, for "unsaved" and for a feature type this build has never heard of
+  dot: `<circle cx="12" cy="12" r="4" fill="currentColor"/>`,
+  warning: `<path d="M12 3.5L21.5 20H2.5z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r="1.05" fill="currentColor"/>`,
+  bug: `<rect x="8" y="8" width="8" height="11" rx="4"/><path d="M9.5 8a2.5 2.5 0 0 1 5 0"/><path d="M8 11H4.5M8 15H4.5M16 11h3.5M16 15h3.5"/><path d="M9.5 5.5L8 3.5M14.5 5.5L16 3.5"/>`,
+  dice: `<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.4" fill="currentColor"/><circle cx="15" cy="15" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>`,
+  undo: `<path d="M4 9h10a5.5 5.5 0 0 1 0 11h-6"/><path d="M8 5L4 9l4 4"/>`,
+  redo: `<path d="M20 9H10a5.5 5.5 0 0 0 0 11h6"/><path d="M16 5l4 4-4 4"/>`,
+  // Two-way sync, for pulling the printer's filament list into the palette
+  sync: `<path d="M8 4v16"/><path d="M5 7l3-3 3 3"/><path d="M16 20V4"/><path d="M13 17l3 3 3-3"/>`,
+
+  // --- timeline transport --------------------------------------------------
+  skipStart: `<path d="M18 5.5v13L8 12z"/><line x1="6" y1="5.5" x2="6" y2="18.5"/>`,
+  stepBack: `<path d="M15.5 5.5v13L6.5 12z"/>`,
+  stepForward: `<path d="M8.5 5.5v13l9-6.5z"/>`,
+  skipEnd: `<path d="M6 5.5v13L16 12z"/><line x1="18" y1="5.5" x2="18" y2="18.5"/>`,
 };
 
-/** The raw path markup for one icon, for components/shell/Icon.vue's v-html.
- *  Every value in PATHS is a compile-time constant in this file — no document
- *  or network data reaches it — which is what makes that v-html the ONE
- *  sanctioned one in the app. */
-export function iconPaths(name: string): string {
-  return PATHS[name] ?? "";
+/** The house pack: hairline strokes, open counters, nothing filled that doesn't
+ *  have to be. Also the fallback every other pack resolves against, which is why
+ *  it is the one pack that must stay complete. */
+export const FORGE_PACK: IconPack = {
+  id: "forge",
+  label: "Forge (outline)",
+  paths: FORGE_PATHS,
+};
+
+/** A heavier variant: the same shapes with their counters filled in, for people
+ *  who find hairlines hard to pick out on a bright display or at a distance.
+ *
+ *  Deliberately NOT exhaustive. It redraws the marks that appear dozens of times
+ *  on screen at small sizes — carets, the eye, checks, chips — where the weight
+ *  difference is actually felt, and inherits the rest from Forge. Adding a mark
+ *  here later needs no other change anywhere. */
+export const ANVIL_PACK: IconPack = {
+  id: "anvil",
+  label: "Anvil (solid)",
+  paths: {
+    caretRight: `<path d="M9 5l7 7-7 7z" fill="currentColor" stroke-linejoin="round"/>`,
+    caretDown: `<path d="M5 9l7 7 7-7z" fill="currentColor" stroke-linejoin="round"/>`,
+    caretUp: `<path d="M5 15l7-7 7 7z" fill="currentColor" stroke-linejoin="round"/>`,
+    visible: `<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="currentColor" fill-opacity="0.25"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/>`,
+    hidden: `<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="currentColor" fill-opacity="0.15"/><line x1="3.5" y1="3.5" x2="20.5" y2="20.5" stroke-width="2.4"/>`,
+    check: `<path d="M4 12l5 5L20 6" stroke-width="2.6"/>`,
+    close: `<path d="M6 6l12 12M18 6L6 18" stroke-width="2.6"/>`,
+    dot: `<circle cx="12" cy="12" r="5.5" fill="currentColor"/>`,
+    warning: `<path d="M12 3.5L21.5 20H2.5z" fill="currentColor" fill-opacity="0.28"/><line x1="12" y1="9.5" x2="12" y2="14" stroke-width="2.2"/><circle cx="12" cy="17" r="1.3" fill="currentColor"/>`,
+    body: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity="0.22"/><path d="M4 7.5l8 4.5 8-4.5"/><line x1="12" y1="12" x2="12" y2="21"/>`,
+    plane: `<path d="M3 9l9-4 9 4-9 4z" fill="currentColor" fill-opacity="0.3"/>`,
+    skipStart: `<path d="M18 5.5v13L8 12z" fill="currentColor"/><line x1="6" y1="5.5" x2="6" y2="18.5" stroke-width="2.4"/>`,
+    stepBack: `<path d="M15.5 5.5v13L6.5 12z" fill="currentColor"/>`,
+    stepForward: `<path d="M8.5 5.5v13l9-6.5z" fill="currentColor"/>`,
+    skipEnd: `<path d="M6 5.5v13L16 12z" fill="currentColor"/><line x1="18" y1="5.5" x2="18" y2="18.5" stroke-width="2.4"/>`,
+  },
+};
+
+/** The pack every lookup falls back to — see resolveIconPaths. */
+export const DEFAULT_PACK_ID = FORGE_PACK.id;
+
+const PACKS = new Map<string, IconPack>([
+  [FORGE_PACK.id, FORGE_PACK],
+  [ANVIL_PACK.id, ANVIL_PACK],
+]);
+
+/** Pack resolution, as a pure function of the whole registry — the part with the
+ *  actual rule in it, and therefore the part under test.
+ *
+ *  Three tiers, in order: the active pack, the default pack, then the empty
+ *  string. The last one is not an oversight. An icon name that no pack knows is
+ *  a typo at a call site, and rendering an empty <svg> keeps the button the same
+ *  size with the same label instead of throwing during a render — a missing mark
+ *  is a cosmetic bug, a crashed panel is a lost document. */
+export function resolveIconPaths(
+  packs: ReadonlyMap<string, IconPack>,
+  activeId: string,
+  name: string,
+  defaultId: string = DEFAULT_PACK_ID,
+): string {
+  return (
+    packs.get(activeId)?.paths[name] ?? packs.get(defaultId)?.paths[name] ?? ""
+  );
 }
 
+// --- the active pack, as a user setting --------------------------------------
+//
+// Persisted the way every other display preference in this app is (ui/units.ts,
+// ui/welcome.ts, io/recentFiles.ts): a `sindricad.*` localStorage key read once
+// at module load, plus a listener set so the live UI re-renders instead of
+// waiting for a reload.
+
+const KEY = "sindricad.iconPack";
+
+/** Narrow an untrusted string — a stored setting, a `<select>` value — to a
+ *  registered pack id, or null. Every boundary that can set the active pack goes
+ *  through here: an unknown id would make EVERY lookup fall through to the
+ *  default pack, which looks exactly like the setting silently not working. */
+export function asIconPackId(v: unknown): string | null {
+  return typeof v === "string" && PACKS.has(v) ? v : null;
+}
+
+function readStored(): string {
+  const raw = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
+  return asIconPackId(raw) ?? DEFAULT_PACK_ID;
+}
+
+let activePackId = readStored();
+const listeners = new Set<() => void>();
+
+export function getIconPack(): string {
+  return activePackId;
+}
+
+export function setIconPack(id: string) {
+  const next = asIconPackId(id);
+  if (!next || next === activePackId) return;
+  activePackId = next;
+  try {
+    localStorage.setItem(KEY, next);
+  } catch {
+    /* private mode / no storage: the choice just doesn't survive the session */
+  }
+  for (const fn of listeners) fn();
+}
+
+/** Subscribe to pack changes; returns the unsubscribe. */
+export function onIconPackChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+/** Every registered pack, for the settings menu. */
+export function iconPacks(): IconPack[] {
+  return [...PACKS.values()];
+}
+
+/** Add a pack at runtime (or replace one by id). Exists so a pack can ship
+ *  separately from this file without every consumer learning about it. */
+export function registerIconPack(pack: IconPack) {
+  PACKS.set(pack.id, pack);
+}
+
+/** The raw path markup for one icon in the ACTIVE pack, for Icon.vue's v-html.
+ *  Every value in every pack is a compile-time constant — no document or network
+ *  data reaches it — which is what makes that v-html the ONE sanctioned one in
+ *  the app. */
+export function iconPaths(name: string): string {
+  return resolveIconPaths(PACKS, activePackId, name);
+}
+
+/** One complete `<svg>` as markup, for the rare caller that has a string slot
+ *  rather than a component slot. Prefer <Icon>; prefer iconElement() in
+ *  imperative DOM code. */
 export function icon(name: string): string {
-  const p = PATHS[name] ?? "";
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${iconPaths(name)}</svg>`;
+}
+
+/** An `<svg>` ELEMENT, for the handful of surfaces still built with
+ *  document.createElement (the sketch dimension box).
+ *
+ *  The innerHTML here is the same sanctioned exception Icon.vue's v-html is, and
+ *  for the same reason: the only thing that reaches it is the constant table
+ *  above. It is a function rather than an inlined snippet at each call site so
+ *  there is exactly one place to audit. */
+export function iconElement(name: string, size = 16): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.innerHTML = iconPaths(name);
+  return svg;
 }

@@ -9,10 +9,12 @@
 // "Bracket &amp; Plate".
 
 import { computed } from "vue";
+import Icon from "./Icon.vue";
 import { indent } from "../../ui/browserTree";
 
 const props = defineProps<{
   label: string;
+  /** An icon NAME from ui/icons.ts, not a character — see featureMeta.ts. */
   icon: string;
   count: number;
   depth: number;
@@ -33,15 +35,15 @@ const style = computed(() =>
 
 <template>
   <div class="tree-folder" :style="style" @click="$emit('toggle')">
-    <span class="tree-caret">{{ collapsed ? "▸" : "▾" }}</span>
-    <span class="feature-icon">{{ icon }}</span>
+    <span class="tree-caret"><Icon :name="collapsed ? 'caretRight' : 'caretDown'" :size="11" /></span>
+    <span class="feature-icon"><Icon :name="icon" :size="14" /></span>
     <span class="tree-label">{{ label }}</span>
     <span style="flex: 1"></span>
     <span class="tree-count">{{ count || "" }}</span>
     <!-- .stop: the eye sits inside the head, and a bare click would also
          collapse the section it is trying to hide. -->
-    <span v-if="toggleVis" class="tree-eye" title="Show/hide" @click.stop="toggleVis()">{{
-      visible === false ? "○" : "◉"
-    }}</span>
+    <span v-if="toggleVis" class="tree-eye" title="Show/hide" @click.stop="toggleVis()">
+      <Icon :name="visible === false ? 'hidden' : 'visible'" :size="13" />
+    </span>
   </div>
 </template>

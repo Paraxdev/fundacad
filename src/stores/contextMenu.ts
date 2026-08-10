@@ -8,6 +8,12 @@ export interface CtxItem {
   separator?: boolean; // renders a divider; other fields ignored
   shortcut?: string | undefined; // right-aligned key hint, e.g. "Q" (undefined = no hint from keyHint)
   danger?: boolean; // destructive action (red)
+  /** Toggle state. Callers used to express this by prefixing the label with
+   *  a check character or four spaces to keep the two states the same width,
+   *  which put a glyph inside a string the menu then had to render verbatim and
+   *  pinned the alignment to whatever the font did with a space. As a field the
+   *  host can reserve one fixed gutter and drop a real icon in it. */
+  checked?: boolean;
   swatch?: string; // small color chip before the label (palette flyouts)
   children?: CtxItem[]; // one-level flyout submenu, opens on hover
 }

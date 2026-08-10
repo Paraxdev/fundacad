@@ -68,7 +68,7 @@ export async function publishToTinkerAtlas(
       // export-what-built: failed features are missing from the upload — say so
       // BEFORE it goes public, so the user can back out.
       const lines = res.warnings.map(
-        (w) => `⚠ ${w.feature_id ?? "feature"} failed — its result is NOT in the upload: ${w.message}`,
+        (w) => `Warning: ${w.feature_id ?? "feature"} failed — its result is NOT in the upload: ${w.message}`,
       );
       await listModal("Publishing with warnings", lines);
     }

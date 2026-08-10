@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref, watch, useTemplateRef } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch, useTemplateRef } from "vue";
+import Icon from "../shell/Icon.vue";
 import { useContextMenuStore, type CtxItem } from "../../stores/contextMenu";
 
 const s = useContextMenuStore();
+
+// The check gutter is all-or-nothing per menu, not per row: a menu with no
+// toggles in it must not indent, and a menu with one must indent EVERY row or
+// the checked entry shifts sideways relative to its neighbours the moment it
+// turns on.
+const hasChecks = computed(() => s.items.some((it) => it.checked !== undefined));
 
 const menuEl = useTemplateRef<HTMLDivElement>("menuEl");
 const subEl = useTemplateRef<HTMLDivElement>("subEl");
@@ -155,10 +162,13 @@ onUnmounted(() => {
           @pointerenter="it.disabled ? undefined : (it.children ? openSub(i) : scheduleSubClose())"
           @click="it.children && !it.disabled ? openSub(i) : activate(it)"
         >
+          <span v-if="hasChecks" class="ctx-check">
+            <Icon v-if="it.checked" name="check" :size="12" />
+          </span>
           <span v-if="it.swatch" class="ctx-swatch" :style="{ background: it.swatch }"></span>
           <span class="ctx-label">{{ it.label }}</span>
           <span v-if="it.shortcut" class="ctx-key">{{ it.shortcut }}</span>
-          <span v-if="it.children" class="ctx-caret">▸</span>
+          <span v-if="it.children" class="ctx-caret"><Icon name="caretRight" :size="10" /></span>
         </div>
       </template>
     </div>

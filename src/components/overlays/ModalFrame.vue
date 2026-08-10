@@ -10,6 +10,8 @@
 // the startup welcome modal by clicking it, and a missing button makes that
 // script hang rather than fail.
 
+import Icon from "../shell/Icon.vue";
+
 defineProps<{ panelClass?: string }>();
 const emit = defineEmits<{ close: [] }>();
 </script>
@@ -22,7 +24,9 @@ const emit = defineEmits<{ close: [] }>();
       <div class="modal-panel" :class="panelClass">
         <div class="modal-head">
           <h2><slot name="title" /></h2>
-          <button class="modal-close" @click="emit('close')">✕</button>
+          <button class="modal-close" aria-label="Close" @click="emit('close')">
+            <Icon name="close" :size="15" />
+          </button>
         </div>
         <slot />
       </div>

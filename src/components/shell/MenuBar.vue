@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
+import Icon from "./Icon.vue";
 import type { MenuDef, MenuItem } from "../../ui/menu";
 
 const props = defineProps<{ menus: MenuDef[] }>();
@@ -16,8 +17,9 @@ const openTick = ref(0);
 
 interface RenderedItem {
   item: MenuItem;
-  label: string;
   disabled: boolean;
+  /** undefined = this row is not a toggle at all, so it claims no gutter slot. */
+  checked: boolean | undefined;
 }
 
 const rendered = computed<RenderedItem[][]>(() => {
@@ -25,13 +27,19 @@ const rendered = computed<RenderedItem[][]>(() => {
   return props.menus.map((m) =>
     m.items.map((item) => ({
       item,
-      // Checkmarks are a label prefix, not a pseudo-element, so a checked and an
-      // unchecked row occupy the same width — four spaces, as before.
-      label: item.checked ? (item.checked() ? "✓ " : "    ") + item.label : item.label,
       disabled: !!item.disabled?.(),
+      checked: item.checked ? item.checked() : undefined,
     })),
   );
 });
+
+// One reserved gutter per MENU rather than per row. The check used to be a
+// label prefix padded with four spaces to keep both states the same width,
+// which put a glyph inside the string and pinned the alignment to whatever the
+// font did with a space. A gutter the whole menu shares does the same job
+// honestly — and it has to be the whole menu, or a toggle would shift sideways
+// against its neighbours the moment it turns on.
+const hasChecks = computed(() => props.menus.map((m) => m.items.some((it) => it.checked)));
 
 function toggle(i: number) {
   if (openIndex.value === i) {
@@ -75,7 +83,10 @@ onUnmounted(() => {
         <template v-for="(r, j) in rendered[i]" :key="j">
           <div v-if="r.item.separator" class="menu-sep"></div>
           <button v-else class="menu-item" :disabled="r.disabled" @click.stop="run(r)">
-            <span>{{ r.label }}</span>
+            <span v-if="hasChecks[i]" class="menu-check">
+              <Icon v-if="r.checked" name="check" :size="12" />
+            </span>
+            <span>{{ r.item.label }}</span>
             <span v-if="r.item.shortcut" class="menu-shortcut">{{ r.item.shortcut }}</span>
           </button>
         </template>

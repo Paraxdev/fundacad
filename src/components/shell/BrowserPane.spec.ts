@@ -89,6 +89,17 @@ function folderNamed(w: VueWrapper, label: string) {
   });
 }
 
+/** Which icon a row's caret / eye is currently wearing.
+ *
+ *  These used to be `.text()` against a Unicode glyph. They are <svg> now, and
+ *  an <svg> has no text content at all — so the assertion moves to the
+ *  `data-icon` name Icon.vue stamps on every mark it draws, which is both
+ *  readable in a failure message and independent of which icon pack is active. */
+const iconIn = (el: ReturnType<typeof folderNamed>, sel: string) =>
+  el?.find(`${sel} svg`).attributes("data-icon");
+const caretName = (el: ReturnType<typeof folderNamed>) => iconIn(el, ".tree-caret");
+const eyeName = (el: ReturnType<typeof folderNamed>) => iconIn(el, ".tree-eye");
+
 const sketch = (id: string, name?: string): Feature =>
   ({ id, type: "sketch", plane: "XY", entities: [], ...(name ? { name } : {}) }) as Feature;
 
@@ -147,13 +158,13 @@ describe("BrowserPane", () => {
     const robot = folderNamed(w, "Robot");
     expect(robot).toBeDefined();
     // a 3,000-part import must not paint 3,000 rows on arrival
-    expect(robot!.find(".tree-caret").text()).toBe("▸");
+    expect(caretName(robot!)).toBe("caretRight");
     expect(panel(w).some((r) => r.text === "MCU")).toBe(false);
 
     await robot!.trigger("click");
 
     expect(panel(w).some((r) => r.kind === "row" && r.text === "MCU")).toBe(true);
-    expect(folderNamed(w, "Robot")!.find(".tree-caret").text()).toBe("▾");
+    expect(caretName(folderNamed(w, "Robot")!)).toBe("caretDown");
   });
 
   it("indents nested assembly rows and caps the step", async () => {
@@ -198,7 +209,7 @@ describe("BrowserPane", () => {
     );
     const w = render(fake);
     const eye = folderNamed(w, "Robot")!.find(".tree-eye");
-    expect(eye.text()).toBe("◉");
+    expect(eyeName(folderNamed(w, "Robot"))).toBe("visible");
 
     await eye.trigger("click");
 
@@ -206,7 +217,7 @@ describe("BrowserPane", () => {
     expect(fake.engine.store.isBodyVisible("b2")).toBe(false);
     // ...and the click must NOT also have collapsed the section it hid
     const robot = folderNamed(w, "Robot");
-    expect(robot!.find(".tree-caret").text()).toBe("▸");
-    expect(robot!.find(".tree-eye").text()).toBe("○");
+    expect(caretName(robot)).toBe("caretRight");
+    expect(eyeName(robot)).toBe("hidden");
   });
 });

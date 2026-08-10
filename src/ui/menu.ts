@@ -15,7 +15,9 @@ export interface MenuItem {
   onClick?: () => void;
   separator?: boolean;
   disabled?: () => boolean;
-  checked?: () => boolean; // shows a ✓ when true (re-evaluated each time the menu opens)
+  /** Toggle state — a check icon in the menu's reserved gutter when true.
+   *  A thunk, so it is re-evaluated each time the menu opens. */
+  checked?: () => boolean;
 }
 
 export interface MenuDef {

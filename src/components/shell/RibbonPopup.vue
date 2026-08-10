@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The dropdown shared by the "⋯ More" overflow and every split button's ▾.
+// The dropdown shared by the "More" overflow and every split button's caret.
 // Fixed-positioned against an anchor rect, teleported to body so it is not
 // clipped by the ribbon's overflow.
 //
@@ -16,7 +16,7 @@ const props = defineProps<{
   /** Section headings, for the overflow popup's grouped list. */
   groups?: { label: string; items: ToolItem[] }[] | undefined;
   anchor: HTMLElement;
-  /** The overflow popup right-aligns under its button; a split ▾ left-aligns. */
+  /** The overflow popup right-aligns under its button; a split caret left-aligns. */
   align: "left" | "right";
 }>();
 const emit = defineEmits<{ pick: [ToolItem]; dismiss: [] }>();

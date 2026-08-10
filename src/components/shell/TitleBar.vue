@@ -4,6 +4,7 @@ import { useEngine } from "../../app/engineKey";
 import { useUiStore } from "../../stores/ui";
 import { getUnit, setUnit, asUnit, onUnitChange, type Unit } from "../../ui/units";
 import { buildMenubar } from "../../app/menubarDef";
+import Icon from "./Icon.vue";
 import MenuBar from "./MenuBar.vue";
 import brandLockup from "../../../assets/brand/sindricad-lockup-app.svg";
 
@@ -42,19 +43,23 @@ function onUnitInput(ev: Event) {
       title="Undo (Ctrl+Z)"
       :disabled="!ui.canUndo"
       @click="engine.doUndo()"
-    >↶</button>
+    ><Icon name="undo" :size="15" /></button>
     <button
       id="redo-btn"
       class="tb-btn"
       title="Redo (Ctrl+Y)"
       :disabled="!ui.canRedo"
       @click="engine.doRedo()"
-    >↷</button>
+    ><Icon name="redo" :size="15" /></button>
     <span id="context-tab" class="context-tab" :class="{ sketch: ui.sketchActive }">
       {{ ui.sketchActive ? "SKETCH" : "SOLID" }}
     </span>
     <span id="docname" class="docname" :class="{ dirty: ui.dirty }">
-      {{ (ui.dirty ? "● " : "") + ui.docName }}
+      <!-- The unsaved mark is an ICON in its own slot, not a character glued
+           to the front of the name: as a prefix it moved the whole filename
+           sideways the instant the document went dirty, which is a jump the eye
+           reads as the name having changed. -->
+      <Icon v-if="ui.dirty" name="dot" :size="8" class="dirty-dot" />{{ ui.docName }}
     </span>
     <div class="spacer"></div>
     <label class="units" title="Display units (geometry is stored in mm)">

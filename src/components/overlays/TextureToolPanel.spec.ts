@@ -56,11 +56,11 @@ describe("TextureToolPanel", () => {
 
   it("labels the commit button for the flow it is in", async () => {
     open({ editing: true });
-    expect(document.body.textContent).toContain("✓ Apply");
+    expect(document.body.textContent).toContain("Apply");
     document.body.innerHTML = "";
     setActivePinia(createPinia());
     open({ editing: false });
-    expect(document.body.textContent).toContain("✓ Add");
+    expect(document.body.textContent).toContain("Add");
   });
 
   it("shows the live summary and refreshes it without touching the form", async () => {
@@ -139,7 +139,7 @@ describe("TextureToolPanel", () => {
     expect(useToolPanelStore().texture).not.toBeNull();
   });
 
-  it("cancels and closes on ✕", async () => {
+  it("cancels and closes on Cancel", async () => {
     const { handlers } = open();
     const no = [...document.querySelectorAll<HTMLButtonElement>("button")]
       .find((b) => b.textContent!.includes("Cancel"))!;
