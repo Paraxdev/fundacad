@@ -40,11 +40,12 @@ describe("planeXDir", () => {
     }
   });
 
-  it("matches viewport.pickFacePlane's rule, which the sidecar also mirrors", () => {
-    // The rule is arbitrary but must be THE rule: world +Z projected in, except
-    // on a near-horizontal plane where +Z has nothing to project. A different
-    // choice here would rotate every face-referenced sketch about its normal at
-    // the first rebuild.
+  it("is the one rule every face pick goes through", () => {
+    // Arbitrary, but it must be THE choice: world +Z projected in, except on a
+    // near-horizontal plane where +Z has nothing to project. viewport
+    // .pickFacePlane carried a second copy of this and now calls through here —
+    // two derivations of an arbitrary axis is a sketch that rotates about its
+    // own normal depending on which route created its plane.
     expect(planeXDir([0, 0, 1])).toEqual([1, 0, 0]);
     expect(planeXDir([1, 0, 0])).toEqual([0, 0, 1]);
   });
