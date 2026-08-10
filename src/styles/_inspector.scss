@@ -20,7 +20,13 @@
   border: 1px solid var(--line-strong);
   color: var(--text);
   border-radius: var(--r-sm);
-  padding: 5px 8px;
+  /* The app's field size. Every text input and <select> in the app resolves to
+     this pair — the survey found 5px/8px here, 4px/7px in the Parameters
+     dialog, 4px/6px on the Units select and 8px/10px on the sign-in field, four
+     spellings of one control. --s-2 vertical rather than --s-3 keeps a field
+     shorter than a button, which is the hierarchy you want when they sit in the
+     same row. */
+  padding: var(--s-2) var(--s-3);
   width: 100%;
   font: inherit;
   font-size: 12px;
@@ -47,7 +53,7 @@
   content: "fx:";
   color: var(--accent);
   font-style: italic;
-  margin-right: 4px;
+  margin-right: var(--s-1);
 }
 /* parameter whose cached value is stale (cycle / missing ref / non-finite) —
    same amber as the solver's over-defined flag */
@@ -69,14 +75,20 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-dim);
-  margin: 12px 0 4px;
+  /* Deliberately lopsided: a section caption belongs to what follows it, so the
+     space above is a real break and the space below is only enough to stop the
+     caption sitting on the first row's shoulders. */
+  margin: var(--s-4) 0 var(--s-1);
 }
 .params-row {
   display: grid;
   grid-template-columns: 110px 1fr 90px 1fr 24px;
   gap: var(--s-3);
   align-items: center;
-  margin-bottom: 4px;
+  /* Same rhythm as .param-row in the inspector. They are the same row — one
+     docked, one in a dialog — and read as unrelated widgets when the dialog
+     packed its rows 2px tighter than the panel did. */
+  margin-bottom: var(--s-2);
 }
 .params-head span {
   font-size: 10px;
@@ -90,7 +102,11 @@
   border: 1px solid var(--line-strong);
   color: var(--text);
   border-radius: var(--r-sm);
-  padding: 4px 22px 4px 7px; /* right side reserved for the arrow above */
+  /* Field size, except on the right, where the 22px is not spacing at all: it
+     is clearance for the arrow the .params-row select paints as a background
+     image (right 7px, 9px wide), and it has to stay tied to that image rather
+     than to the scale or the caret starts overlapping the value. */
+  padding: var(--s-2) 22px var(--s-2) var(--s-3);
   width: 100%;
   font: inherit;
   font-size: 12px;
@@ -121,7 +137,7 @@
   cursor: pointer;
   border-radius: var(--r-sm);
   line-height: 1;
-  padding: 2px 6px;
+  padding: var(--s-0) var(--s-2);
 }
 .params-del:hover {
   color: #ff6b6b;
@@ -132,7 +148,10 @@
   border: 1px solid var(--line-strong);
   color: var(--text);
   border-radius: var(--r-sm);
-  padding: 4px 8px;
+  /* Field size rather than button size: it sits directly under the parameter
+     grid and lining it up with the inputs above matters more than lining it up
+     with the dialog's footer buttons. */
+  padding: var(--s-2) var(--s-3);
   font: inherit;
   font-size: 12px;
   cursor: pointer;

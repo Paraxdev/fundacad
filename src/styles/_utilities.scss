@@ -29,13 +29,17 @@ button.finish:hover {
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--s-3);
   background: rgba(18, 20, 25, 0.88);
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
           backdrop-filter: blur(14px) saturate(1.3);
   border: 1px solid var(--line-strong);
   color: var(--text);
-  padding: 7px 14px;
+  /* Roomier than any other pill in the app, and that is the point: this is the
+     banner that tells you what the armed tool wants next, so it has to read as
+     an announcement rather than as another piece of chrome. Same pair as
+     .print-status-pill, the only other free-floating HUD banner. */
+  padding: var(--s-3) var(--s-5);
   border-radius: var(--r-pill);
   font-size: 12px;
   font-weight: 450;
@@ -59,7 +63,14 @@ button.finish:hover {
   to   { opacity: 1; transform: translateX(-50%); }
 }
 
-/* ---- on-canvas dimension input ---- */
+/* ---- on-canvas dimension input ----
+   Left off the spacing scale on purpose, like the sketch dimension labels in
+   _browser.scss and for the same reason: `position: fixed` with coordinates
+   computed from a projected 3D point, so its box is sized against the geometry
+   it is floating over rather than against the chrome's rhythm. It is also the
+   most keyboard-driven surface in the app — it appears under the cursor and is
+   dismissed with Enter or Esc — so growing it to look tidier costs picking area
+   on the model and buys nothing. */
 .dim-input {
   position: fixed;
   display: flex;
@@ -154,7 +165,7 @@ button.finish:hover {
   align-items: center;
   gap: var(--s-3);
   max-width: 560px;
-  padding: 8px 12px;
+  padding: var(--s-3) var(--s-4);
   border-radius: var(--r-md);
   background: var(--panel-2);
   border: 1px solid var(--line-strong);
@@ -178,7 +189,9 @@ button.finish:hover {
 }
 .toast-action {
   flex: 0 0 auto;
-  padding: 3px 10px;
+  /* Badge height but button width: it has to stay short enough not to grow the
+     toast, and wide enough to be an obvious target for a one-shot Undo. */
+  padding: var(--s-1) var(--s-4);
   border-radius: var(--r-sm);
   border: 1px solid var(--accent);
   background: var(--accent-tint);
@@ -227,7 +240,7 @@ button.finish:hover {
 .units {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s-2);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.3px;
@@ -239,7 +252,10 @@ button.finish:hover {
   color: var(--text);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
-  padding: 4px 22px 4px 6px; /* right side reserved for the arrow above */
+  /* Field size, and the same 22px right-hand exception as .params-row: that
+     number is clearance for the arrow drawn as a background image above, so it
+     is tied to `background-position`/`background-size`, not to the scale. */
+  padding: var(--s-2) 22px var(--s-2) var(--s-3);
   font: inherit;
   font-size: 12px;
   text-transform: none;

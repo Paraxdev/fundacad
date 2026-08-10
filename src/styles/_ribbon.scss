@@ -18,7 +18,10 @@
   display: flex;
   align-items: stretch;
   height: 100%;
-  padding: 0 var(--s-3);
+  /* --s-4 because the titlebar above and the timeline below use it too: the
+     three full-width bars share one left edge, so the ribbon's first group, the
+     File menu and the transport buttons all start on the same vertical line. */
+  padding: 0 var(--s-4);
 }
 .ribbon-spacer {
   flex: 1;
@@ -31,7 +34,7 @@
   align-self: center;
   height: 52px;
   min-width: 30px;
-  margin: 0 4px;
+  margin: 0 var(--s-1);
   background: none;
   border: 1px solid var(--line, #23272e);
   border-radius: var(--r-md, 8px);
@@ -56,11 +59,16 @@
   border: 1px solid var(--line-strong, #3a4048);
   border-radius: var(--r-md, 8px);
   box-shadow: var(--shadow-3, 0 16px 48px rgba(0, 0, 0, 0.5));
-  padding: var(--s-1, 4px);
+  /* Every popup shell in the app — this, .menu-popup, .context-menu, the rail
+     flyout, the Cmd-K list — pads by --s-1, so a highlighted row always sits
+     the same 4px inside the popup's border wherever the popup came from. */
+  padding: var(--s-1);
   animation: pop-in var(--t-fast, 0.12s) var(--ease, ease);
 }
 .ribbon-overflow-label {
-  padding: 8px 10px 4px;
+  /* Inline padding matched to the rows below so the caption is flush with the
+     labels it heads; the shallow bottom keeps it attached to its own group. */
+  padding: var(--s-3) var(--s-4) var(--s-1);
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -69,9 +77,12 @@
 .ribbon-overflow-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--s-3);
   width: 100%;
-  padding: 7px 10px;
+  /* The shared popup-row size: .menu-item, .ctx-item and .cmdk-item resolve to
+     the same pair, because they are the same affordance seen in four places and
+     nothing about which menu opened should change how tall a row is. */
+  padding: var(--s-3) var(--s-4);
   background: none;
   border: none;
   border-radius: var(--r-sm, 6px);
@@ -108,7 +119,9 @@
 }
 .ribbon-tools {
   display: flex;
-  gap: 2px;
+  /* Hairline: the tools in one group are a family, and a visible gap between
+     them would compete with the hairline rule that separates the GROUPS. */
+  gap: var(--s-0);
   flex: 1;
   align-items: center;
 }
@@ -150,9 +163,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: var(--s-2);
   width: 60px;
-  padding: 7px 4px 6px;
+  /* Symmetric, which 7px/6px was not — the icon sat a pixel high inside its own
+     button and every ribbon group inherited the drift. The vertical rung is one
+     up from the old value because this is the largest click target in the app
+     and the row it lives in is auto-sized (see the #app grid comment), so it
+     can afford the height. */
+  padding: var(--s-3) var(--s-1);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--r-md);

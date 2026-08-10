@@ -47,19 +47,53 @@
   /* legacy alias (kept so any stray reference still resolves) */
   --accent-blue: var(--accent);
 
-  /* --- radii --- */
+  /* --- radii ---
+     One rung per SIZE OF THING, not per corner style, so a component picks its
+     radius from how big it is and the whole app stays coherent:
+       xs   badges, swatches and grips — anything under ~16px, where 6px would
+            eat the shape rather than soften it (this rung is new; the marker
+            grip, the constraint glyph and the filament swatch had each guessed
+            2px or 3px on their own)
+       sm   controls: inputs, buttons, chips, menu rows
+       md   containers: popups, cards, the ribbon button
+       lg   dialogs and the docked palette
+       pill fully-rounded — capsules AND thin bars, where "half the height" is
+            what you actually mean and 999px is the way to say it without
+            knowing the height */
+  --r-xs: 3px;
   --r-sm: 6px;
   --r-md: 8px;
   --r-lg: 10px;
   --r-pill: 999px;
 
-  /* --- spacing scale --- */
+  /* --- spacing scale ---
+     Every gap, padding and margin in the app comes from this ramp. It is not a
+     style preference: a survey of the stylesheet found the same intent written
+     as 5px, 6px and 7px in three neighbouring panels, and 9/10/11/12 in four
+     more, which is what made the UI read as arbitrary rather than dense.
+     Density is right for a CAD tool — the fix is one rung, not more air.
+
+     Roughly geometric so adjacent rungs are distinguishable but never jarring:
+       s-0  2px  hairline — items that must read as ONE control strip
+                 (the view-control pill's buttons, the timeline transport, the
+                 ribbon's tool row). New rung: 2px was the third most common
+                 literal in the sheet and had nowhere to live.
+       s-1  4px  inside a small control; popup shell padding
+       s-2  6px  list-row and field padding (vertical), icon-to-label
+       s-3  8px  the workhorse — row padding (horizontal), control padding
+       s-4  12px panel padding, bar padding, popup row padding (horizontal)
+       s-5  16px dialog padding, major gaps between groups
+       s-6  20px card padding
+       s-7  24px section-level separation inside a dialog. New rung: the two
+            widest gaps in the sheet were 22px and 24px, both meaning this. */
+  --s-0: 2px;
   --s-1: 4px;
   --s-2: 6px;
   --s-3: 8px;
   --s-4: 12px;
   --s-5: 16px;
   --s-6: 20px;
+  --s-7: 24px;
 
   /* --- elevation (soft, layered, low-spread) --- */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);

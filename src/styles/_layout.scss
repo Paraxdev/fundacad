@@ -28,7 +28,16 @@
      a long body list then simply runs off the bottom of the window) */
   min-height: 0;
   overscroll-behavior: contain;
-  padding: var(--s-3) var(--s-3) var(--s-5);
+  /* The two docked panels are siblings and must read as siblings, so they share
+     one padding declaration rather than each drifting to its own value. Stepped
+     up from --s-3 to --s-4 (8px -> 12px): at 8px the tree rows' hover pills sat
+     almost against the panel border and the whole column read as a list crammed
+     into a gutter. 12px costs 8px of a 232px/252px fixed column, which the
+     labels can afford (they already ellipsis), and it is the same 12px the
+     viewport's floating furniture insets itself by, so the eye reads one margin
+     all the way across the app. The deeper bottom is deliberate: it is scroll
+     runway, so the last row is never flush with the timeline. */
+  padding: var(--s-4) var(--s-4) var(--s-6);
 }
 #inspector {
   border-right: none;
@@ -55,8 +64,11 @@
   bottom: var(--s-4);
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px;
+  /* Hairline gap, not a real one: these buttons are a single segmented control
+     that happens to be made of separate elements, and anything wider starts
+     reading as a row of unrelated pills inside one border. */
+  gap: var(--s-0);
+  padding: var(--s-1);
   background: rgba(22, 24, 29, 0.78);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
           backdrop-filter: blur(12px) saturate(1.2);
@@ -74,13 +86,13 @@
   position: absolute;
   right: var(--s-4);
   bottom: var(--s-4);
-  padding: 2px 7px;
+  padding: var(--s-0) var(--s-3);
   font: 11px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums; /* digits stop twitching as the value changes */
   color: var(--text-mute);
   background: rgba(22, 24, 29, 0.55);
   border: 1px solid var(--line);
-  border-radius: var(--r-sm, 4px);
+  border-radius: var(--r-sm);
   cursor: default;
   user-select: none;
   z-index: 15;
@@ -90,7 +102,10 @@
   border: 1px solid transparent;
   color: var(--text-dim);
   border-radius: var(--r-pill);
-  padding: 5px 12px;
+  /* Denser than the default button on purpose: this is a strip of six of them
+     floating over the model, so the horizontal rung matches (--s-4) but the
+     vertical stays one rung down. */
+  padding: var(--s-2) var(--s-4);
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -108,14 +123,16 @@
 /* subtle separator before Fit / Persp */
 #viewcontrols #fit {
   position: relative;
-  margin-left: 5px;
+  margin-left: var(--s-2);
 }
+/* The rule is drawn INSIDE the margin above, which is why the two values are
+   tied: half a rung of clearance either side of a 1px line. */
 #viewcontrols #fit::before {
   content: "";
   position: absolute;
-  left: -4px;
-  top: 4px;
-  bottom: 4px;
+  left: calc(-1 * var(--s-1));
+  top: var(--s-1);
+  bottom: var(--s-1);
   width: 1px;
   background: var(--line-strong);
 }
@@ -126,7 +143,12 @@ button {
   color: var(--text);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
-  padding: 6px 11px;
+  /* The app's default control size, and the one every other button is measured
+     against — .btn in a dialog resolves to the same pair. 6px/11px put this at
+     a ~29px box, which is under the ~32px that reads as comfortably clickable
+     and is why the panels felt packed; one rung up on each axis lands at ~33px
+     without turning a CAD panel into a settings page. */
+  padding: var(--s-3) var(--s-4);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;

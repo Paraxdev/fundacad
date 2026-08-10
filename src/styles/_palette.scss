@@ -22,12 +22,16 @@
   margin-bottom: var(--s-3);
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--s-2);
 }
 .palette-title::before {
   content: "";
   width: 6px;
   height: 6px;
+  /* A squircle, and off the radius scale on purpose: --r-xs would round a 6px
+     square into a circle, which is the shape the status pill's dot and the
+     prompt toast's dot already use. This mark has to stay distinguishable from
+     those at a glance, so its radius is a fraction of its own 6px, not a rung. */
   border-radius: 2px;
   background: var(--accent);
   box-shadow: 0 0 8px var(--accent-glow);
@@ -48,8 +52,16 @@
   justify-content: space-between;
   font-size: 12.5px;
   color: var(--text);
-  padding: 6px 8px;
-  margin: 0 calc(-1 * var(--s-2));
+  /* The shared list-row size (.tree-folder, .feature-row, .welcome-recent and
+     .choice-check all resolve to this pair). */
+  padding: var(--s-2) var(--s-3);
+  /* The row bleeds out of the palette's own padding so its hover fill reaches
+     towards the card edge instead of floating in the middle. The bleed has to
+     equal the row's own inline padding — then card padding (--s-4) minus bleed
+     plus padding lands the LABEL back on --s-4, flush with the title and the
+     section rules above it. It was -6px against 8px of padding, which put every
+     row's text 2px right of everything else in the card. */
+  margin: 0 calc(-1 * var(--s-3));
   border-radius: var(--r-sm);
   cursor: pointer;
   transition: background var(--t-fast) var(--ease);
@@ -87,7 +99,9 @@
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
-  padding: 3px 11px 3px 9px;
+  /* Asymmetric on purpose: the status dot lives inside the left padding, so an
+     even inset would read as too much space on that side. */
+  padding: var(--s-1) var(--s-4) var(--s-1) var(--s-3);
   white-space: nowrap;
   /* shrink-to-fit rather than push the titlebar wide. `.spacer` is flex:1 1 0%
      so it has nothing to give up — all the shrinkage lands here, which is what
@@ -100,7 +114,10 @@
   content: "";
   display: inline-block;
   vertical-align: middle;
-  margin-right: 6px;
+  margin-right: var(--s-2);
+  /* Not on the scale and not spacing: a one-pixel optical nudge that drops the
+     dot onto the text's x-height, because vertical-align:middle centres on the
+     em box and lands it visibly high. */
   margin-bottom: 1px;
   width: 6px;
   height: 6px;

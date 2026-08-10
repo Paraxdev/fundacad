@@ -7,25 +7,28 @@
   flex: 1;
   display: grid;
   grid-template-columns: 260px 1fr;
-  gap: 16px;
+  /* The one seam in this screen that separates two unrelated things -- a local
+     file list and a remote web view -- so it gets a wider rung than any gap
+     inside either column. */
+  gap: var(--s-5);
   min-height: 0; /* let the iframe pane shrink instead of overflowing */
 }
 .welcome-left {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--s-4);
   min-height: 0;
 }
 .welcome-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--s-3);
 }
 .welcome-actions .choice-btn {
   width: 100%;
 }
 .welcome-section {
-  margin-top: 6px;
+  margin-top: var(--s-2);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.4px;
@@ -35,7 +38,7 @@
 .welcome-recents {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--s-0);
   overflow-y: auto;
   min-height: 0;
 }
@@ -43,11 +46,13 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
+  /* Hairline: the filename and its directory are one label on two lines. */
+  gap: var(--s-0);
   background: transparent;
   border: none;
   border-radius: var(--r-sm, 6px);
-  padding: 6px 8px;
+  /* List-row size, shared with .palette-row, .tree-folder and .choice-check. */
+  padding: var(--s-2) var(--s-3);
   cursor: pointer;
   text-align: left;
   color: var(--text, #e6e8ec);
@@ -68,7 +73,7 @@
 }
 .welcome-account {
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: var(--s-4);
   border-top: 1px solid var(--line, #262a31);
 }
 .welcome-account .choice-btn {
@@ -77,7 +82,7 @@
 .welcome-user {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--s-3);
   font-size: 12px;
 }
 .welcome-avatar {
@@ -117,19 +122,22 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--s-4);
   color: var(--text-dim, #9aa3af);
   font-size: 13px;
 }
 .welcome-foot {
   display: flex;
-  padding: 10px 16px;
+  /* Same inset as .modal-foot: this panel IS a .modal-panel, and its footer
+     should not be a different height from every other dialog's. */
+  padding: var(--s-5);
   border-top: 1px solid var(--line, #262a31);
 }
 .welcome-startup {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* Checkbox-to-label, as in .sm-inv and .ta-publish-public. */
+  gap: var(--s-2);
   font-size: 12px;
   color: var(--text-dim, #9aa3af);
   cursor: pointer;
@@ -140,13 +148,15 @@
   width: min(420px, 92vw);
 }
 .ta-signin-hint {
-  margin: 0 0 10px;
+  margin: 0 0 var(--s-4);
   font-size: 12px;
   color: var(--text-dim, #9aa3af);
 }
 .ta-signin .choice-btn {
   width: 100%;
-  margin-bottom: 10px;
+  /* Stack rhythm inside the small dialogs: --s-3 between controls, --s-4 after
+     a paragraph. The two used to be 8 and 10 with no rule behind which. */
+  margin-bottom: var(--s-3);
 }
 .ta-signin .choice-row .choice-btn {
   margin-bottom: 0;
@@ -158,13 +168,15 @@
   border: 1px solid var(--line-strong, #323843);
   border-radius: var(--r-sm, 6px);
   color: var(--text, #e6e8ec);
-  padding: 8px 10px;
+  /* Field size, as in the inspector -- this was the roomiest of the four
+     spellings of an input the survey turned up. */
+  padding: var(--s-2) var(--s-3);
   font-size: 12px;
   font-family: monospace;
 }
 .ta-signin-error {
   min-height: 16px;
-  margin: 6px 0 4px;
+  margin: var(--s-2) 0 var(--s-1);
   font-size: 11px;
   color: var(--danger, #ff6b6b);
 }
@@ -174,7 +186,7 @@
   width: min(460px, 92vw);
 }
 .ta-publish .ta-signin-input {
-  margin-bottom: 8px;
+  margin-bottom: var(--s-3);
   font-family: inherit;
 }
 .ta-publish-desc {
@@ -183,10 +195,10 @@
 .ta-publish-public {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s-2);
   font-size: 12px;
   color: var(--text-dim, #9aa3af);
-  margin: 2px 0 6px;
+  margin: var(--s-0) 0 var(--s-2);
   cursor: pointer;
 }
 
@@ -198,15 +210,15 @@
   font-size: 11px;
   text-decoration: underline;
   cursor: pointer;
-  padding: 2px 0 8px;
+  padding: var(--s-0) 0 var(--s-3);
 }
 .ta-signin-alt:hover {
   color: var(--text, #e6e8ec);
 }
 .ta-signin-tokenrow {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
 }
 .ta-signin-tokenrow .ta-signin-input {
   flex: 1;
@@ -218,9 +230,9 @@
   white-space: nowrap;
 }
 .ta-signin-waiting {
-  padding: 8px 0 4px;
+  padding: var(--s-3) 0 var(--s-1);
   font-size: 13px;
 }
 .ta-signin-waiting p {
-  margin: 0 0 8px;
+  margin: 0 0 var(--s-3);
 }
