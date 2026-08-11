@@ -546,11 +546,19 @@ def test_offset_face_and_thicken():
     assert not e, e
     assert len(bodies) == 1 and abs(p.volume - 4800) < 1, "join merges into the source body"
 
-    # refusals must be clean ValueErrors (feature errors), never a crash
-    _p, e, _ = rebuild({"parameters": {}, "features": [
+    # A sphere's face offsets. This used to assert the opposite — that a sphere
+    # MUST be refused — because the operation kept a whitelist of two surface
+    # types. Measurement (see _press_pull) showed that gate was denying work the
+    # kernel does without complaint, so the whitelist is gone and this case flips
+    # from a refusal to a result. See test_presspull.py for the full surface set.
+    p, e, _ = rebuild({"parameters": {}, "features": [
         {"id": "sp", "type": "sphere", "radius": 10},
         {"id": "of", "type": "offsetFace", "faces": {"kind": "face", "by": "all"}, "distance": 1}]})
-    assert e and "flat and cylindrical" in e[0]["message"], f"sphere must be refused, got {e}"
+    assert not e, f"offsetting a sphere must now work, got {e}"
+    assert p is not None and p.volume > 4188, (
+        f"a +1mm offset on r10 should grow past the original 4188mm3, got {p.volume:.0f}")
+
+    # refusals must still be clean ValueErrors (feature errors), never a crash
     _p, e, _ = build({"id": "th", "type": "thicken", "faces": top, "thickness": 0})
     assert e and "thickness is zero" in e[0]["message"], f"zero thicken must be refused, got {e}"
 

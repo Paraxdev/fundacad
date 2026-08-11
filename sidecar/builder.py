@@ -5056,9 +5056,24 @@ def _press_pull(part, face, d, clamp=True):
     PLANAR faces extrude the face region into a prism and boolean it (union for +d,
     subtract for -d). This is far more robust than a local surface offset
     (BRepOffset), which SEGFAULTs on faceted / split imported faces — and it handles
-    holed faces fine in practice. CYLINDRICAL faces still use the local offset (to
-    resize a hole/boss cleanly). Other curved surfaces are rejected — OCCT's offset
-    is too unreliable on them to risk taking down the sidecar.
+    holed faces fine in practice. Every CURVED face goes through the local offset
+    (_offset_faces), which is what resizes a hole, a boss or a blend cleanly.
+
+    Curved faces used to be restricted to cylinders on the grounds that OCCT's
+    offset was too unreliable elsewhere to risk taking the sidecar down. Measured,
+    that is not what happens. Every surface type was offset in an isolated
+    subprocess, in both directions, so that a crash would show up as a signal
+    rather than as an exception: cone, sphere and torus all produced valid solids,
+    a swept freeform (BSPLINE) offset correctly both ways, and the one case that
+    could not be done — a loft between a circle and a square — came back as a
+    clean ValueError from MakeOffsetShape. Nothing segfaulted.
+
+    So the type gate was rejecting work the kernel does perfectly well, and the
+    surface it most often rejected is a TORUS — which is what a fillet on a round
+    edge is, i.e. exactly the face someone reaches for after blending a part.
+    What replaces the gate is attempt-and-verify: _offset_faces now checks its own
+    result and refuses an invalid one, which is a stronger guarantee than a
+    whitelist ever gave, since a cylinder could always be offset into nonsense.
     """
     if abs(d) < 1e-9:
         return part
@@ -5084,9 +5099,13 @@ def _press_pull(part, face, d, clamp=True):
             return part
         prism = extrude(face, dd)  # +dd outward (boss), -dd inward (pocket)
         return (part + prism) if dd > 0 else (part - prism)
-    if gt == GeomType.CYLINDER:
+    # Curved. The radius cap applies only where a radius is what runs out: pushing
+    # a cylinder or a cone inward past its own axis collapses it, and OCCT does
+    # not survive that gracefully. Everything else is left to _offset_faces, which
+    # refuses an offset it cannot make and validates the one it can.
+    if gt in (GeomType.CYLINDER, GeomType.CONE):
         return _offset_face(part, face, _clamp_cylinder(face, d))
-    raise ValueError("Press/Pull supports flat and cylindrical faces only")
+    return _offset_face(part, face, d)
 
 
 def _distance_to_target(src_face, target_pt, target_n):
@@ -5136,7 +5155,7 @@ def _guard_offsetable(part, faces, label):
     Raises ValueError — which the rebuild loop renders as user-facing prose —
     rather than letting BRepOffset take the sidecar down.
 
-    Scope is deliberately the SAME two checks press/pull already trusts, no more.
+    Scope is deliberately the SAME check press/pull already trusts, no more.
     An earlier, broader "refuse any faceted body" guard was tried and removed: a
     cylinder STL imported through _refacet_clean reduces to 26 clean planar faces
     and offsets correctly (measured: 2278 → 2502 mm³), so refusing it would have
@@ -5144,12 +5163,20 @@ def _guard_offsetable(part, faces, label):
     reduce (MAX_IMPORT_FACES), and server.py's out-of-process worker is the
     backstop for whatever still manages to crash OCCT."""
     for f in faces:
+        # No surface-TYPE gate. It used to refuse everything but planes and
+        # cylinders; measurement (see _press_pull) shows cones, spheres, tori and
+        # swept freeforms all offset to valid solids, and the ones that cannot
+        # come back as a clean refusal from MakeOffsetShape rather than as a
+        # crash. A whitelist here only ever denied work that would have succeeded
+        # — the result check in _offset_faces is the guarantee that actually
+        # matters, and it covers the whitelisted types too.
+        #
+        # The facet check below stays: that one is about the BODY being a mesh
+        # rather than about the surface being curved, and it is still real.
         try:
-            gt = f.geom_type
+            _ = f.geom_type
         except Exception:
-            gt = None
-        if gt not in (GeomType.PLANE, GeomType.CYLINDER):
-            raise ValueError(f"{label} supports flat and cylindrical faces only")
+            pass
         # a lone mesh facet on a dense body: reject rather than offset a sliver
         try:
             if len(part.faces()) > 300 and f.area < 1.0:
@@ -5208,6 +5235,18 @@ def _offset_faces(part, pairs):
     # tessellation and export all see a uniform solid.
     if sh.ShapeType() == TopAbs_ShapeEnum.TopAbs_SHELL:
         sh = BRepBuilderAPI_MakeSolid(TopoDS.Shell_s(sh)).Solid()
+    # IsDone() is not the same as "produced a usable solid": BRepOffset reports
+    # success while emitting a shell that self-intersects where the offset ran
+    # past the local curvature. Letting that into the document is worse than
+    # refusing, because it survives until some later boolean fails somewhere the
+    # user cannot connect to what they did. This is the check that lets the type
+    # gate above be dropped — the operation now polices its own result.
+    from OCP.BRepCheck import BRepCheck_Analyzer
+
+    if not BRepCheck_Analyzer(sh).IsValid():
+        raise ValueError(
+            "that offset ran past what this surface can hold — try a smaller amount"
+        )
     return Solid(sh)
 
 
