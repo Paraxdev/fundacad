@@ -1870,6 +1870,104 @@ def _group_sels_by_body(sel, ctx, label):
     return list(groups.values())
 
 
+#: Below this angle between the two face normals at an edge, the faces meet
+#: smoothly and the edge is not a corner. One degree rather than zero because a
+#: blend that has been rebuilt, imported or re-tessellated carries a little
+#: numerical noise on its tangency, and a blend of any size across a 0.3-degree
+#: "corner" is a degenerate sliver nobody asked for.
+SMOOTH_EDGE_DEG = 1.0
+
+
+def _edge_dihedral_deg(shape, edge):
+    """Angle between the surface normals of the two faces meeting at `edge`, in
+    degrees at its midpoint — 0 where they meet smoothly, 90 on a box corner.
+
+    None when the question does not apply: a seam edge, a free edge, or a point
+    where a normal degenerates. None must be read as "unknown", never as
+    "smooth", or the guard below starts refusing perfectly good work."""
+    import math
+
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+    from OCP.gp import gp_Pnt, gp_Vec
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.TopoDS import TopoDS
+    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+
+    try:
+        m = TopTools_IndexedDataMapOfShapeListOfShape()
+        TopExp.MapShapesAndAncestors_s(shape.wrapped, TopAbs_EDGE, TopAbs_FACE, m)
+        faces = []
+        for i in range(1, m.Extent() + 1):
+            if m.FindKey(i).IsSame(edge.wrapped):
+                faces = [TopoDS.Face_s(x) for x in m.FindFromIndex(i)]
+                break
+        # Deduped by identity: the ancestor map lists a face once per incidence,
+        # so a seam edge shows the SAME face twice and is not two faces meeting.
+        uniq = []
+        for fc in faces:
+            if not any(fc.IsSame(g) for g in uniq):
+                uniq.append(fc)
+        if len(uniq) != 2:
+            return None
+        mid = edge.position_at(0.5)
+        p = gp_Pnt(mid.X, mid.Y, mid.Z)
+        normals = []
+        for fc in uniq:
+            surf = BRep_Tool.Surface_s(fc)
+            proj = GeomAPI_ProjectPointOnSurf(p, surf)
+            u, v = proj.LowerDistanceParameters()
+            ad = BRepAdaptor_Surface(fc)
+            q, du, dv = gp_Pnt(), gp_Vec(), gp_Vec()
+            ad.D1(u, v, q, du, dv)
+            n = du.Crossed(dv)
+            if n.Magnitude() < 1e-12:
+                return None
+            n.Normalize()
+            normals.append(n)
+        return math.degrees(math.acos(max(-1.0, min(1.0, normals[0].Dot(normals[1])))))
+    except Exception:
+        return None
+
+
+def _refuse_smooth_edges(shape, edges, label):
+    """Refuse a blend on an edge whose faces already meet smoothly, and say why.
+
+    A fillet or a chamfer cuts across the corner between two faces. Where those
+    faces are TANGENT there is no corner, so there is nothing to cut and no size
+    of cut that would find one — the operation fails identically at 5mm and at
+    0.05mm. This is not a rare shape: it is the boundary of every fillet on the
+    model, so it is exactly what a user picks when they click the visible line
+    around a round they already made.
+
+    Without this, the failure surfaces as OCCT's own "try a smaller length
+    value(s)", which is not merely unhelpful but actively wrong — it describes a
+    size problem, so it sends someone into a retry loop that cannot terminate.
+    Refusing here costs one dihedral measurement per feature and replaces that
+    with the truth."""
+    smooth = []
+    for e in edges:
+        ang = _edge_dihedral_deg(shape, e)
+        if ang is not None and ang < SMOOTH_EDGE_DEG:
+            smooth.append(e)
+    if not smooth:
+        return
+    if len(edges) == 1:
+        which = "that edge is already smooth"
+    elif len(smooth) == len(edges):
+        which = f"all {len(edges)} selected edges are already smooth"
+    else:
+        which = f"{len(smooth)} of the {len(edges)} selected edges are already smooth"
+    raise ValueError(
+        f"can't {label.lower()} here — {which}: the faces meet tangentially, so "
+        "there is no corner to cut and no smaller value will help. It is most "
+        "likely the edge of a round that is already there — select the rounded "
+        "FACE and delete it if you want the sharp edge back."
+    )
+
+
 def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
     """Shared fillet/chamfer body: blend every selected edge, per owning body.
 
@@ -1895,6 +1993,7 @@ def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
         edges = resolve_edges(body["shape"], sels, diag=ctx.diagnostics, feature_id=f.get("id"))
         if not edges:
             raise ValueError(f"no edge found to {label.lower()} on {body['name']}")
+        _refuse_smooth_edges(body["shape"], edges, label)
         try:
             new_shape = combined(body["shape"], edges)
         except ConicNotApplicable:
