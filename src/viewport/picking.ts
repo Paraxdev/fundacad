@@ -35,6 +35,9 @@ export class Picker {
   // screen-space distance (px) of the best edge hit from the last pickEdge() —
   // lets pick() prefer a face over an edge unless the cursor is on the edge line.
   private edgeScreenDist = Infinity;
+  // ray distance of that same edge hit, so pick() can tell whether it is on the
+  // surface the cursor is over or on the far side of the body. See occludedEdge.
+  private edgeDepth = Infinity;
   // Raycast targets: ONE merged object per body now, so this list is ~3k long
   // instead of ~348k and the per-move filter is cheap. Hidden edges are not in
   // the geometry at all (BodyEdges rebuilds without them), so there is nothing
@@ -91,8 +94,10 @@ export class Picker {
       face = { kind: "face", faceId, selector: faceSelector(normal, point), point: [point.x, point.y, point.z] };
     }
 
-    // edge only when on the line (or there's no face under the cursor at all)
-    if (edge && (this.edgeScreenDist <= EDGE_NEAR_PX || !face)) return edge;
+    // edge only when on the line (or there's no face under the cursor at all),
+    // and never when that line is round the back of the body
+    const through = occludedEdge(this.edgeDepth, fHit?.distance ?? null, modelScale(view));
+    if (edge && !through && (this.edgeScreenDist <= EDGE_NEAR_PX || !face)) return edge;
     return face;
   }
 
@@ -137,6 +142,7 @@ export class Picker {
       if (d < bestD) { bestD = d; best = h; }
     }
     this.edgeScreenDist = bestD; // used by pick() to decide edge vs face
+    this.edgeDepth = best.distance; //  "     "     "  to reject an edge behind it
 
     // three reports the instance (segment) index as `faceIndex` on a
     // LineSegments2 hit; the owning BodyEdges maps it back to the edge.
@@ -147,6 +153,50 @@ export class Picker {
     if (!selector) return null;
     return { kind: "edge", edge, selector };
   }
+}
+
+/** How far behind the visible surface an edge may sit and still count as being ON
+ *  it, as a fraction of the model's size.
+ *
+ *  Relative because it exists to absorb tessellation error: a curved face's
+ *  triangles sit up to a chord's sagitta inside the true surface, so an edge on
+ *  that surface can measure marginally behind them, and that error scales with
+ *  the geometry that produced it. Small enough that it stays well under the
+ *  thickness of a thin plate — on a 100x100x2 plate (141mm diagonal) this is
+ *  0.28mm against 2mm of material, so the plate's own back edges are still
+ *  rejected. */
+export const EDGE_DEPTH_FRACTION = 0.002;
+
+/** Is the best edge candidate round the BACK of the body?
+ *
+ *  pickEdge deliberately ranks edges by screen distance rather than by depth, so
+ *  that a fat line the cursor is visually nearest wins over one that merely
+ *  happens to be closer to the camera. That is right among edges you can see and
+ *  wrong the moment an edge you cannot see projects near the cursor: hovering
+ *  anywhere near the silhouette, an edge on the far side of the solid lands a
+ *  couple of pixels from the pointer and takes the pick from the face you are
+ *  actually looking at. That is the "it selected through the object" report.
+ *
+ *  A face hit is the depth of the surface under the cursor, so anything further
+ *  than that (plus the tolerance above) is behind material and cannot have been
+ *  what the user aimed at. With no face under the cursor there is nothing to be
+ *  occluded BY — that is the case where you pick an edge against empty space,
+ *  and it must keep working. */
+export function occludedEdge(
+  edgeDist: number,
+  faceDist: number | null,
+  modelScale: number,
+): boolean {
+  if (faceDist == null || !Number.isFinite(edgeDist)) return false;
+  const s = Number.isFinite(modelScale) && modelScale > 0 ? modelScale : 0;
+  return edgeDist > faceDist + Math.max(1e-6, s * EDGE_DEPTH_FRACTION);
+}
+
+/** The model's overall size, for the tolerance above. Zero for an empty view,
+ *  which occludedEdge reads as "use the absolute floor". */
+function modelScale(view: ModelView): number {
+  const d = view.box.isEmpty() ? 0 : view.box.getSize(new THREE.Vector3()).length();
+  return Number.isFinite(d) ? d : 0;
 }
 
 // three.js Line2 raycast threshold is ~0.5× the on-screen pixel radius, so ~26
