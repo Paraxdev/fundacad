@@ -5530,14 +5530,33 @@ def _rotate_entity(e, cx, cy, ang, eid, val):
         return [{"type": "arc", "id": eid, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "mx": mx, "my": my, **c}]
     if t == "spline":
         return [{"type": "spline", "id": eid, "points": [dict(zip(("x", "y"), R(val(p["x"]), val(p["y"])))) for p in e.get("points", [])], **c}]
-    # rectangle can't carry rotation (axis-aligned) -> a 4-line loop
-    hw, hh = val(e["width"]) / 2, val(e["height"]) / 2
-    ex, ey = val(e.get("x", 0)), val(e.get("y", 0))
-    corners = [R(ex - hw, ey - hh), R(ex + hw, ey - hh), R(ex + hw, ey + hh), R(ex - hw, ey + hh)]
+    # A rectangle carries its OWN rotation now, but the pattern/mirror transform R
+    # can also shear or reflect, which a width/height/angle triple cannot express.
+    # So a transformed copy stays a 4-line loop, as it always has.
+    corners = [R(px, py) for px, py in _rect_corners(e, val)]
     return [
         {"type": "line", "id": f"{eid}.{i}", "x1": corners[i][0], "y1": corners[i][1], "x2": corners[(i + 1) % 4][0], "y2": corners[(i + 1) % 4][1], **c}
         for i in range(4)
     ]
+
+
+def _rect_corners(e, val):
+    """A rectangle's four corners CCW (bl, br, tr, tl), about its own centre.
+
+    `angle` is DEGREES, like every other angle field. MIRRORS
+    src/sketch/region.ts rectCorners and must keep doing so: the frontend draws
+    and picks from that one and the solid is built from this one, so a
+    disagreement is a sketch that extrudes into a shape the user did not draw.
+    Angle 0 returns the corners untouched rather than through a cos/sin, so every
+    rectangle already in a saved document is bit-identical to before."""
+    x, y = val(e.get("x", 0)), val(e.get("y", 0))
+    hw, hh = val(e["width"]) / 2, val(e["height"]) / 2
+    local = ((-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh))
+    a = math.radians(val(e.get("angle", 0)))
+    if not a:
+        return [(x + lx, y + ly) for lx, ly in local]
+    c, s = math.cos(a), math.sin(a)
+    return [(x + lx * c - ly * s, y + lx * s + ly * c) for lx, ly in local]
 
 
 def _expand_pattern(pat, by_id, val):
@@ -5648,9 +5667,7 @@ def _entity_edges(e, val):
         pts = [(val(p["x"]), val(p["y"]), 0) for p in e.get("points", [])]
         return [Edge.make_spline(pts)] if len(pts) >= 2 else []
     if t == "rectangle":
-        x, y = val(e.get("x", 0)), val(e.get("y", 0))
-        hw, hh = val(e["width"]) / 2, val(e["height"]) / 2
-        c = [(x - hw, y - hh), (x + hw, y - hh), (x + hw, y + hh), (x - hw, y + hh)]
+        c = _rect_corners(e, val)
         return [Edge.make_line((c[k][0], c[k][1], 0), (c[(k + 1) % 4][0], c[(k + 1) % 4][1], 0))
                 for k in range(4)]
     if t == "polygon":
@@ -5902,6 +5919,7 @@ def _build_sketch(f, val, datums=None):
         if et == "rectangle":
             faces.append(
                 Pos(val(e.get("x", 0)), val(e.get("y", 0)))
+                * Rot(0, 0, val(e.get("angle", 0)))
                 * Rectangle(val(e["width"]), val(e["height"]))
             )
             all_edges.extend(_entity_edges(e, val))

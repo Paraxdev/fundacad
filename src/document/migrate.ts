@@ -32,8 +32,19 @@ import { nextDName } from "../params/engine";
 // the first migration that is not purely a data rewrite — older builds get an
 // explicit "update SindriCAD" message rather than a JSON syntax error.
 
+// v5 → v6: `rectangle.angle` (degrees about its own centre), so a rectangle drawn
+// from three points can be SAVED as a rectangle rather than decomposed into four
+// lines — which would have cost it its W/H dimension, its "<rectId>~k" edge
+// addressing and its identity in the browser tree.
+//
+// A pure addition, and absent still means 0, so no data is rewritten. It is
+// stamped anyway because the failure mode without a stamp is worse than the ones
+// v3 and v4 guarded against: an older build does not skip a field it does not
+// know, it ignores it and draws the rectangle axis-aligned — the wrong SHAPE,
+// silently. The stamp turns that into the "made by a newer version" warning.
+
 /** .sindri file-format version (bump when the on-disk shape changes incompatibly). */
-export const FORMAT_VERSION = 5;
+export const FORMAT_VERSION = 6;
 
 export function migrateDocument(parsed: CadDocument): string[] {
   const version = parsed.version ?? 1;

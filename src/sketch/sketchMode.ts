@@ -3737,7 +3737,7 @@ export class SketchMode {
     if (e.type === "line" || e.type === "arc") {
       return [new THREE.Vector2(e.x1, e.y1), new THREE.Vector2(e.x2, e.y2)];
     }
-    if (e.type === "rectangle") return rectCorners(e.x, e.y, e.width, e.height).map((q) => q.clone());
+    if (e.type === "rectangle") return rectCorners(e.x, e.y, e.width, e.height, e.angle).map((q) => q.clone());
     if (e.type === "spline") {
       const last = e.points.length - 1;
       const a = e.points[0], b = e.points[last];

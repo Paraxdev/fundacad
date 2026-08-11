@@ -222,7 +222,7 @@ export function pickDimTarget(ents: ResolvedEntity[], p: V, tol: number): DimTar
   const e = idx >= 0 ? ents[idx] : undefined;
   if (!e) return null;
   if (e.type === "rectangle") {
-    const c = rectCorners(e.x, e.y, e.width, e.height);
+    const c = rectCorners(e.x, e.y, e.width, e.height, e.angle);
     let bk = 0, bd = Infinity;
     for (let k = 0; k < 4; k++) {
       const a = c[k], b = c[(k + 1) % 4];
@@ -250,7 +250,7 @@ export function rebindTarget(t: DimTarget, ents: ResolvedEntity[]): DimTarget | 
     return r ? { kind: "point", e, p: t.p, pos: r.pos.clone(), ...rim } : null;
   }
   if (e.type !== "rectangle") return null;
-  const c = rectCorners(e.x, e.y, e.width, e.height);
+  const c = rectCorners(e.x, e.y, e.width, e.height, e.angle);
   const a = c[t.k], b = c[(t.k + 1) % 4];
   return a && b ? { kind: "edge", e, k: t.k, a: a.clone(), b: b.clone() } : null;
 }

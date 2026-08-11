@@ -48,7 +48,7 @@ export function entityPolyline(e: ResolvedEntity): THREE.Vector2[] {
     case "line":
       return [v(e.x1, e.y1), v(e.x2, e.y2)];
     case "rectangle":
-      return closed(rectCorners(e.x, e.y, e.width, e.height));
+      return closed(rectCorners(e.x, e.y, e.width, e.height, e.angle));
     case "circle":
       return closed(circleLoop(e.x, e.y, e.radius));
     case "arc":
@@ -91,21 +91,28 @@ export function entitySegments(e: ResolvedEntity): [THREE.Vector2, THREE.Vector2
   return out;
 }
 
-/** four corners of an axis-aligned rectangle (CCW, no repeat) */
+/** Four corners of a rectangle (CCW: bl, br, tr, tl; no repeat), about its own
+ *  centre. `angleDeg` rotates it — degrees, as every other angle field is. */
 export function rectCorners(
   x: number,
   y: number,
   width: number,
   height: number,
+  angleDeg = 0,
 ): THREE.Vector2[] {
   const hw = width / 2;
   const hh = height / 2;
-  return [
-    new THREE.Vector2(x - hw, y - hh),
-    new THREE.Vector2(x + hw, y - hh),
-    new THREE.Vector2(x + hw, y + hh),
-    new THREE.Vector2(x - hw, y + hh),
-  ];
+  const local: [number, number][] = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+  // Rotation lives HERE rather than at the nine call sites, so a rotated
+  // rectangle draws, dimensions, solves, snaps, picks and extrudes correctly by
+  // construction. Angle 0 must return exactly the old points, not the old points
+  // through a cos/sin that rounds them — every axis-aligned rectangle already
+  // saved depends on that being bit-identical.
+  if (!angleDeg) return local.map(([lx, ly]) => new THREE.Vector2(x + lx, y + ly));
+  const a = (angleDeg * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return local.map(([lx, ly]) => new THREE.Vector2(x + lx * c - ly * s, y + lx * s + ly * c));
 }
 
 /** sample a circle as a closed polygon (no repeat) */
@@ -186,7 +193,7 @@ export function detectRegions(
     // by shared endpoints.
     loops = [];
     for (const { e } of perEntity) {
-      if (e.type === "rectangle") loops.push(rectCorners(e.x, e.y, e.width, e.height));
+      if (e.type === "rectangle") loops.push(rectCorners(e.x, e.y, e.width, e.height, e.angle));
       else if (e.type === "circle") loops.push(circleLoop(e.x, e.y, e.radius));
       // a projected CIRCLE is a closed loop of its own, like a native circle —
       // its polyline has no free endpoints for the chain tracer to join

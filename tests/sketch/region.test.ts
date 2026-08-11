@@ -2,7 +2,7 @@
 // detectRegions, pointInLoop/pointInRegion.
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { detectRegions, entityPolyline, glyphRegion, pointInRegion } from "../../src/sketch/region";
+import { detectRegions, entityPolyline, glyphRegion, pointInRegion, rectCorners } from "../../src/sketch/region";
 import type { ResolvedEntity } from "../../src/sketch/snap";
 
 const line = (id: string, x1: number, y1: number, x2: number, y2: number): ResolvedEntity =>
@@ -291,3 +291,73 @@ function circleLoopFor(cx: number, cy: number, r: number): THREE.Vector2[] {
   }
   return out;
 }
+
+describe("rectCorners rotation", () => {
+  const at = (pts: THREE.Vector2[], i: number) => {
+    const p = pts[i];
+    if (!p) throw new Error(`no corner ${i}`);
+    return p;
+  };
+
+  it("returns the axis-aligned corners EXACTLY when there is no angle", () => {
+    // Every rectangle in every saved document takes this path. Routing them
+    // through a cos/sin would move them by float noise, which is a diff in every
+    // file anyone opens and re-saves.
+    for (const a of [0, undefined]) {
+      const c = rectCorners(3, 5, 10, 4, a);
+      expect(c.map((p) => [p.x, p.y])).toEqual([[-2, 3], [8, 3], [8, 7], [-2, 7]]);
+    }
+  });
+
+  it("rotates about the rectangle's own centre, not the origin", () => {
+    // Rotating about the origin would send an off-centre rectangle across the
+    // sketch the moment it was given an angle.
+    const c = rectCorners(100, 0, 10, 4, 90);
+    const cx = c.reduce((s, p) => s + p.x, 0) / 4;
+    const cy = c.reduce((s, p) => s + p.y, 0) / 4;
+    expect(cx).toBeCloseTo(100, 9);
+    expect(cy).toBeCloseTo(0, 9);
+  });
+
+  it("reads the angle as DEGREES, like every other angle field", () => {
+    // 90 degrees swaps the extents; 90 RADIANS would not.
+    const c = rectCorners(0, 0, 10, 4, 90);
+    const xs = c.map((p) => p.x);
+    const ys = c.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(4, 9);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(10, 9);
+  });
+
+  it("keeps the CCW corner order the edge addressing depends on", () => {
+    // "<rectId>~k" names edge k in this order. A rotation that reordered or
+    // reversed the corners would silently re-target every dimension and
+    // constraint attached to a rectangle edge.
+    const c = rectCorners(0, 0, 10, 4, 30);
+    const area =
+      c.reduce((s, p, i) => {
+        const q = at(c, (i + 1) % 4);
+        return s + (p.x * q.y - q.x * p.y);
+      }, 0) / 2;
+    expect(area).toBeGreaterThan(0); // positive => counter-clockwise
+    expect(area).toBeCloseTo(40, 6); // and still 10 x 4
+  });
+
+  it("stays a rectangle: opposite sides equal, corners square", () => {
+    const c = rectCorners(-7, 2, 10, 4, 37.5);
+    const side = (i: number) => at(c, (i + 1) % 4).clone().sub(at(c, i));
+    expect(side(0).length()).toBeCloseTo(10, 9);
+    expect(side(1).length()).toBeCloseTo(4, 9);
+    expect(side(2).length()).toBeCloseTo(10, 9);
+    expect(side(0).dot(side(1))).toBeCloseTo(0, 9);
+  });
+
+  it("gives entityPolyline a closed rotated loop", () => {
+    // The one place an entity becomes points — everything downstream (regions,
+    // picking, snapping, the sidecar's own corners) reads through it.
+    const p = entityPolyline({ type: "rectangle", id: "r", x: 0, y: 0, width: 10, height: 4, angle: 45 } as never);
+    expect(p).toHaveLength(5);
+    expect(at(p, 0).x).toBeCloseTo(at(p, 4).x, 9);
+    expect(at(p, 0).y).toBeCloseTo(at(p, 4).y, 9);
+    expect(at(p, 0).y).not.toBeCloseTo(at(p, 1).y, 6); // genuinely rotated
+  });
+});

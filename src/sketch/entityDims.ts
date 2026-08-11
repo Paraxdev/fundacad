@@ -326,7 +326,7 @@ export function lineOperand(
   const base = byId.get(id.slice(0, t));
   const k = Number(id.slice(t + 1));
   if (!base || base.type !== "rectangle" || !Number.isInteger(k) || k < 0 || k > 3) return null;
-  const c = rectCorners(base.x, base.y, base.width, base.height);
+  const c = rectCorners(base.x, base.y, base.width, base.height, base.angle);
   const a = c[k], b = c[(k + 1) % 4];
   return a && b ? { x1: a.x, y1: a.y, x2: b.x, y2: b.y } : null;
 }
@@ -449,7 +449,7 @@ export function dimRefPoints(e: ResolvedEntity): { p: number; pos: V }[] {
   }
   if (e.type === "circle" || e.type === "point") return [{ p: 0, pos: v(e.x, e.y) }];
   if (e.type === "rectangle") {
-    return rectCorners(e.x, e.y, e.width, e.height).map((q, k) => ({ p: k, pos: v(q.x, q.y) }));
+    return rectCorners(e.x, e.y, e.width, e.height, e.angle).map((q, k) => ({ p: k, pos: v(q.x, q.y) }));
   }
   if (e.type === "spline") {
     const out: { p: number; pos: V }[] = [];

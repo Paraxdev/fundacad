@@ -140,7 +140,7 @@ export async function compileAndSolve(
       circles.push({ id: e.id, center: c, radius: e.radius });
       centers.set(e.id, c);
     } else if (e.type === "rectangle") {
-      const corner = rectCorners(e.x, e.y, e.width, e.height); // CCW: bl, br, tr, tl
+      const corner = rectCorners(e.x, e.y, e.width, e.height, e.angle); // CCW: bl, br, tr, tl
       const cp = corner.map((p) => getPoint(p.x, p.y, true));
       for (let k = 0; k < 4; k++) {
         const a = cp[k], b = cp[(k + 1) % 4];

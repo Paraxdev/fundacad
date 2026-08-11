@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import type { DimPlace, ProjectedCurve, ProjectedSource } from "../types";
 import { asRound } from "./entityDims";
+import { rectCorners } from "./region";
 
 export type SnapKind =
   | "free"
@@ -84,16 +85,18 @@ export function candidatesFromEntities(
       add(e.x2, e.y2, "endpoint", 100);
       add((e.x1 + e.x2) / 2, (e.y1 + e.y2) / 2, "midpoint", 80);
     } else if (e.type === "rectangle") {
-      const hw = e.width / 2;
-      const hh = e.height / 2;
-      for (const sx of [-1, 1])
-        for (const sy of [-1, 1]) add(e.x + sx * hw, e.y + sy * hh, "endpoint", 100);
+      // Through rectCorners rather than +-hw/+-hh, so a ROTATED rectangle snaps
+      // to where it is drawn. Computing corners inline here is how the two would
+      // drift apart, and a snap that lands on a phantom axis-aligned corner is
+      // the sort of thing you only notice after the part is wrong.
+      const c = rectCorners(e.x, e.y, e.width, e.height, e.angle);
+      for (const p of c) add(p.x, p.y, "endpoint", 100);
       add(e.x, e.y, "center", 90);
-      // edge midpoints
-      add(e.x, e.y + hh, "midpoint", 80);
-      add(e.x, e.y - hh, "midpoint", 80);
-      add(e.x + hw, e.y, "midpoint", 80);
-      add(e.x - hw, e.y, "midpoint", 80);
+      for (let k = 0; k < 4; k++) {
+        const a = c[k]!;
+        const b = c[(k + 1) % 4]!;
+        add((a.x + b.x) / 2, (a.y + b.y) / 2, "midpoint", 80);
+      }
     } else if (e.type === "circle") {
       add(e.x, e.y, "center", 90);
     } else if (e.type === "arc") {
@@ -137,7 +140,7 @@ export function candidatesFromEntities(
 // plain numbers already, so it survives resolution as a structural copy.
 export type ResolvedEntity =
   | { type: "line"; id: string; x1: number; y1: number; x2: number; y2: number; construction?: boolean; dimPlace?: DimPlace }
-  | { type: "rectangle"; id: string; width: number; height: number; x: number; y: number; construction?: boolean; dimPlace?: DimPlace }
+  | { type: "rectangle"; id: string; width: number; height: number; x: number; y: number; angle?: number; construction?: boolean; dimPlace?: DimPlace }
   | { type: "circle"; id: string; radius: number; x: number; y: number; construction?: boolean; dimPlace?: DimPlace }
   | { type: "arc"; id: string; x1: number; y1: number; x2: number; y2: number; mx: number; my: number; construction?: boolean }
   | { type: "spline"; id: string; points: { x: number; y: number }[]; construction?: boolean }

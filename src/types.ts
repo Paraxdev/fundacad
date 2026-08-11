@@ -127,7 +127,9 @@ export function applyProjectionUpdate<E extends { curve: ProjectedCurve; stale?:
 // entityDims() returns a dimension for): rectangle W/H, circle diameter,
 // polygon radius, slot length/width, line length.
 export type SketchEntity =
-  | { type: "rectangle"; id?: string; width: Num; height: Num; x?: Num; y?: Num; construction?: boolean; dimPlace?: DimPlace }
+  // `angle` is DEGREES about the rectangle's own centre, absent meaning 0 —
+  // every rectangle saved before v6 is axis-aligned and stays so untouched.
+  | { type: "rectangle"; id?: string; width: Num; height: Num; x?: Num; y?: Num; angle?: Num; construction?: boolean; dimPlace?: DimPlace }
   | { type: "circle"; id?: string; radius: Num; x?: Num; y?: Num; construction?: boolean; dimPlace?: DimPlace }
   | { type: "line"; id?: string; x1: Num; y1: Num; x2: Num; y2: Num; construction?: boolean; dimPlace?: DimPlace }
   | { type: "arc"; id?: string; x1: Num; y1: Num; x2: Num; y2: Num; mx: Num; my: Num; construction?: boolean }

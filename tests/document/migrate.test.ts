@@ -100,10 +100,10 @@ describe("migrateDocument", () => {
   it("v3 (projected entities) is a no-op stamp: v3 docs pass through unchanged, twice", () => {
     // Pins the current format so a version bump has to come past these tests.
     // v5 moved geometry OUT of the document (inline base64 `brep` -> the `geom`
-    // content hash carried in the container), but a v3 document still passes
-    // through migrateDocument untouched: `brep` is still READ, so nothing here
-    // rewrites it.
-    expect(FORMAT_VERSION).toBe(5);
+    // content hash carried in the container); v6 added `rectangle.angle`. A v3
+    // document still passes through migrateDocument untouched by either: `brep`
+    // is still READ, and an absent angle already means 0.
+    expect(FORMAT_VERSION).toBe(6);
     const doc = v1({
       version: 3,
       features: [{ id: "f1", type: "sketch", plane: "XY", entities: [
@@ -137,6 +137,36 @@ describe("migrateDocument", () => {
     expect(migrateDocument(doc)).toEqual([]); // in-format: no warnings
     expect(JSON.stringify(doc)).toBe(before);
     migrateDocument(doc); // idempotent
+    expect(JSON.stringify(doc)).toBe(before);
+  });
+
+  it("v6 (rectangle.angle) leaves an axis-aligned rectangle alone", () => {
+    // A pure addition where absent already means 0, so no rectangle in any file
+    // anyone has is rewritten. The stamp exists for the OTHER direction: an older
+    // build ignores a field it does not know and draws the rectangle
+    // axis-aligned, which is the wrong shape rather than a missing feature.
+    const doc = v1({
+      version: 5,
+      features: [{ id: "f1", type: "sketch", plane: "XY", entities: [
+        { type: "rectangle", id: "r1", width: 10, height: 4, x: 0, y: 0 },
+      ] }],
+    });
+    const before = JSON.stringify(doc);
+    expect(migrateDocument(doc)).toEqual([]);
+    expect(JSON.stringify(doc)).toBe(before);
+    const rect = (doc.features[0] as { entities: Record<string, unknown>[] }).entities[0]!;
+    expect("angle" in rect).toBe(false); // not defaulted INTO the document
+  });
+
+  it("keeps a rotated rectangle's angle through a round trip", () => {
+    const doc = v1({
+      version: 6,
+      features: [{ id: "f1", type: "sketch", plane: "XY", entities: [
+        { type: "rectangle", id: "r1", width: 10, height: 4, x: 0, y: 0, angle: 37.5 },
+      ] }],
+    });
+    const before = JSON.stringify(doc);
+    expect(migrateDocument(doc)).toEqual([]);
     expect(JSON.stringify(doc)).toBe(before);
   });
 });
