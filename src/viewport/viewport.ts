@@ -1043,24 +1043,21 @@ export class Viewport {
     };
   }
 
-  /** The sketch plane of the currently selected face, or null when nothing is
-   *  selected and when what IS selected is curved.
+  /** The sketch plane of the currently selected face; null when nothing is selected
+   *  and when what IS selected is curved.
    *
-   *  This is what lets "click a face, press S" skip the plane picker entirely:
-   *  a selected planar face has already answered the only question the picker
-   *  was there to ask. The derivation is sketchView.faceSketchPlane — pure,
-   *  tested, and reading nothing but the face's own normal, so re-entering the
-   *  sketch later lands on exactly the same axes.
+   *  This is what lets "click a face, press S" skip the plane picker: a selected
+   *  planar face has already answered the picker's only question. The derivation is
+   *  sketchView.faceSketchPlane, which reads nothing but the face's own normal, so
+   *  re-entering the sketch later lands on the same axes.
    *
-   *  No interior reference is passed. The face normal is the area-weighted
-   *  triangle normal of a sewn solid, so its winding already points out of the
-   *  material; a "centre of the body" test would agree with it almost
-   *  everywhere and then invert the underside of an overhang, which is worse
-   *  than not testing at all.
+   *  No interior reference is passed: the face normal is the area-weighted triangle
+   *  normal of a sewn solid, so its winding already points out of the material, and
+   *  a "centre of the body" test would agree almost everywhere and then invert the
+   *  underside of an overhang.
    *
-   *  Curved faces are rejected rather than flattened: a sketch on a mean plane
-   *  through a cylinder wall is geometry the user did not ask for, and the
-   *  picker (which offers base planes too) is the right answer there. */
+   *  Curved faces are rejected rather than flattened — a sketch on a mean plane
+   *  through a cylinder wall is geometry the user did not ask for. */
   selectedFaceSketchPlane(): PlaneDef | null {
     if (!this.highlighter || !this.model) return null;
     const faceId = this.highlighter.getSelectedFaces()[0];
@@ -1596,24 +1593,20 @@ export class Viewport {
   }
 
   /**
-   * The plane of the face under the cursor — for the right-click menu's "Sketch
-   * on this face" / "Offset plane from face" and the ViewCube's set-side-from-a-
-   * face override. Null when the cursor is over no face, or over one that
-   * implies no plane at all (a fillet's blend, a sphere, a cone, a spline).
+   * The plane of the face under the cursor — for the right-click menu's "Sketch on
+   * this face" / "Offset plane from face" and the ViewCube's set-side override.
+   * Null over no face, or over one that implies no plane (a blend, sphere, cone,
+   * spline).
    *
-   * The derivation is features/facePlanePick + planeMath, which is also what the
-   * interactive plane picker and cross-section mode ask. It used to be a private
-   * copy that read ONE triangle of the tessellation: correct on a flat face and
-   * quietly wrong on every curved one, where it answered with the plane of a
-   * chord — so "sketch on this face" on a cylinder placed the sketch through the
-   * material at a tessellation-dependent angle instead of refusing or giving the
-   * tangent plane. Sharing the derivation is what makes a round face a usable
-   * answer here rather than a plausible-looking wrong one.
+   * Derived by features/facePlanePick + planeMath, the same as the interactive
+   * picker and cross-section mode. It used to be a private copy reading ONE
+   * triangle of the tessellation: correct on a flat face, and on a curved one it
+   * answered with the plane of a chord, so "sketch on this face" on a cylinder
+   * placed the sketch through the material at a tessellation-dependent angle.
    *
-   * The origin is NOT the face's own centroid, and that rule (with the bug that
-   * produced it) is documented on planeMath.planeFromPointNormal: grid snapping
-   * rounds in plane-LOCAL coordinates, so the origin decides where the lattice
-   * falls in world space.
+   * The origin is NOT the face's centroid; planeMath.planeFromPointNormal documents
+   * why (grid snapping rounds in plane-LOCAL coordinates, so the origin decides
+   * where the lattice falls in world space).
    */
   pickFacePlane(clientX: number, clientY: number): PlaneDef | null {
     return pickFacePlaneAt(this, clientX, clientY)?.def ?? null;
@@ -1764,27 +1757,22 @@ export class Viewport {
 
   // --- cross-section mode ----------------------------------------------------
   //
-  // Display-only view state, in the same family as zebra / curvature combs /
-  // the analysis overlays: owned here rather than by the tool, because it has to
-  // OUTLIVE a rebuild. The old section was documented as "lost on the next
-  // rebuild", which was honest when it was a one-shot you set, looked at and
-  // closed; a mode you keep working inside cannot evaporate the moment the
-  // fillet you were aiming at rebuilds the body. setModel re-applies it, exactly
-  // as it re-applies the other three.
+  // Display-only view state, like zebra / curvature combs / the analysis overlays,
+  // owned here rather than by the tool because it has to OUTLIVE a rebuild. A mode
+  // you keep working inside cannot evaporate the moment the fillet you were aiming
+  // at rebuilds the body, so setModel re-applies it as it does the other three.
   //
-  // The near half is clipped, as before. The far half is drawn a SECOND time,
-  // faintly, by a per-body mesh that shares the body's own geometry (no copy, no
-  // upload) and carries the mirrored clip plane. That is the cheap route on this
-  // renderer: bodies already own separate meshes and materials, so ghosting is
-  // one extra draw call per visible body and one shared material — no render
-  // target, no depth prepass, no shader of our own. The ghosts are CHILDREN of
-  // the body meshes, which is what makes them inherit a move-ghost's live
-  // transform and disappear with a body that is hidden or replaced.
+  // The near half is clipped; the far half is drawn a SECOND time, faintly, by a
+  // per-body mesh sharing the body's geometry (no copy, no upload) with the
+  // mirrored clip plane. Cheap on this renderer — bodies already own separate
+  // meshes and materials, so it is one extra draw call per visible body and one
+  // shared material, with no render target or shader of our own. The ghosts are
+  // CHILDREN of the body meshes, so they inherit a move-ghost's live transform and
+  // vanish with a hidden or replaced body.
   //
-  // Cost when the mode is off is zero: no objects, no material, and the plane
-  // assignment below only ever runs on a transition or a rebuild — nothing is
-  // added to the per-frame path, which matters because this viewport renders on
-  // demand and would otherwise be woken every frame by state nobody is looking at.
+  // Cost when off is zero, and the plane assignment runs only on a transition or a
+  // rebuild — nothing joins the per-frame path, which matters because this viewport
+  // renders on demand.
   private section: { ghost: number } | null = null;
   /** The live cut. Materials hold a REFERENCE to it, so moving the section is a
    *  mutation here rather than a re-assignment across every material. */

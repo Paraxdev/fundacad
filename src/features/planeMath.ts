@@ -1,28 +1,18 @@
 // The arithmetic behind "make a plane out of the thing I clicked": the frame a
-// picked face implies, and the tangent plane where the cursor lands on a round
-// one.
+// picked face implies, and the tangent plane where the cursor lands on a round one.
 //
-// Two things make this worth isolating rather than writing inline in the tool.
+// Isolated because it can be WRONG in a way the user only discovers three
+// operations later — a drifted origin moves the snap lattice of every sketch drawn
+// on it, and a tangent plane off by a chord's sagitta puts the sketch inside the
+// material. Neither raises an error; both show up as a part that does not fit.
 //
-// It is the part that can be WRONG in a way the user only discovers three
-// operations later — a plane whose origin drifts moves the snap lattice of every
-// sketch drawn on it, and a tangent plane that misses the surface by a chord's
-// sagitta puts the sketch inside the material. Neither shows up as an error;
-// both show up as a part that does not fit.
+// And its answer is what gets WRITTEN DOWN: there is no face-referenced plane spec
+// on the wire, so a datumPlane carries a resolved {origin, normal, xdir} that the
+// sidecar simply rebuilds with. Nothing downstream re-derives or corrects it, and
+// a future face-following datum would have to reproduce these rules on the sidecar
+// side to stay compatible with planes already saved in people's documents.
 //
-// And its answer is what gets WRITTEN DOWN. There is no face-referenced plane
-// spec on the wire — a datumPlane feature carries a resolved {origin, normal,
-// xdir}, which the sidecar simply rebuilds with (builder.py, `_plane_of`) — so
-// whatever these functions return is the plane, permanently, for every rebuild
-// and every reopen of the file. Nothing downstream re-derives it and nothing
-// corrects it. That also means the rules below are the ones a future
-// face-following datum would have to reproduce on the sidecar side to stay
-// compatible with the planes already saved in people's documents, which is why
-// each lives in one named function with its reasoning attached rather than
-// inline where it is used.
-//
-// Everything here is plain tuples: no THREE, no viewport, no camera — so vitest
-// can reach it, which is the same bargain edgeDragMath.ts struck.
+// Plain tuples throughout: no THREE, no viewport, no camera, so vitest reaches it.
 
 import type { PlaneDef, Vec3 } from "../types";
 
@@ -68,26 +58,21 @@ export function unit(v: Vec3): Vec3 | null {
 
 /** The in-plane x axis a bare normal implies.
  *
- *  A plane needs an x direction and a normal alone does not supply one, so SOME
- *  arbitrary choice has to be made, and it has to be the same one every time:
- *  a plane whose x axis is derived one way at pick time and another way later is
- *  a sketch that rotates about its own normal, moving every coordinate stored in
- *  it. viewport.pickFacePlane used to carry a second copy of this rule and now
- *  calls through here, which is the only way to keep that promise.
+ *  A normal supplies no x direction, so an arbitrary choice has to be made and it
+ *  has to be the SAME one every time — derived one way at pick time and another
+ *  later is a sketch that rotates about its own normal, moving every coordinate
+ *  stored in it. viewport.pickFacePlane calls through here rather than carrying a
+ *  second copy.
  *
- *  KNOWN DIVERGENCE, recorded rather than fixed: sketchView.sketchXdir answers
- *  the same question by a different rule (the normal's dominant world axis, so a
- *  +X face sketches like the YZ plane and the axis never jumps as the face
- *  tilts). It serves the "select a face, press S" route; this serves the "press
- *  S, click a face" one. Both are stable and both are recorded IN the plane they
- *  produce — a saved sketch carries its own xdir — so the only symptom is that
- *  the same face can open with its sketch axes a quarter turn apart depending on
- *  the route taken, never a plane in the wrong place. Unifying is safe for
- *  existing documents for exactly that reason; it is left alone here because
- *  picking the winner is a decision about feel, not correctness.
+ *  KNOWN DIVERGENCE, recorded rather than fixed: sketchView.sketchXdir answers the
+ *  same question by the normal's dominant world axis, serving the "select a face,
+ *  press S" route where this serves "press S, click a face". Both are stable and
+ *  both are recorded IN the plane they produce, so the only symptom is the same
+ *  face opening a quarter turn apart depending on route — never a plane in the
+ *  wrong place. Unifying is safe; picking the winner is a decision about feel.
  *
- *  World +Z, projected into the plane, except when the plane is nearly
- *  horizontal (where +Z has almost nothing to project) — then world +X. */
+ *  World +Z projected into the plane, or world +X when the plane is nearly
+ *  horizontal and +Z has almost nothing to project. */
 export function planeXDir(normal: Vec3): Vec3 | null {
   const n = unit(normal);
   if (!n) return null;
@@ -261,24 +246,18 @@ export function cylinderFromFace(points: Vec3[], normals: Vec3[]): Cylinder | nu
 
 /** The plane that touches a cylinder at the point you clicked.
  *
- *  `at` comes from a raycast against the tessellation, so it sits a sagitta
- *  INSIDE the true surface; the returned origin is pushed back out to the exact
- *  touch point (axis + radius · radial) rather than used as given, or the datum
- *  would be a plane buried a hair inside the material — visible the moment you
- *  sketch on it and extrude.
+ *  `at` comes from a raycast against the tessellation, so it sits a sagitta INSIDE
+ *  the true surface; the origin is pushed back out to the exact touch point (axis +
+ *  radius · radial), or the datum would be buried a hair inside the material.
  *
- *  The x axis is the cylinder's own axis, so a sketch drawn on the tangent plane
- *  has "along the shaft" as its horizontal. That is the only in-plane frame the
- *  geometry itself supplies, and it beats the generic world-+Z fallback for the
- *  one case where a better answer exists.
+ *  The x axis is the cylinder's own axis, so a sketch has "along the shaft" as its
+ *  horizontal — the only in-plane frame the geometry itself supplies.
  *
- *  `facing`, when given, decides which way the plane's normal points: away from
- *  the axis on a shaft, but TOWARD it on a bore, because the face's own normal
- *  points into the void there. Without it a datum on a hole wall would face into
- *  the material and its offset would run backwards — and it would disagree with
- *  the sidecar, which reads the same direction straight off the B-rep face.
- *  Where the plane SITS is unaffected: the touch point is computed from the
- *  geometric radial before any flip.
+ *  `facing` decides which way the normal points: away from the axis on a shaft, but
+ *  TOWARD it on a bore, where the face's own normal points into the void. Without
+ *  it a datum on a hole wall would face into the material, its offset would run
+ *  backwards, and it would disagree with the sidecar, which reads the direction
+ *  straight off the B-rep face. Where the plane SITS is unaffected.
  *
  *  Null on the axis itself, where "radially outward" has no meaning. */
 export function tangentPlaneOnCylinder(cyl: Cylinder, at: Vec3, facing?: Vec3): PlaneDef | null {

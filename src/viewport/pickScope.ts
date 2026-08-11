@@ -1,37 +1,23 @@
-// How much of the model ONE edge pick means, when that pick is about to become a
-// fillet or a chamfer.
+// How much of the model ONE edge pick means, when it is about to become a fillet
+// or a chamfer.
 //
 // A blend cannot terminate mid-tangency, so picking an edge normally drags its
-// whole tangent chain into the operation (see edgeFeatureTool.tangentChain, and
-// the note above it for why OCCT leaves no choice). That is right for the case
-// it was written for — the rim of a plate, where "this edge" plainly means the
-// rim — and wrong for the case that kept coming up: a user zoomed hard into one
-// corner, who means that corner and gets the entire perimeter of the part.
+// whole tangent chain in (see edgeFeatureTool.tangentChain). Right for the rim of
+// a plate; wrong for a user zoomed hard into one corner, who means that corner and
+// gets the whole perimeter. So a pick carries a SCOPE, from two things the user
+// already told us:
 //
-// So a pick carries a SCOPE now, decided here, from two things the user has
-// already told us without being asked:
+//   SHIFT — "exactly what I clicked". Explicit, so it beats everything else, and
+//   additive: shift-click builds the member set one edge at a time.
+//   ZOOM — nobody flies in to fill the screen with one corner and means the whole
+//   rim. A guess, so it is only ever the DEFAULT; members stay click-toggleable.
 //
-//   SHIFT — held while picking, it means "exactly what I clicked". It is an
-//   explicit instruction, so it beats everything else, and it is additive:
-//   shift-clicking edge after edge builds the member set one edge at a time.
+// Both zoom readings are RATIOS. An absolute distance would mean different things
+// on a 6mm cube and a 400mm plate, and the same part in inches would decide
+// differently from the same part in mm.
 //
-//   ZOOM — how close the camera is on the thing being picked. Nobody flies in to
-//   fill the screen with one corner and then means the whole rim. This is a
-//   guess, so it is only ever the DEFAULT: every member stays click-toggleable
-//   inside the tool, either way.
-//
-// Both zoom readings are deliberately RATIOS. An absolute world distance ("the
-// camera is within 20mm") would mean something different on a 6mm cube than on a
-// 400mm plate, and the same part modelled in inches would decide differently
-// from the same part modelled in mm. A ratio is the same number at every scale —
-// which is also what makes it something a test can pin down.
-//
-// Lives in the viewport layer, not with the edge tool, for the same reason
-// edgeMatch.ts does: it is about the camera, the pick and the selection, all of
-// which the viewport owns, and the viewport records the answer alongside the
-// edge selection it belongs to. Kept DOM/three-free so vitest covers it with no
-// canvas, camera or WebGL context — the pointer plumbing on both sides of it
-// cannot run headless, and this is the part that decides what the user gets.
+// DOM/three-free so vitest covers it with no canvas — the pointer plumbing on both
+// sides cannot run headless, and this is the part that decides what the user gets.
 
 /** What a pick means: the tangent chain through it, or exactly that edge. */
 export type PickScope = "chain" | "single";

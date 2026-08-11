@@ -1,22 +1,17 @@
-// The arithmetic behind the direct-manipulation edge gesture: turning a drag
-// along the handle's axis into a radius/distance, flipping between the two edge
-// treatments mid-gesture, and keeping the dragged number inside what the kernel
-// can plausibly build.
+// The arithmetic behind the direct-manipulation edge gesture: a drag along the
+// handle's axis into a radius/distance, the flip between the two edge treatments
+// mid-gesture, and the bounds that keep the number buildable.
 //
-// The drag is SIGNED, and that is the whole design: one axis carries both
-// treatments, with "nothing" at the origin between them. Drag the arrow the way
-// it points and you get a fillet whose radius is how far you dragged; keep
-// pulling back through the origin and the same travel becomes a chamfer's
-// setback; stop at the origin and there is no feature at all. Changing your mind
-// therefore costs a mouse movement rather than an abort and a restart — which is
-// what the earlier one-sided drag (floored at a snap step, so it could neither
-// reach zero nor cross it) forced on you.
+// The drag is SIGNED, and that is the design: one axis carries both treatments with
+// "nothing" at the origin between them. Drag the way the arrow points for a fillet,
+// keep pulling back through the origin and the same travel becomes a chamfer's
+// setback, stop at the origin and there is no feature. Changing your mind costs a
+// mouse movement rather than an abort and a restart — which is what the earlier
+// one-sided drag, floored at a snap step, forced on you.
 //
-// Split out of edgeFeatureTool.ts on purpose. The tool itself is pointer
-// plumbing — listeners, a Three.js gizmo, a sidecar preview — none of which can
-// run in the headless test suite. These functions are the part that can actually
-// be wrong in a way a user notices, so they live where vitest can reach them
-// with no viewport, camera or WebGL context.
+// Split out of edgeFeatureTool.ts because the tool is pointer plumbing that cannot
+// run headless, and these are the functions that can be wrong in a way a user
+// notices.
 
 import { snap } from "../ui/units";
 

@@ -1,31 +1,20 @@
 // The handle that appears the moment you select something you could pull.
+// Selecting used to be a dead end: the entity lit up and you were expected to know
+// some command would consume it.
 //
-// Selecting used to be a dead end: the entity lit up and you were expected to
-// know that some command — Fillet, Chamfer, Press/Pull — would consume the
-// selection. This puts the offer on screen instead: a handle standing off the
-// thing you just pointed at, saying "pull me".
+// Deliberately NOT a tool — it sets no toolBusy() (a passive affordance that
+// blocked every other command would be a mode nobody entered), does not touch
+// suspendPicking, and owns no value, preview or document state. Grabbing it hands
+// the gesture to the real tool, which owns all of that.
 //
-// It is deliberately NOT a tool:
-//
-//  - it does not set toolBusy(), because a passive affordance that blocked
-//    every other command would be a modal state the user never entered. You can
-//    select something and then do literally anything else.
-//  - it does not touch suspendPicking, so normal selection keeps working
-//    around it.
-//  - it owns no value, no preview and no document state. Grabbing it hands the
-//    gesture to the real tool, which owns all of that already; this file's
-//    entire job is to be visible and to be grabbable.
-//
-// One class serves every entity type, because the handle is the whole point:
-// pressing it arms a tool that mounts its OWN handle at the same anchor inside
-// the same pointerdown, and if the two are not literally the same glyph on the
-// same axis the handover is a visible jump that steers the drag somewhere the
-// user did not aim. Keeping edges and faces on one implementation is what makes
-// that guarantee cheap to hold. What differs between them — where the handle
-// stands, which way it points, which tool takes over — arrives as a placement.
+// One class serves every entity type. Pressing it arms a tool that mounts its OWN
+// handle at the same anchor inside the same pointerdown, and if the two are not
+// literally the same glyph on the same axis the handover is a visible jump that
+// steers the drag somewhere the user did not aim. What differs — where it stands,
+// which way it points, which tool takes over — arrives as a placement.
 //
 // Per-frame work stays out of Vue: the transform is written straight onto the
-// Three.js object in a rAF loop, the same way the tool gizmos do it.
+// Three.js object in a rAF loop, as the tool gizmos do.
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";

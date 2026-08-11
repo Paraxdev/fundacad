@@ -246,28 +246,23 @@ def _planar_face_normals(sh):
     return fmap, fnorm, em
 
 
-# Chord-deviation target for edge polylines, in MILLIMETRES, and the clamps
-# around it. Edges are what the user actually reads as "is this circle round?",
-# and they cost a few floats each in the JSON reply — far cheaper per unit of
-# perceived quality than triangles. The old fixed 24-segments-per-edge left a
-# 60mm circle 0.257mm off true, which is plainly visible zoomed in on a 1mm
-# fillet.
+# Chord-deviation target for edge polylines, in MILLIMETRES, plus clamps. Edges are
+# what the user reads as "is this circle round?" and cost a few floats each — far
+# cheaper per unit of perceived quality than triangles. The old fixed 24 segments
+# per edge left a 60mm circle 0.257mm off true.
 #
-# GCPnts_QuasiUniformDeflection hits this target almost exactly — measured on
-# the parts in this repo's bench, requesting 0.01 achieved a worst-case 0.00995
-# — so this constant IS the worst-case deviation, not a knob that merely
-# correlates with it. 0.01mm holds a 60mm circle under a pixel at any zoom
-# someone would inspect a fillet at (~0.75px at 20mm-across / 1500px), and it
-# also makes SMALL parts cheaper rather than dearer: a 6mm cube's 0.5mm fillet
-# arcs go from 848 points to 240, because deviation-based sampling stops
-# subdividing once an arc is already sub-micron.
+# GCPnts_QuasiUniformDeflection hits the target almost exactly (requesting 0.01
+# achieved a worst case of 0.00995), so this constant IS the worst-case deviation
+# rather than a knob correlating with it. 0.01mm holds a 60mm circle under a pixel
+# at any zoom someone would inspect a fillet at, and makes SMALL parts cheaper: a
+# 6mm cube's 0.5mm fillet arcs go 848 points -> 240, because deviation-based
+# sampling stops subdividing once an arc is already sub-micron.
 #
-# The clamps are belt and braces, not quality knobs: a curved edge always gets
-# at least _EDGE_MIN_SEG segments (a tiny arc still reads as an arc), and never
-# more than _EDGE_MAX_SEG, so a pathological spline can't hand the frontend an
-# unbounded point list. 512 covers a ~1m-diameter circle at the deflection
-# above; the worst real edge measured here needed 122. Both must stay EVEN, so
-# every clamped polyline also has an odd point count (see _sample_by_deflection).
+# The clamps are belt and braces, not quality knobs: a curved edge always gets at
+# least _EDGE_MIN_SEG segments and never more than _EDGE_MAX_SEG, so a pathological
+# spline cannot hand the frontend an unbounded point list. 512 covers a ~1m circle
+# at the deflection above; the worst real edge measured needed 122. Both must stay
+# EVEN, so every clamped polyline also has an odd point count.
 _EDGE_DEFLECTION = 0.01
 _EDGE_MIN_SEG = 4
 _EDGE_MAX_SEG = 512

@@ -1,41 +1,18 @@
 // How large a blend the geometry AROUND an edge can actually hold.
 //
-// The drag was previously bounded by one number for the whole document: a
-// quarter of the model's bounding-box diagonal (edgeDragMath.MAX_DIAGONAL_
-// FRACTION). That is a crude stand-in for the real constraint, and it is wrong
-// in both directions at once:
+// The drag used to be bounded by one number for the whole document — a quarter of
+// the model's bbox diagonal — which is wrong in both directions at once. A
+// 100x100x2 plate has a 141mm diagonal, so the drag reached a 35mm fillet on a 2mm
+// rim; on a chunky part the same fraction refused fillets the kernel would have
+// built. The real constraint is LOCAL: a blend fails when it runs out of face to
+// sit on, which is decided by what is near THIS edge.
 //
-//   too generous — a 100x100x2 plate has a 141mm diagonal, so the drag would
-//   happily reach a 35mm fillet on a 2mm rim. Every value past 1mm is a dead
-//   certainty of failure, and the user spends the drag watching a preview that
-//   cannot build. This is the "sometimes it overshoots" half.
+// Measured against EDGES, not faces. The sidecar has the real thing (edge-to-
+// nearest-non-touching-FACE via BRepExtrema, tools/gen_fillet_corpus.py) but it is
+// behind a round-trip and this number is needed live during a drag. Where the two
+// differ this reads SMALLER, which is the safe direction for a bound.
 //
-//   too tight — on a chunky part the same fraction stops well short of a fillet
-//   the kernel would have built without complaint, and the number simply refuses
-//   to grow. This is the "sensible fillets are denied" half.
-//
-// The constraint is LOCAL: a blend fails when it runs out of face to sit on,
-// which is decided by what is near THIS edge, not by how big the part is. So
-// measure that instead — the distance from the edge to the nearest bit of the
-// body that is not attached to it.
-//
-// Measured against EDGES rather than faces, and that is a deliberate
-// approximation. The sidecar has the real thing (tools/gen_fillet_corpus.py
-// `_clearance`, edge-to-nearest-non-touching-FACE via BRepExtrema) but it lives
-// behind a round-trip, and this number is needed the instant the selection
-// changes and must not stall a drag. The viewport already holds every edge as a
-// polyline, in memory, exactly. The two measures agree on the cases that decide
-// the bound anyway: a face's distance from an edge is realised somewhere on that
-// face, and on the geometry that actually constrains a blend — a thin wall, a
-// narrow rib, a shallow pocket — that somewhere is at or very near the face's
-// own boundary, which is an edge. Where they differ, this reads SMALLER (a face
-// can approach closer in its interior than its rim does), and erring small is
-// the safe direction for a bound.
-//
-// Kept free of THREE and of the DOM so vitest can reach it with no viewport,
-// camera or WebGL context — same reason edgeDragMath.ts and pickScope.ts are
-// split out. This is arithmetic that is either right or quietly ruins the
-// gesture, so it belongs where a test can pin it down.
+// No THREE, no DOM, so vitest reaches it with no viewport.
 
 export type Pt3 = readonly [number, number, number];
 
@@ -193,18 +170,13 @@ export function polylineDistance(
   return best === Infinity ? Infinity : Math.sqrt(best);
 }
 
-/** For a CLOSED edge, the blend's own turning radius as an upper bound — null
- *  for an open one, which has no such limit.
+/** For a CLOSED edge, the blend's own turning radius as an upper bound — null for
+ *  an open one.
  *
- *  A distance to the nearest neighbour misses this case entirely. The top rim of
- *  a tall thin cylinder is height/2 away from the bottom rim and so measures as
- *  roomy, but a fillet on that rim sweeps INWARD across the cap and runs out of
- *  cap at the axis: the real ceiling is the cylinder's radius, however tall it
- *  is. The sidecar's reference measure (tools/gen_fillet_corpus.py `_clearance`)
- *  caps circular edges the same way and for the same reason.
- *
- *  Half the largest bbox extent, which is exactly r for a circle and a fair
- *  reading of "how far in can this loop close" for anything else. */
+ *  Nearest-neighbour distance misses this entirely: the top rim of a tall thin
+ *  cylinder is height/2 from the bottom rim and measures as roomy, but a fillet on
+ *  it sweeps inward across the cap and runs out of cap at the axis. Half the
+ *  largest bbox extent — exactly r for a circle. */
 export function closedLoopRadius(points: readonly Pt3[]): number | null {
   if (points.length < 3) return null;
   const first = points[0];

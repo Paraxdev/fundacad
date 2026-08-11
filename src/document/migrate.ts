@@ -1,27 +1,17 @@
-// Load-time document migration to the current FORMAT_VERSION.
-// Mutates the parsed document in place and returns user-facing warnings.
-// Everything here is idempotent, so it can safely run on every load.
+// Load-time document migration to the current FORMAT_VERSION. Mutates the parsed
+// document in place and returns user-facing warnings. Idempotent, so it can run on
+// every load.
 //
-// v1 → v2 changes:
-//  - polygon.angle was stored in RADIANS (the lone outlier — every other angle
-//    field is degrees); v2 stores DEGREES.
-//  - dimension constraints gain a stable `id` ("c" prefix, sketch/id.ts).
-//  - bare parameter NAMES stored in numeric fields ("distance": "thickness")
-//    become model parameters (dN rows in `paramDefs` with a target binding) and
-//    the field is rewritten to the cached number — loss-free, same geometry.
-//  - plain user parameters get a paramDefs row (expr = the literal).
-//
-// v2 → v3: the "projected" sketch entity (linked reference geometry). A pure
-// ADDITION — no data rewrite, the stamp alone marks the format. Older builds
-// opening a v3 file hit the newer-version warning below and degrade gracefully
-// (unknown entity types are skipped, not crashed on).
-//
-// v3 → v4: the "offset" sketch constraint (the associative link the Offset tool
-// creates) and the sketch feature's `planeId` (a by-id datum-plane reference, so
-// an offset plane's distance stays editable instead of being baked into the
-// plane's origin). Both pure ADDITIONS — no data rewrite, the stamp alone marks
-// the format. `plane` is still written alongside `planeId` as a resolved cache,
-// so an older build opening a v4 file still places the sketch correctly.
+// v1 -> v2: polygon.angle was RADIANS (the lone outlier) and is now degrees;
+//   dimension constraints gain a stable `id`; bare parameter names stored in
+//   numeric fields become model parameters with the field rewritten to the cached
+//   number (loss-free); plain user parameters get a paramDefs row.
+// v2 -> v3: the "projected" sketch entity. Pure ADDITION — the stamp alone marks
+//   the format, and older builds skip unknown entity types rather than crashing.
+// v3 -> v4: the "offset" sketch constraint and the sketch feature's `planeId` (a
+//   by-id datum reference, so an offset plane's distance stays editable instead of
+//   being baked into the origin). Also pure additions; `plane` is still written
+//   alongside `planeId` as a resolved cache, so older builds still place the sketch.
 
 import type { CadDocument, ParamDef, ParamTarget } from "../types";
 import { FEATURE_NUM_FIELDS, RIGID_ENTITY_NUM_FIELDS, kindUnit } from "./numFields";

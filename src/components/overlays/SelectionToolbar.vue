@@ -1,42 +1,23 @@
 <script setup lang="ts">
-// The toolbar that follows the selection: the tools that can act on what you
-// just picked, floating just above it, gone the moment nothing is selected.
-//
-// It is the third answer to the same complaint the drag handle answers. Select
-// an edge and the app used to light it up and say nothing useful — you were
-// expected to know that Fillet and Chamfer, and only those two, would consume
-// it. The handle put ONE offer on the geometry (drag me). This puts the rest of
-// them where the geometry is, and takes the same care not to lie: the list is
+// The toolbar that follows the selection: the tools that can act on what you just
+// picked, floating just above it, gone the moment nothing is selected. The list is
 // derived from features/toolCapabilities.ts, so a tool that cannot act on this
-// selection is never on it, and a tool that can never has to be gone looking
-// for.
+// selection is never on it and one that can never has to be gone looking for.
 //
-// Like the handle (features/selectionNudge.ts) it is NOT a tool: it sets no
-// busy state, owns no document state, and clicking a button simply dispatches
-// the action the ribbon would have.
+// Like the drag handle (features/selectionNudge.ts) it is NOT a tool: no busy
+// state, no document state, and a button click dispatches the same action the
+// ribbon would.
 //
-// --- how it knows -----------------------------------------------------------
+// It knows by LOOKING once a frame, not by subscribing: onSelectionChange is a
+// single-slot callback already owned by app/viewportWiring.ts, and profile-area
+// selection notifies nothing at all. Polling covers the silent paths too — a
+// rebuild restoring a selection, a tool clearing one, Escape.
 //
-// By looking, once a frame, while something is selected — not by subscribing.
-// viewport.onSelectionChange is a single-slot callback field already owned by
-// app/viewportWiring.ts, and profile-area selection has no notification at all
-// (it lives on the sketch overlay, which tools mutate directly). Polling covers
-// all of it, including the paths that fire nothing: a rebuild restoring a
-// selection, a tool clearing one, Escape.
-//
-// The loop is bounded at both ends so this costs nothing when idle:
-//
-//   * it RUNS only while a selection exists, and stops itself the first frame
-//     the selection is empty;
-//   * it is WOKEN by the only four things that can create a selection — a
-//     pointer release, a key release, a document change and a build. Each of
-//     those schedules one frame; if that frame finds nothing selected, the loop
-//     ends there.
-//
-// Per frame it reads only the cheap accessors (getSelectedFaceIds is O(n) by
-// contract; the full selectedFacesForPressPull walks every triangle of every
-// selected face and is called ONLY when the selection's signature changes, which
-// is the same cost the drag handle already pays on the same event).
+// The loop costs nothing when idle: it runs only while a selection exists and
+// stops itself on the first empty frame, and it is woken only by the four things
+// that can create one (pointer release, key release, document change, build). Per
+// frame it reads the cheap accessors only; the triangle-walking
+// selectedFacesForPressPull runs only when the selection signature changes.
 
 import { computed, onMounted, onUnmounted, ref, shallowRef } from "vue";
 import * as THREE from "three";

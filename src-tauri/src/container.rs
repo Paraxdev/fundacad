@@ -1,42 +1,31 @@
 //! The `.sindri` container: a ZIP holding the document JSON plus the geometry it
 //! references by content hash.
 //!
-//! WHY THIS EXISTS. Geometry used to live *inside* the document as base64 ASCII
-//! BREP. On the reference 356 MiB STEP assembly that is 541.8 MiB of JSON — 4.2x
-//! over the 128 MiB websocket frame cap, and 6.4x over the 64 MiB embedded-BREP
-//! cap that is re-checked on every rebuild. Measured on that file: binary
-//! BinTools is 224.1 MiB and deflates to 83.5 MiB, and reloading from the blob
-//! takes 1.9 s against 189.0 s to re-import from STEP.
+//! Geometry used to live inside the document as base64 BREP. On the reference
+//! 356 MiB STEP assembly that is 541.8 MiB of JSON — 4.2x over the websocket frame
+//! cap. Binary BinTools is 224.1 MiB, deflates to 83.5 MiB, and reloads in 1.9 s
+//! against 189.0 s to re-import from STEP.
 //!
-//! WHY RUST OWNS IT, not the Python sidecar. `sidecar.rs` deliberately does not
-//! auto-respawn, so a dead sidecar is permanent for the session — a save routed
-//! through it would leave the user unable to save at all, with unsaved work in
-//! front of them. Saving needs no geometry: the document comes from the frontend
-//! and the blobs are already bytes on disk. Rust also already owns durable
-//! document persistence (`recovery_write` in lib.rs), so this sits next to it.
-//! This does NOT breach "Rust never touches geometry" — nothing here interprets
-//! a shape, exactly as printer.rs moves gcode and tinkeratlas.rs moves 3MF.
+//! RUST OWNS IT, not the sidecar: sidecar.rs deliberately does not auto-respawn, so
+//! a save routed through it would leave the user unable to save at all with unsaved
+//! work in front of them. Saving needs no geometry — the document comes from the
+//! frontend and the blobs are already bytes on disk. Nothing here interprets a
+//! shape, so "Rust never touches geometry" still holds.
 //!
-//! TWO RULES, both load-bearing rather than stylistic:
+//! TWO LOAD-BEARING RULES:
 //!
-//! 1. **Hash the STORED bytes once, at write time, and carry that hash.** Never
-//!    re-derive one by re-serialising a shape: `write(read(x)) != x` byte-wise
-//!    for BREP (reading rebuilds the shape graph in a different but equivalent
-//!    order), so a re-derived hash changes every generation and every lookup
-//!    would miss. The sidecar computes the hash when it first produces the bytes;
-//!    this module only ever carries or VERIFIES it.
+//! 1. **Hash the STORED bytes once, at write time.** `write(read(x)) != x` for BREP
+//!    (reading rebuilds the shape graph in an equivalent but different order), so a
+//!    re-derived hash changes every generation and every lookup would miss.
 //! 2. **Never use a name from inside the archive as a path.** Extracted blobs are
-//!    published under the hash we computed ourselves over the inflated bytes, so
-//!    zip-slip is structurally impossible rather than filtered.
-//!
-//! LAYOUT (entry order matters only for the first entry):
+//!    published under the hash we computed over the inflated bytes, so zip-slip is
+//!    structurally impossible rather than filtered.
 //!
 //! ```text
 //! manifest.json        STORED, first — readable without a decompressor
 //! document.json        DEFLATE — the CadDocument, carrying its own `version`
 //! geom/<hash>.bbrep    DEFLATE — binary OCCT BinTools; the NAME is the hash
-//! mesh/<key>.bin       DEFLATE(1) — packed f32/u32; optional by design, a
-//!                      reader that skips this section is still correct
+//! mesh/<key>.bin       DEFLATE(1) — packed f32/u32; optional, skippable
 //! ```
 
 use std::collections::BTreeMap;
@@ -101,22 +90,17 @@ pub struct Manifest {
 
 /// The durable blob store: content-addressed geometry, one file per hash.
 ///
-/// Under `app_data_dir()`, deliberately NOT `$XDG_CACHE_HOME`. `geomstore` lives
-/// in the cache and is free to reclaim: its `evict()` drops any blob with a
-/// refcount of 0, and `purge()` is wired to the Compute All button — a container
-/// blob living there would be deleted by a user pressing a button. The container
-/// is the source of truth for a user's geometry, so its blobs must be somewhere
-/// nothing sweeps.
+/// Under `app_data_dir()`, deliberately NOT the cache dir: geomstore's `evict()`
+/// drops any blob with refcount 0 and `purge()` is wired to the Compute All
+/// button, so a container blob there would be deleted by a button press.
 ///
-/// This directory is the SEAM between the two languages: Rust writes it when
-/// opening a container, the Python sidecar writes it at import time, and both
-/// read it. That is safe without any locking because the path is a pure function
-/// of the content hash — two writers racing on the same hash are writing
-/// byte-identical data, and each publishes via rename.
+/// This directory is the SEAM between the two languages — Rust writes it when
+/// opening a container, the sidecar writes it at import, both read it. Safe with no
+/// locking because the path is a pure function of the content hash: two writers
+/// racing on the same hash write byte-identical data, and each publishes by rename.
 ///
-/// Flat, not sharded like geomstore's `blobs/<key[:2]>/`: that store holds one
-/// blob per BODY (3,060 for the reference assembly), this one holds one per
-/// IMPORT FEATURE, so directory sizes stay in the hundreds.
+/// Flat, not sharded: geomstore holds one blob per BODY (3,060 for the reference
+/// assembly), this one holds one per IMPORT FEATURE.
 pub fn blob_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     let dir = app

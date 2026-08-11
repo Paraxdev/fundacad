@@ -29,26 +29,23 @@ _PROFILES = {"facet", "round"}
 # memory. server.py's EXPORT_DENSITY_CAP_PER_FACE is normally what applies.
 _DEFAULT_DENSITY_CAP = 2_000_000
 
-# Bump on ANY change to the displacement algorithm/output (subdivision, height
-# fields, normals, taper): it participates in the persistent mesh-cache key, so
-# a code update invalidates cached textured meshes instead of serving stale
-# geometry built by the previous version.
-# 5: crease-aligned lattices — vertices land ON the pattern's gradient
-#    breakpoints instead of a uniform grid, so faceted kinds are exact.
-# 6: seam-aware ring on closed faces — the UV-seam columns are densified with
-#    the lattice's own on-seam points (not uniform steps), and the lattice is
-#    no longer culled against them, so hex cells straddling the seam keep the
-#    corners their creases need (was: ~half the seam cells crushed by up to
-#    46% of depth, staggered by row).
-# 7: consistent triangle winding — lattice Delaunay orientation is arbitrary
-#    (measured: half a tube face wound inward), and a double-sided renderer
-#    negates the shading normal on back-wound triangles, lighting half the
-#    model inside-out; inconsistent winding also rides into STL/3MF exports.
-#    Windings now oriented to agree with the analytic normals.
+# Bump on ANY change to the displacement algorithm or output: it participates in the
+# persistent mesh-cache key, so a code update invalidates cached textured meshes
+# instead of serving stale geometry from the previous version.
+# 5: crease-aligned lattices — vertices land ON the pattern's gradient breakpoints
+#    instead of a uniform grid, so faceted kinds are exact.
+# 6: seam-aware ring on closed faces — UV-seam columns densified with the lattice's
+#    own on-seam points, and the lattice no longer culled against them, so hex cells
+#    straddling the seam keep their crease corners (was: ~half crushed by up to 46%
+#    of depth, staggered by row).
+# 7: consistent triangle winding — lattice Delaunay orientation is arbitrary (half a
+#    tube face wound inward), and a double-sided renderer negates the shading normal
+#    on back-wound triangles, lighting half the model inside-out; it also rode into
+#    STL/3MF exports. Now oriented to agree with the analytic normals.
 # 8: waves got its own faceted profile (a sine polyline). Under `facet` it had
-#    returned the same _trapezoid as ribs, so the two kinds were byte-identical
-#    for every user on the default profile; `sharpness` now picks its facet
-#    count instead of a land width. Existing waves documents change shape.
+#    returned the same _trapezoid as ribs, so the two were byte-identical on the
+#    default profile; `sharpness` now picks its facet count. Existing documents
+#    change shape.
 CODE_VERSION = 8
 
 
@@ -1028,25 +1025,21 @@ def _aligned_grid_triangulation(base_pts, base_uv, base_tris, u_mm, v_mm,
     rp_u = (P_mm[:, 0] + offset) * ca - P_mm[:, 1] * sa
     rp_v = (P_mm[:, 0] + offset) * sa + P_mm[:, 1] * ca
 
-    # DENSIFY THE BOUNDARY RING to the sample spacing. It used to be kept
-    # verbatim from the base triangulation, which on a real part means a handful
-    # of nodes: measured on a filleted body, 20 ring vertices with the longest
-    # edge 18mm against a 2mm pattern period. Along an edge like that the mesh
-    # has NO vertices to carry the pattern, so the strip between the rim and the
-    # first interior grid row comes out flat and smeared no matter how fine the
-    # interior is — the visible "band" around a textured face.
+    # DENSIFY THE BOUNDARY RING to the sample spacing. Kept verbatim from the base
+    # triangulation it is a handful of nodes — measured on a filleted body, 20 ring
+    # vertices with the longest edge 18mm against a 2mm pattern period. The mesh
+    # then has NO vertices along that edge to carry the pattern, so the strip
+    # between the rim and the first interior row comes out flat however fine the
+    # interior is: the visible "band" around a textured face.
     #
-    # With a lattice the ring additionally gets a vertex wherever a crease line
-    # CROSSES the boundary. Without those the rim band is the one place the mesh
-    # still cuts corners off the pattern, because the band is stitched by a
-    # Delaunay pass that has no reason to respect a crease it has no vertex on.
+    # With a lattice the ring also gets a vertex wherever a crease line CROSSES the
+    # boundary, since the band is stitched by a Delaunay pass that has no reason to
+    # respect a crease it has no vertex on.
     #
-    # The crack-free invariant is preserved either way: every new point is a
-    # linear interpolation along the EXISTING boundary polyline, so it lies
-    # exactly on the segment the neighbouring face spans (and this chart is
-    # affine — the fit_err check below enforces it — so lerping uv/xyz is exact,
-    # not an approximation). They are still boundary vertices, so the taper
-    # leaves them undisplaced and the seam stays flush.
+    # Crack-free either way: every new point is a linear interpolation along the
+    # EXISTING boundary polyline, so it lies exactly on the segment the neighbouring
+    # face spans (and this chart is affine — fit_err enforces it — so lerping uv/xyz
+    # is exact). They stay boundary vertices, so the taper leaves them undisplaced.
     base_uv0 = np.asarray(base_uv, dtype=np.float64)
     base_xyz0 = np.asarray(base_pts, dtype=np.float64)
     bnd_ids = np.unique(np.asarray(boundary, dtype=np.int64).ravel())

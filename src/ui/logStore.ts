@@ -1,23 +1,17 @@
 // The app's own log — every error, warning and notice, kept whole.
 //
-// It exists because the places an error currently surfaces all shorten it. A
-// toast is one line with `text-overflow: ellipsis`, and the title bar's status
-// pill is narrower still, so a sentence like "Fillet failed on Body1: Failed
-// creating a chamfer, try a smaller length value(s)" arrives as "Fillet failed
-// on Body1: Failed cr...". The part that got cut is the part that says what to
-// do about it — and for a geometry kernel that sentence is often the only
-// diagnosis anyone is going to get.
+// Every other place an error surfaces shortens it. A toast is one line with
+// text-overflow: ellipsis and the status pill is narrower still, so "Fillet failed
+// on Body1: Failed creating a chamfer, try a smaller length value(s)" arrives as
+// "Fillet failed on Body1: Failed cr..." — the part that got cut is the part that
+// says what to do, and for a geometry kernel that sentence is often the only
+// diagnosis anyone gets. Nothing here ever truncates, the panel wraps rather than
+// clips, and an entry can be copied verbatim.
 //
-// So messages land here in full, and nothing here ever truncates. The panel
-// wraps text rather than clipping it, and can copy an entry verbatim, because
-// the realistic next step after reading a kernel error is pasting it somewhere.
-//
-// Module-level rather than a Pinia store, and the same shape as ui/theme.ts and
-// ui/icons.ts: a value, a validating gate on the way in, and a listener set.
-// That is deliberate — logging has to work from places that have no component
-// and no active pinia (a window error handler, a worker callback, module
-// initialisation), and a store would make the earliest and most interesting
-// failures the ones it could not record.
+// Module-level rather than Pinia, same shape as ui/theme.ts and ui/icons.ts:
+// logging has to work from places with no component and no active pinia (a window
+// error handler, a worker callback, module initialisation), and a store would make
+// the earliest and most interesting failures the ones it could not record.
 
 export type LogLevel = "error" | "warning" | "info";
 

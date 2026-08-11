@@ -1,26 +1,18 @@
 // The press-and-hold gesture behind the tool rail's variant flyouts, as a state
 // machine with no DOM in it.
 //
-// Every rail button carries two meanings on the same pointer: press and let go
-// and you run the tool that is on the face; press and KEEP HOLDING and the
-// flyout of variants opens instead, and the tool you release over becomes both
-// the thing that runs and the button's new face. Those two readings of one
-// press are decided entirely by timing and by where the pointer comes up, which
-// is exactly the kind of rule that is obvious while you are writing it and
-// impossible to reason about three changes later — so it lives here as a pure
-// transition function rather than as a scatter of booleans across a component.
+// Every rail button carries two meanings on one pointer: press and let go runs the
+// tool on the face; press and KEEP HOLDING opens the flyout, and the tool you
+// release over both runs and becomes the new face.
 //
-// The failure this shape prevents is the one that makes a rail feel broken: a
-// hold that ALSO runs the default when you let go, so opening the Rectangle
-// flyout draws a rectangle you did not ask for. In this machine that cannot
-// happen, because opening leaves the `pressing` phase and only `pressing`
-// produces runDefault.
+// The failure this shape prevents is the one that makes a rail feel broken: a hold
+// that ALSO runs the default on release, so opening the Rectangle flyout draws a
+// rectangle you did not ask for. That cannot happen here, because opening leaves
+// the `pressing` phase and only `pressing` produces runDefault.
 //
-// Nothing here reads a clock. The component owns the timer and sends `hold`
-// when it fires; that keeps the whole rule set synchronous and testable, and it
-// means a timer that outlives its press (the classic source of a menu that pops
-// open a second after you clicked) is just an event arriving in a phase that
-// ignores it.
+// Nothing reads a clock — the component owns the timer and sends `hold` when it
+// fires. That keeps the rules synchronous and testable, and a timer that outlives
+// its press is just an event arriving in a phase that ignores it.
 
 /** How long the pointer must stay down before the flyout opens, in ms.
  *

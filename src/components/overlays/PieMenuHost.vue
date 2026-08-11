@@ -1,41 +1,28 @@
 <script setup lang="ts">
-// The pie menu on screen. Every rule about WHAT a gesture picked lives in
-// ui/pieMath.ts; this file is the plumbing between a pointer stream and those
-// rules — the same division LeftToolbar.vue keeps with ui/holdGesture.ts.
+// The pie menu on screen. Every rule about WHAT a gesture picked is in
+// ui/pieMath.ts; this is the plumbing from a pointer stream to those rules.
 //
-// The pointer bookkeeping that cannot move into the pure module, and why it is
-// here:
+// The pointer bookkeeping that cannot move into the pure module:
 //
-//   * Move and release are listened for on the WINDOW. A pie is aimed at by
-//     throwing the cursor somewhere — over the model, over the ribbon, off the
-//     window edge — and a gesture that only counted movement inside the wheel
-//     would be a wheel you had to stay inside, which is the rectangle-hover
-//     behaviour a pie exists to replace.
+//   * Move and release listen on the WINDOW. A pie is aimed at by throwing the
+//     cursor somewhere — over the model, the ribbon, off the window edge — and a
+//     gesture that only counted movement inside the wheel would be the
+//     rectangle-hover behaviour a pie exists to replace.
+//   * The DISMISSING pointerdown is bound one tick late (as ContextMenuHost does).
+//     When the pie is opened by a press, that press is still down and its release
+//     ends the flick; binding the press handler immediately would let the opening
+//     press dismiss the menu it just opened.
+//   * The cursor starts at the CENTRE, not the true pointer position. The wheel is
+//     nudged inward near a screen edge, so adopting that offset would arm an item
+//     nobody aimed at and let the opening click's release pick it.
 //
-//   * The DISMISSING pointerdown is bound one tick late, exactly as
-//     ContextMenuHost.vue binds its own. Move and release are bound
-//     immediately, because when the pie is opened by a press (the toolbar's pie
-//     button) that press is still down and its release is the end of the flick.
-//     Binding the press handler in the same breath would let the opening press
-//     dismiss the menu it just opened.
+// The backdrop swallows pointer events and exists only while the pie is up (v-if):
+// left in the DOM it would steal picks, and a click falling THROUGH would
+// re-select something mid-gesture, so the pie would run a tool against a selection
+// that changed between press and release.
 //
-//   * The cursor starts at the centre rather than at the true pointer position.
-//     The wheel is nudged inward when it opens near a screen edge, so "where
-//     the pointer is" and "where the middle of the wheel is" are not the same
-//     point, and adopting that offset immediately would arm an item nobody
-//     aimed at — and, worse, let the opening click's own release pick it.
-//     Nothing is armed until the user moves.
-//
-// The backdrop swallows pointer events while the pie is up, and exists at all
-// only while it is up (v-if, not a hidden element). Both halves matter: an
-// overlay left in the DOM would steal picks from the geometry behind it, and a
-// click that fell THROUGH to the viewport would re-select something mid-gesture
-// — the pie would then run a tool against a selection that changed between the
-// press and the release.
-//
-// Unlike the list menu, a pie holds no captured targets (no faceId, no body id,
-// no feature), so a rebuild underneath it cannot make it act on stale topology.
-// That is why nothing here subscribes to the document to dismiss itself.
+// A pie captures no targets (no faceId, no body, no feature), so a rebuild under it
+// cannot make it act on stale topology — hence nothing here watches the document.
 
 import { computed, onUnmounted, ref, watch } from "vue";
 import Icon from "../shell/Icon.vue";

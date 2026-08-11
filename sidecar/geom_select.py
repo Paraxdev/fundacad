@@ -58,13 +58,10 @@ from build123d import Axis, Vector, GeomType
 AXES = {"X": Axis.X, "Y": Axis.Y, "Z": Axis.Z}
 
 # --- tunable scoring constants -----------------------------------------------
-# These 13 numbers are the ONLY thing that governs how `by:"match"` scores
-# candidates; they are externalized to selector_tuning.json (next to this file)
-# so an optimization loop can tune them without editing resolver logic. The
-# hardcoded defaults below are authoritative fallbacks: if the JSON is missing a
-# key (or the whole file), the shipped behavior is unchanged. Values are applied
-# to module globals so the resolver body can keep referencing them by name; the
-# oracle overrides them per-experiment via configure().
+# The ONLY thing governing how `by:"match"` scores candidates. Externalized to
+# selector_tuning.json so an optimization loop can tune them without touching
+# resolver logic; the defaults below are authoritative fallbacks, so a missing key
+# (or the whole file) leaves shipped behaviour unchanged.
 #
 #   ANG_TOL      ~1.1deg of slack on (1 - |dot|) for dir/normal
 #   POS_DRIFT    mm of absolute positional drift budget (kernel disagreement)
@@ -72,14 +69,12 @@ AXES = {"X": Axis.X, "Y": Axis.Y, "Z": Axis.Z}
 #   LEN_REL_TOL  2% on length / radius
 #   AREA_REL_TOL 5% on area
 #   TIE_BAND     runner-up within 15% of best => a genuine tie (need nth)
-#   NEAREST_TIE_BAND  the same idea for by:"nearest", but on RAW DISTANCE rather
-#                than the weighted match cost — so it is far tighter. 15% apart
-#                in millimetres is a clear winner; what we must refuse is the
-#                degenerate case where two entities are indistinguishable by this
-#                metric at all (a point on a shared edge, or on a circle's axis
-#                where every point of the rim is equidistant). Measured on the
-#                real corpus: the references that silently flipped were EXACT
-#                ties (margin 0.0000), while legitimate picks cleared 2% easily.
+#   NEAREST_TIE_BAND  same idea for by:"nearest" but on RAW DISTANCE, so far
+#                tighter. What must be refused is the degenerate case where two
+#                entities are indistinguishable by this metric at all (a point on a
+#                shared edge, or on a circle's axis). On the real corpus the
+#                references that silently flipped were EXACT ties (margin 0.0000)
+#                while legitimate picks cleared 2% easily.
 #   ACCEPT_MAX   best cost above this => resolvable but marginal (lossy)
 #   W_*          scoring weights, per normalized error term
 #   W_RANK       penalty per rank step for concentric rims (scale-invariant)

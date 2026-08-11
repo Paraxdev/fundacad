@@ -262,23 +262,21 @@ def _rebuild_edge(edge, face, newsurf):
         a, b = b, a
 
     # A corner that no longer lands on the new surface is one of two completely
-    # different things, and the size of the gap is what tells them apart.
+    # different things, and the size of the gap tells them apart.
     #
-    # Round-off, if it is a millionth of the face: a section endpoint sits on an
-    # END pole, which no reweight moves, but it sits there through a pcurve
-    # value and a UV box that were each rounded once, so it can land a hair
-    # inside the arc — where the reweight does move it, by a hair times k. That
-    # is a tolerance, and OCCT already has the word for "the curves meet here,
-    # within this much": the vertex's own tolerance. Widen it and carry on,
+    # Round-off, at a millionth of the face: a section endpoint sits on an END pole,
+    # which no reweight moves, but it sits there through a pcurve value and a UV box
+    # that were each rounded once, so it can land a hair inside the arc — where the
+    # reweight does move it, by a hair times k. OCCT already has the word for "the
+    # curves meet here, within this much": the vertex's own tolerance. Widen it
     # rather than refusing a corner blend over a nanometre.
     #
-    # Otherwise the blend is being cut across its section by something that had
-    # to be re-intersected (see the module docstring), and no tolerance can
-    # honestly cover that — the same corner walks millimetres as the profile
-    # sweeps. Refuse by name, here where the measurement is in hand, instead of
-    # letting MakeEdge report a bare DifferentsPointAndParameter that explains
-    # none of it. The two are orders of magnitude apart in practice: measured
-    # 1e-6 of the face for round-off against 0.2 of it for a real cut.
+    # Otherwise the blend is being cut across its section by something re-intersected
+    # (see the module docstring), and no tolerance can honestly cover that — the same
+    # corner walks millimetres as the profile sweeps. Refuse by name here, where the
+    # measurement is in hand, instead of letting MakeEdge report a bare
+    # DifferentsPointAndParameter. Measured: 1e-6 of the face for round-off against
+    # 0.2 of it for a real cut.
     scale = _extent(newsurf)
     for v, p, q in ((v1, a, start), (v2, b, end)):
         gap = p.Distance(q)

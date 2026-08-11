@@ -1,30 +1,17 @@
-// The grid you draw on inside a sketch: a lattice on the sketch plane that
-// fades out with distance instead of ending at a border.
+// The grid you draw on inside a sketch: a lattice on the sketch plane that fades
+// out with distance instead of ending at a border.
 //
-// It replaces a fixed 400 mm / 80-division GridHelper, which had three problems
-// that are all the same problem — it did not know what scale you were working
-// at. Zoomed in it was one flat wash of lines; zoomed out it was a small bright
-// square floating in the middle of the part; and wherever it ended, it ended on
-// a hard edge that read as a boundary of something, which it was not.
-//
-// Three deliberate choices:
+// It replaces a fixed 400mm / 80-division GridHelper whose three problems were all
+// one problem — it did not know what scale you were working at.
 //
 //  - Spacing comes from niceStep, the same ui/units helper the world ground grid
-//    (viewport/scene.ts AdaptiveGrid) uses, at the same ~64 px target. The two
-//    grids are never on screen together — entering a sketch hides the ground
-//    grid — but they should behave identically when they swap, and neither
-//    should invent its own idea of a round number.
-//
-//  - It is floored at the SNAP step. A line you can see but cannot snap to is a
-//    lie, so the lattice never subdivides finer than the sketch's snap lattice;
-//    past that point zooming in just makes the same cells bigger. Every drawn
-//    line is a line the cursor will actually catch on.
-//
-//  - The fade is baked into vertex colours and the material is ADDITIVE, so
-//    shade 0 is genuinely invisible whatever is behind it. Fading to the
-//    background colour instead would leave dark ghost lines over the (dimmed)
-//    model, and per-vertex alpha would have the far ends of the grid still
-//    writing into the blend at 2 % for no visible gain.
+//    uses at the same ~64px target. The two are never on screen together, but they
+//    should behave identically when they swap.
+//  - Floored at the SNAP step. A line you can see but cannot snap to is a lie, so
+//    past that point zooming in just makes the same cells bigger.
+//  - The fade is baked into vertex colours with an ADDITIVE material, so shade 0 is
+//    genuinely invisible. Fading to the background colour would leave dark ghost
+//    lines over the dimmed model.
 
 import * as THREE from "three";
 import { niceStep } from "../ui/units";

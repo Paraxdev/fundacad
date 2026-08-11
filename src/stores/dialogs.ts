@@ -7,24 +7,22 @@ import type { TaUser } from "../tinkeratlas/client";
 import type { LogicalSlot, MappingResult } from "../print/printDialog";
 import type { ToolheadFilament } from "../print/printerClient";
 
-/** Open/closed state for the seven app-level dialogs that used to build their
- *  own DOM (welcome, 3D-mouse settings, sign-in, publish, bug report, filament
- *  mapping). Each exported opener in ui/ and tinkeratlas/ is now a facade over a
- *  field here; the markup lives in components/overlays/*.vue.
+/** Open/closed state for the seven app-level dialogs that used to build their own
+ *  DOM. Each exported opener in ui/ and tinkeratlas/ is now a facade over a field
+ *  here; the markup lives in components/overlays/*.vue.
  *
- *  Independent fields rather than one `activeDialog` discriminant, for the same
- *  reason panels.ts is: they legitimately stack. The welcome screen opens the
- *  sign-in dialog on top of itself (.choice-backdrop is z-index 4000, .modal-
- *  overlay 1000), and publish opens sign-in before its own form.
+ *  Independent fields rather than one `activeDialog` discriminant, because they
+ *  legitimately stack: the welcome screen opens sign-in on top of itself, and
+ *  publish opens sign-in before its own form.
  *
- *  The dialogs that gate global shortcuts do it in their component's
- *  onMounted/onUnmounted (composables/useModalGate.ts) — NOT here. A store field
- *  can be written from anywhere, including twice; a mount happens exactly once
- *  and its unmount cannot be forgotten, which is what the depth counter needs.
+ *  Dialogs that gate global shortcuts do it in their component's onMounted/
+ *  onUnmounted (composables/useModalGate.ts), NOT here — a store field can be
+ *  written from anywhere, including twice, while a mount happens exactly once and
+ *  its unmount cannot be forgotten.
  *
- *  markRaw everywhere a value lands here: every request holds a `resolve`
- *  closure, and welcomeCallbacks / bugDeps close over the whole engine graph
- *  (DocumentStore, Viewport, SketchMode). None of it may become a Proxy. */
+ *  markRaw everywhere a value lands here: every request holds a `resolve` closure,
+ *  and welcomeCallbacks / bugDeps close over the whole engine graph. None of it may
+ *  become a Proxy. */
 
 export interface SignInReq {
   resolve: (user: TaUser | null) => void;

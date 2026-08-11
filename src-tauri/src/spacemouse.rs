@@ -42,27 +42,20 @@ const USAGE_KEYBOARD: u16 = 0x06;
 /// Higher is better.
 ///
 /// Matching on vendor id ALONE was a real bug: 0x046d is Logitech's, shared with
-/// every mouse, keyboard and Unifying receiver they ship, and the old code took
-/// the first vendor match in enumeration order. On a machine with a Logitech
-/// mouse that either blamed the wrong device in the "can't read it" toast, or —
-/// worse — opened the mouse and fed its HID reports through as 6DOF motion.
+/// every mouse and receiver they ship, and the old code took the first vendor match
+/// in enumeration order — so on a machine with a Logitech mouse it either blamed
+/// the wrong device or opened the mouse and fed its reports through as 6DOF motion.
 ///
-/// Ranking rather than FILTERING is deliberate. Gating on a known-product-id list
-/// would reject a SpaceMouse Pro/Enterprise/Wireless whose id we never listed —
-/// devices that work today under the vendor match — so the vendor path is kept as
-/// a fallback and nothing that currently works regresses.
+/// Ranking rather than FILTERING is deliberate: a known-product-id list would
+/// reject a SpaceMouse Pro/Enterprise/Wireless whose id we never listed, which
+/// works today under the vendor match.
 ///
 /// A field report (0.1.85, Linux: "it think my logitech mx anywhere 3s is a space
-/// mouse ... any movement of the mouse rotate the world") showed the decoy check
-/// above was not enough, because it can only fire when the platform populated the
-/// usage. Two changes came out of it:
-///   * a vendor match whose usage IS known and is not multi-axis now scores
-///     `None`. That collection has told us what it is, and it is not a 6DOF
-///     controller, so there is nothing left to fall back FOR.
-///   * the remaining fallback — vendor match, usage unavailable — no longer
-///     streams on trust: `stream()` reads the device's own report descriptor
-///     after opening and drops it unless it declares Multi-axis. See
-///     `declares_multi_axis`.
+/// mouse") showed the decoy check was not enough, since it can only fire when the
+/// platform populated the usage. So a vendor match whose usage IS known and is not
+/// multi-axis now scores `None`, and the remaining fallback — vendor match, usage
+/// unavailable — no longer streams on trust: `stream()` reads the report descriptor
+/// after opening and drops the device unless it declares Multi-axis.
 fn rank(vendor_id: u16, usage_page: u16, usage: u16) -> Option<i32> {
     let multi_axis = usage_page == USAGE_PAGE_GENERIC_DESKTOP && usage == USAGE_MULTI_AXIS;
     let vendor = VENDORS.contains(&vendor_id);

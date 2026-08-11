@@ -1010,21 +1010,16 @@ export class EdgeFeatureTool {
 
   /** Keep the handle standing across an orbit.
    *
-   *  An edge handle's axis is defined against the CAMERA — perpendicular to the
-   *  edge and lying in the screen plane — so it is only right for the orbit it
-   *  was computed in. It used to be computed exactly once, when the tool armed,
-   *  and after that orbiting swung the camera around an axis that stayed put:
-   *  come round far enough and it pointed at the viewer, where a 52px blob
-   *  projects to nothing and reads as a squashed lump with no direction in it.
-   *  The PASSIVE handle recomputes every frame (selectionNudge), so the armed
-   *  tool was also drifting away from the handle it is supposed to be
-   *  indistinguishable from.
+   *  An edge handle's axis is defined against the CAMERA — perpendicular to the edge
+   *  and in the screen plane — so it is only right for the orbit it was computed in.
+   *  Computed once when the tool armed, it ended up pointing at the viewer after a
+   *  far enough orbit, where a 52px glyph projects to nothing. The PASSIVE handle
+   *  recomputes every frame, so the armed tool was also drifting away from the
+   *  handle it is supposed to be indistinguishable from.
    *
-   *  Not while a gesture is live, though. The axis is what the drag measures
-   *  along, and moving it under a hand that is already pressing would re-scale
-   *  travel already made — and it is what profileAt reads its angles against.
-   *  Mid-gesture only the DRAWN direction leans out of the view, which the
-   *  measurement never sees. */
+   *  Not while a gesture is live: the axis is what the drag measures along and what
+   *  profileAt reads its angles against, so moving it under a pressing hand would
+   *  re-scale travel already made. Mid-gesture only the DRAWN direction leans. */
   private refreshAxis() {
     if (!this.grabbing && !this.draggingArc) this.axis.copy(this.computeAxis());
     const cam = this.viewport.camera;

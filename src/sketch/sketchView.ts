@@ -60,26 +60,22 @@ export function outwardNormal(normal: Vec3, at: Vec3, inside: Vec3 | null): Vec3
   return dot(normal, out) < 0 ? [-normal[0], -normal[1], -normal[2]] : normal;
 }
 
-/** The sketch's +X axis for a plane with this normal — the one decision in the
- *  whole derivation that is genuinely free, and therefore the one that has to be
- *  nailed down.
+/** The sketch's +X axis for a plane with this normal — the one genuinely free
+ *  decision in the derivation, and therefore the one to nail down.
  *
- *  The rule: find the world axis the face most nearly FACES (the largest
- *  component of the normal), then take the next axis in the cyclic X→Y→Z order
- *  and project the normal out of it. On the cardinal faces that reproduces the
- *  bases people already expect — a +Z face gets u=+X, v=+Y (the XY plane), a +X
- *  face gets u=+Y, v=+Z (the YZ plane) — and everywhere else it varies smoothly
- *  with the normal.
+ *  Find the world axis the face most nearly FACES (largest normal component), take
+ *  the next axis in the cyclic X->Y->Z order, and project the normal out of it. On
+ *  the cardinal faces that reproduces the expected bases (+Z gets u=+X, v=+Y; +X
+ *  gets u=+Y, v=+Z) and elsewhere it varies smoothly with the normal.
  *
- *  What it deliberately does NOT read is the camera, the click point, or the
- *  previous invocation. Deriving u from anything but the normal is how a sketch
- *  ends up rotated differently each time you open it on the same face, which
- *  moves every stored coordinate in it. The only discontinuity left is an exact
- *  tie between two components — a face at 45° to two world axes — and the axis
- *  ORDER settles that, so even there the same normal always yields the same u.
+ *  It deliberately does NOT read the camera, the click point, or the previous
+ *  invocation: deriving u from anything but the normal is how a sketch ends up
+ *  rotated differently each time you open it on the same face, moving every stored
+ *  coordinate in it. The only discontinuity left is an exact tie between two
+ *  components, and the axis ORDER settles that.
  *
  *  Conditioning is free as a side effect: the chosen axis is never the dominant
- *  one, so |n·axis| ≤ 1/√2 and the projection can never collapse. */
+ *  one, so |n·axis| <= 1/sqrt(2) and the projection cannot collapse. */
 export function sketchXdir(normal: Vec3): Vec3 {
   const n = unit(normal) ?? FALLBACK_N;
   let dominant = 0;

@@ -1,26 +1,18 @@
-// The orientation wheel: eight ways to point the camera, laid out so the
-// direction you flick IS the direction you end up looking from.
+// The orientation wheel: eight ways to point the camera, laid out so the direction
+// you flick IS the direction you end up looking from. Every other way the app
+// offers to square up the view asks you to find a target and click it; here the
+// whole gesture is a wrist movement.
 //
-// This is the pie that earns the idiom. Every other way the app offers to
-// square up the view — the ViewCube's faces, the "Look" submenu, the command
-// palette — asks you to find a target and click it. Here the whole gesture is a
-// wrist movement: right-click empty space, flick up, you are looking down at the
-// part. After a day nobody reads these labels.
+// The spatial mapping is the point, so it is a rule rather than an accident of
+// declaration order: OPPOSITE DIRECTIONS CARRY OPPOSITE VIEWS. North/south are
+// Top/Bottom, west/east are Left/Right, north-west/south-east are Front/Back.
+// pieMath.SLOT_ORDER puts opposite slots in adjacent index pairs precisely so a
+// menu expresses that by declaring the pairs next to each other; viewPie.test.ts
+// holds it. Isometric and Fit are not directions, which is why they take the last
+// pair rather than displacing an axis that has one to express.
 //
-// The spatial mapping is the point, so it is stated as a rule rather than left
-// implicit in the declaration order: OPPOSITE DIRECTIONS CARRY OPPOSITE VIEWS.
-// Flick north for Top and south for Bottom, west for Left and east for Right,
-// north-west for Front and south-east for Back. pieMath.SLOT_ORDER puts
-// opposite slots in adjacent index pairs precisely so a menu can express that
-// by declaring the pairs next to each other, and viewPie.test.ts holds it.
-//
-// The last pair is the odd one out — Isometric and Fit are not directions —
-// which is why they take the last pair of slots rather than displacing an axis
-// that has a direction to express.
-//
-// Depends on a two-method shape rather than on Viewport so it can be built and
-// inspected with no WebGL context; the real caller passes the viewport straight
-// in.
+// Depends on a two-method shape rather than on Viewport, so it can be inspected
+// with no WebGL context.
 
 import type { PieRequest } from "./pieMenu";
 

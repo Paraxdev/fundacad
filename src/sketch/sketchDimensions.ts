@@ -1,20 +1,14 @@
-// Persistent, editable dimension annotations shown on committed sketch geometry
-// while in the sketch environment (MCAD-style). Each label is projected onto the
-// geometry; click it to type a new value (in the current display unit) and the
-// entity updates. This is the "edit the length later" half of the workflow — the
-// live W/H boxes handle it during creation.
+// Persistent, editable dimension annotations on committed sketch geometry. Each
+// label is projected onto the geometry; click it to type a new value in the current
+// display unit. This is the "edit the length later" half — the live W/H boxes handle
+// creation. The dimension set comes from entityDims(), shared with the inspector
+// and SketchMode.editDimension.
 //
-// The dimension set (which fields an entity has, where each label sits, the
-// value) comes from entityDims() so there's one source of truth shared with the
-// inspector and SketchMode.editDimension.
-//
-// This is now a FACADE. The labels are rendered by
-// components/overlays/SketchDimLayer.vue out of stores/sketchAnnotations.ts, and
-// the drag, the value editor and the per-frame reprojection live there — the
-// last of those deliberately OUTSIDE reactivity. What stays here is exactly the
-// surface SketchMode already talks to: the same four-argument constructor, the
-// same show/hide/setInteractive/clearSelection/deleteSelected, and the same four
-// hook fields. sketchMode.ts did not have to move a line.
+// Now a FACADE: the labels are rendered by components/overlays/SketchDimLayer.vue
+// out of stores/sketchAnnotations.ts, and the drag, value editor and per-frame
+// reprojection live there (the last deliberately outside reactivity). What stays is
+// exactly the surface SketchMode already talks to, so sketchMode.ts did not move a
+// line.
 
 import type * as THREE from "three";
 import { markRaw } from "vue";

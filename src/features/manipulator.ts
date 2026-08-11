@@ -1,9 +1,8 @@
-// Shared math and glyphs for interactive 3D manipulators (extrude / fillet /
-// chamfer / press-pull): mapping a cursor ray onto a drag axis to read a signed
-// scalar (a distance or radius in mm), and the handle you grab to do it.
-// Kept in one place so the tools don't each carry a copy — and, since the
-// passive selection handle hands its gesture over to the fillet/chamfer tool
-// mid-press, so the two handles are provably the same handle.
+// Shared math and glyphs for the interactive 3D manipulators (extrude, fillet,
+// chamfer, press-pull): cursor ray -> signed scalar along a drag axis, plus the
+// handle you grab to do it. Shared, not copied, because the passive selection
+// handle hands its gesture to the fillet/chamfer tool mid-press — the two must
+// be provably the same handle.
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";
@@ -26,13 +25,11 @@ export function distanceAlongAxis(
   return (e - b * d) / denom; // signed param along dir
 }
 
-/** Drag distance along a world axis for a cursor position — robust at EVERY
- *  view angle. The closest-point solution above degenerates when the camera
- *  looks down the axis (in an orthographic top view it returns a CONSTANT, so
- *  dragging a top-facing face did nothing at all). Near the degeneracy this
- *  projects the axis to screen space and measures the cursor along it; when
- *  the axis has no screen extent (pointing dead at the camera), vertical mouse
- *  motion drives it — up = toward the viewer. */
+/** Drag distance along a world axis, robust at every view angle. The closest-point
+ *  solution degenerates when the camera looks down the axis (orthographic top view
+ *  returns a CONSTANT), so near the degeneracy this measures the cursor along the
+ *  axis's screen projection; with no screen extent at all, vertical mouse motion
+ *  drives it, up = toward the viewer. */
 export function axisDragDistance(
   viewport: Viewport,
   clientX: number,
@@ -67,18 +64,10 @@ export const HANDLE_UP = new THREE.Vector3(0, 1, 0);
 
 /** Pick the sign of a drag axis so it points AWAY from the body.
  *
- *  `perp` is only defined up to a sign, and the cross product that produced it
- *  has no idea which side the material is on — so the handle used to stand
- *  outward or bury itself in the solid depending on nothing more than which way
- *  the camera happened to be facing. Comparing against the direction from the
- *  body's centre to the anchor settles it.
- *
- *  A centre-to-anchor test is exact for a convex body and right almost
- *  everywhere else; it only misreads deep inside a concave pocket, where "out"
- *  is genuinely ambiguous. The alternative — averaging the two adjacent face
- *  normals — needs adjacency the viewport does not carry, for a case this
- *  already handles.
- */
+ *  `perp` is only defined up to a sign, so the handle used to stand outward or
+ *  bury itself in the solid depending on where the camera happened to be.
+ *  Centre-to-anchor settles it: exact for a convex body, and only ambiguous deep
+ *  inside a concave pocket. */
 export function orientOutward(
   perp: THREE.Vector3,
   anchor: THREE.Vector3 | null,
@@ -90,19 +79,14 @@ export function orientOutward(
   return perp.dot(out) < 0 ? perp.negate() : perp;
 }
 
-/** Drag axis for a handle sitting ON an edge: perpendicular to the edge and
- *  lying in the screen plane, so the handle stands clear of the edge instead of
- *  vanishing into it — and, given `anchor` and the body `centre`, pointing out
- *  of the material rather than into it. Falls back to the camera's right vector
- *  when there is no tangent (a multi-edge pre-selection) or the edge points at
- *  the camera.
+/** Drag axis for a handle sitting ON an edge: perpendicular to the edge, in the
+ *  screen plane, pointing out of the material. Falls back to the camera's right
+ *  vector when there is no tangent (multi-edge pre-selection) or the edge points
+ *  at the camera.
  *
- *  Shared rather than duplicated because the passive selection handle and the
- *  armed tool must agree to the last digit: the handle is grabbed and the tool
- *  arms inside the SAME pointerdown, and an axis that differed by a hair would
- *  make the handle visibly jump — and steer the drag somewhere else — at the
- *  exact moment the user commits to the gesture. That is also why the outward
- *  flip lives here rather than in either caller. */
+ *  Shared because the passive handle and the armed tool must agree to the last
+ *  digit — both are computed inside the SAME pointerdown, and a hair of
+ *  difference makes the handle jump as the user commits. */
 export function edgeHandleAxis(
   viewport: Viewport,
   tangent: THREE.Vector3 | null,
@@ -121,26 +105,15 @@ export function edgeHandleAxis(
 }
 
 /** Orientation for a gizmo drawn FLAT AGAINST THE SCREEN: local +X along `axis`
- *  as the screen sees it, local +Y up the screen, local +Z out of it toward the
- *  camera. `fallbackRight` (the camera's own right) covers an axis pointing dead
- *  at the viewer, which has no screen direction to line up with.
+ *  as the screen sees it, +Y up the screen, +Z out of it. `fallbackRight` covers
+ *  an axis pointing dead at the viewer.
  *
- *  The obvious spelling of this is three cross products into makeBasis, and the
- *  obvious spelling is what the profile arc shipped with — `up = fwd x right`,
- *  with `-fwd` in the third column. That basis is LEFT-handed: `fwd x right`
- *  points DOWN the screen, so its determinant is -1. Quaternion.setFromRotation-
- *  Matrix assumes a proper rotation, and handed a reflection it returns a
- *  non-unit quaternion standing for some unrelated rotation — which Object3D
- *  then applies as a tilt AND a shrink. So the arc was drawn at an essentially
- *  arbitrary angle, near enough edge-on at most orbits to disappear. Its knob is
- *  a sphere and its readout a sprite, both orientation-blind, so those two went
- *  on looking correct while the only part of the control that had to be oriented
- *  collapsed to a stub.
- *
- *  Handedness is also what keeps a curved control's two halves agreeing. A hit
- *  test reads screen angles with atan2 about a flipped y — i.e. +Y up — so a
- *  mirrored basis sends the knob one way round its track while the cursor is
- *  read the other way. */
+ *  Must stay RIGHT-handed. The obvious `up = fwd x right` spelling has
+ *  determinant -1, and setFromRotationMatrix on a reflection returns a non-unit
+ *  quaternion for an unrelated rotation — Object3D then applies it as a tilt and
+ *  a shrink, which is how the profile arc shipped drawn edge-on. Hit tests also
+ *  read screen angles with atan2 about +Y, so a mirrored basis would send the
+ *  knob one way round its track while the cursor is read the other. */
 export function screenPlaneOrientation(
   forward: THREE.Vector3,
   axis: THREE.Vector3,
@@ -161,28 +134,20 @@ export function screenPlaneOrientation(
   );
 }
 
-/** The smallest share of a handle's length that has to survive projection, as
- *  the sine of the angle between its axis and the view direction. 0.4 leaves
- *  about 21px of the glyph's 52 and costs at most 24 degrees of lean — enough
- *  that it still reads as a body standing along a direction, little enough that
- *  the direction it reads as is still the one the drag runs along. */
+/** Smallest share of a handle's length that must survive projection, as the sine
+ *  of the angle to the view direction. 0.4 keeps ~21px of the glyph's 52 and
+ *  costs at most 24 degrees of lean. */
 export const MIN_SCREEN_AXIS = 0.4;
 
-/** The direction to DRAW a handle along when its own axis points at the camera.
+/** The direction to DRAW a handle along when its own axis points at the camera:
+ *  tipped back out of the screen until `minScreen` of it survives, keeping its
+ *  existing screen direction so an orbit makes it lean rather than snap.
+ *  Otherwise the 52px body projects to a 20px disc with no length to read or aim
+ *  at.
  *
- *  The glyph is a 52px body standing along an axis. Stand it along the view
- *  direction and it projects to a 20px disc: no length to read, no length to
- *  aim at, and no hint of which way the gesture runs — the "squashed lump" a
- *  handle becomes when the camera swings round behind its axis. This tips the
- *  axis back out of the screen until at least `minScreen` of it survives,
- *  keeping the screen direction it already had and the side of the camera it was
- *  already on, so a slow orbit makes the handle lean rather than snap.
- *
- *  For DRAWING only, never for measuring. A press/pull distance means nothing
- *  unless it is measured along the real face normal, and a fillet radius nothing
- *  unless measured along the real drag axis. Nothing is lost by the split:
- *  axisDragDistance already drives an axis this steep off vertical mouse travel
- *  rather than off the axis's (by then nonexistent) screen extent. */
+ *  For DRAWING only. A press/pull distance means nothing unless measured along
+ *  the real face normal, and axisDragDistance already handles a steep axis by
+ *  falling back to vertical mouse travel. */
 export function leanOutOfView(
   axis: THREE.Vector3,
   forward: THREE.Vector3,
@@ -208,23 +173,14 @@ export type FluentRelease = "commit" | "cancel" | "stay";
 
 /** Releasing the handle: commit, throw the gesture away, or stay armed.
  *
- *  A gesture that began on the PASSIVE selection handle is one press — press,
- *  drag, release, done. That is the entire point of the affordance, and leaving
- *  the tool armed afterwards would strand the user in a modal state they never
- *  opted into. A gesture that began on the tool's own gizmo is the classic
- *  flow and keeps its explicit commit.
+ *  A gesture begun on the PASSIVE selection handle is one press and ends done —
+ *  leaving the tool armed would strand the user in a mode they never opted into.
+ *  A gesture begun on the tool's own gizmo keeps its explicit commit.
  *
- *  Two cases inside the fluent one are easy to get wrong:
- *
- *  `moved` — a press that never travelled is not a drag. It must not commit a
- *  default value off a stray click on the handle, so it stays armed instead,
- *  which doubles as the way IN to the full tool from the handle.
- *
- *  `meaningful` — a drag that ended back at nothing (zero radius, zero
- *  distance) has nothing to commit. Staying armed would strand exactly the user
- *  who was trying to back out, so it cancels. The tools disagreed about this
- *  before it lived in one place: one cancelled, the other set a prompt and
- *  stayed. */
+ *  `moved`: a press that never travelled must not commit a default value, so it
+ *  stays armed — which doubles as the way in to the full tool.
+ *  `meaningful`: a drag that ended back at zero cancels, because staying armed
+ *  would strand exactly the user who was backing out. */
 export function fluentRelease(opts: {
   fluent: boolean;
   moved: boolean;
@@ -235,11 +191,8 @@ export function fluentRelease(opts: {
 }
 
 // --- the grab handle ------------------------------------------------------
-//
-// Painted from the app's own accent tokens rather than from a palette of its
-// own. Each theme runs a single accent (styles/_themes.scss) and the manipulator
-// is the most-looked-at thing on screen, so it is the last place that should be
-// carrying colours the chrome no longer uses.
+// Painted from the app's own accent tokens (styles/_themes.scss), not a private
+// palette: this is the most-looked-at thing on screen.
 
 // The literals are FALLBACKS, not the palette: each is read from its theme token
 // at paint time (viewport/themeColors.ts) so a manipulator can never be the one
@@ -279,21 +232,13 @@ export interface DragHandle {
   dispose(): void;
 }
 
-/** The lathe profile, as (radius, height) in PIXELS: a soft stem that swells
- *  into a fat rounded head.
+/** The lathe profile, as (radius, height) in PIXELS: a soft stem swelling into a
+ *  fat rounded head.
  *
- *  Deliberately NOT an arrow. Two reasons, one aesthetic and one behavioural:
- *
- *  An arrowhead promises a direction, and these handles no longer have one —
- *  the edge drag runs a fillet one way and a chamfer the other through zero,
- *  and press/pull adds one way and cuts the other. A symmetric head says "slide
- *  me along this line", which is what they actually do.
- *
- *  And a 1.6px shaft is a miserable target. The head is where the eye goes and
- *  where the cursor goes, so the glyph puts its mass there instead of spending
- *  it on a stalk. (The real fix for aiming is the grab volume below; this is
- *  what makes the drawn shape agree with it.)
- */
+ *  Deliberately not an arrow. An arrowhead promises a direction these handles do
+ *  not have — the edge drag runs a fillet one way and a chamfer the other through
+ *  zero. A symmetric head says "slide me along this line", and putting the mass at
+ *  the head rather than on a 1.6px stalk is where the eye and cursor go anyway. */
 const PROFILE: [number, number][] = [
   [0.0, 5.0], // sits off the surface so it never buries in the face it stands on
   [2.0, 5.4],
@@ -308,25 +253,19 @@ const PROFILE: [number, number][] = [
   [0.0, 45.0], // pole
 ];
 
-/** The drawn glyph's height in its own units — the profile's last y.
- *
- *  Read by handleScale, so the two cannot drift apart: if the profile is
- *  retuned, the size cap retunes with it rather than quietly capping against a
- *  length the shape no longer has. */
+/** The drawn glyph's height in its own units — the profile's last y. Read by
+ *  handleScale, so retuning the profile retunes the size cap with it. */
 export const HANDLE_LENGTH = 45;
 
 /** How far off the axis a press still counts as grabbing the handle, in pixels.
  *
- *  The whole point of the overhaul. The old handle was hit-tested against its
- *  own geometry, so grabbing it meant landing on a 1.6px shaft or a 5px cone —
- *  fine as a drawn mark, far too fine as a target, which is why it took careful
- *  aim. These proxies never draw; they only widen what counts as a hit. Three's
- *  raycaster tests layers and never `visible`, so an invisible mesh is still
- *  pickable — locked down by a test, since the whole affordance rests on it. */
-// Deliberately NOT slimmed along with the drawn profile above. These never
-// render, so a smaller one buys no visual restraint at all and spends the
-// aiming margin that was the entire reason they exist — the glyph may be
-// quieter than it was, but it must not become harder to grab.
+ *  The old handle was hit-tested against its own geometry — a 1.6px shaft or a 5px
+ *  cone — which is why it took careful aim. These proxies never draw; Three's
+ *  raycaster tests layers, not `visible`, so an invisible mesh is still pickable
+ *  (locked down by a test, since the affordance rests on it).
+ *
+ *  Deliberately NOT slimmed with the drawn profile: they never render, so a
+ *  smaller one buys no visual restraint and spends the aiming margin. */
 const GRAB_HEAD = 17;
 const GRAB_STEM = 11;
 
@@ -339,21 +278,14 @@ export const HANDLE_MODEL_FRACTION = 0.45;
  *  and it is better to let the handle look large than to make it unusable. */
 export const MIN_HANDLE_SCALE = 0.45;
 
-/** Multiplier on the usual constant-pixel scale, so the handle cannot dwarf the
- *  thing it is attached to.
+/** Multiplier on the constant-pixel scale, so the handle cannot dwarf what it is
+ *  attached to.
  *
- *  Constant SCREEN size is the right default — a handle that shrank with the
- *  model would become unaimable the moment you zoomed out, which is the whole
- *  reason gizmos are pixel-scaled. But it is only right while the model is the
- *  bigger of the two. Zoom out until the part is 60px across and a 45px handle
- *  is no longer a control ON an object, it is a balloon with an object hanging
- *  off it — which is exactly what it looks like.
- *
- *  So the pixel scale stands until the handle would exceed a fraction of the
- *  model's own on-screen size, and from there they shrink together. Returns 1
- *  when there is nothing to measure against: an empty document, or a reading the
- *  camera cannot produce. Never returns 0 — a handle scaled to nothing is a tool
- *  that has silently vanished. */
+ *  Constant SCREEN size is right while the model is the bigger of the two; zoom
+ *  out until the part is 60px across and a 45px handle is a balloon with an object
+ *  hanging off it. So the pixel scale stands until the handle would exceed a
+ *  fraction of the model's on-screen size, and from there they shrink together.
+ *  Returns 1 when there is nothing to measure against, never 0. */
 export function handleScale(
   modelDiagonal: number | null,
   pixelWorldSize: number | null,

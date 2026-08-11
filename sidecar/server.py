@@ -98,24 +98,20 @@ _ip_conns: dict[str, int] = {}
 # offset that collapses a hole); the timeout + worker recycling turns that into a
 # clean, recoverable error instead of a frozen app.
 JOB_TIMEOUT = 25.0
-# DOC_TIMEOUT (120 s) USED TO LIVE HERE, for the document-scaled ops that replay
-# the whole feature history: export, exportProject, interference,
-# projectGeometry. It is gone — those four are supervised by PROGRESS now (see
-# STALL_TIMEOUT below), which is what the roomier budget was really reaching for.
+# DOC_TIMEOUT (120 s) used to live here for the ops that replay the whole feature
+# history (export, exportProject, interference, projectGeometry). Gone — those four
+# are supervised by PROGRESS now (STALL_TIMEOUT below). A wall clock could not tell
+# a long build from a wedged one, and its failure was self-perpetuating: the timeout
+# recycled the worker, clearing the incremental cache, so every retry started cold
+# and hit the same wall.
 #
-# A wall clock could not tell a long build from a wedged one, and its failure was
-# self-perpetuating: the timeout recycled the worker, which cleared the
-# incremental cache, so every retry started cold and hit the same wall.
+# Safe only because the silent phases are short. On a 3,000-body assembly the
+# ticking rebuild is 10.2 s while the silent write is 2.8 s for a 48 MB STEP, 0.7 s
+# for STL, 0.1 s for a project 3MF. A future format with a longer silent write needs
+# ticks or its own stall=, not a return to wall clock.
 #
-# Safe to move ONLY because the silent phases in those jobs are short. Measured
-# on a 3,000-body assembly: the ticking rebuild is 10.2 s while the silent write
-# is 2.8 s for a 48 MB STEP, 0.7 s for STL, and 0.1 s for a project 3MF. If a
-# future format grows a write phase that can run past STALL_TIMEOUT without
-# ticking, it needs ticks or its own stall= — not a return to wall clock.
-#
-# The `import` op keeps its own size-derived wall-clock budget on purpose: OCP
-# holds the GIL for the whole of ReadFile+Transfer, so nothing can tick inside it
-# and there is no progress to supervise.
+# `import` keeps a size-derived wall-clock budget on purpose: OCP holds the GIL for
+# the whole of ReadFile+Transfer, so nothing can tick inside it.
 
 # Import phase labels and their share of the wall clock, measured on the 356 MiB
 # reference STEP: read+convert 90.6 s, canonicalize 93.9 s, encode 7.3 s.
@@ -504,74 +500,60 @@ def _prune_export_cache(live):
 # below) — the reference point our size-adaptive scaling is relative to.
 _DEFAULT_TOLERANCE = 0.1
 
-# The interactive viewport meshes with OCCT's RELATIVE deflection: the chord
-# tolerance is a fraction of each feature's own size rather than a fixed
-# millimetre figure, so a 1mm fillet gets a proportionally finer mesh than the
-# 60mm face it sits on — which is exactly where faceting is visible.
+# The interactive viewport meshes with OCCT's RELATIVE deflection: chord tolerance
+# as a fraction of each feature's own size, so a 1mm fillet gets a finer mesh than
+# the 60mm face it sits on — exactly where faceting is visible.
 #
-# EXPORTS DELIBERATELY STAY ABSOLUTE (_EXPORT_TOL above): a 3MF/STL for printing
-# needs a deterministic chord error in millimetres, not one that scales with the
-# part. That's why `relative` is a per-call argument on tessellate() and not a
-# module-level switch.
+# EXPORTS STAY ABSOLUTE (_EXPORT_TOL): a 3MF/STL for printing needs a deterministic
+# chord error in millimetres. Hence `relative` is a per-call argument, not a switch.
 #
-# 0.001 was picked by measuring the user's reported part (a 60mm ring, 5mm tall,
-# 1mm fillet) plus a 6mm cube, a 400mm plate and a sphere:
-#   * ring fillet surface deviation 0.152mm -> 0.080mm (-48%) for +22% triangles
-#     (6532 -> 7992) and +5ms. At MATCHED cost, absolute is worse: 0.03mm
-#     absolute gives 8472 triangles at 0.098mm — more triangles, coarser fillet.
-#   * 400mm plate: the 60mm hole goes 0.096mm -> 0.053mm while triangles go
-#     164 -> 216. Big parts get better AND stay cheap.
-#   * 6mm cube (0.5mm fillets): 628 -> 7428 triangles, 2.5 -> 12.0ms, fillet
-#     deviation 0.022mm -> 0.006mm. A 12x ratio, but a trivial absolute cost —
-#     and that convergence is the POINT of relative deflection: triangle count
-#     tracks feature complexity instead of part size.
-#   * bare sphere is the worst case (4002 -> 10108 triangles, 17 -> 55ms); a
-#     single all-curvature body is pathological and still well inside the
-#     stall supervisor's budget.
+# 0.001 was measured on a 60mm ring (5mm tall, 1mm fillet) plus a 6mm cube, a 400mm
+# plate and a sphere:
+#   * ring fillet deviation 0.152 -> 0.080mm (-48%) for +22% triangles and +5ms. At
+#     MATCHED cost absolute is worse: 0.03mm gives 8472 tris at 0.098mm.
+#   * 400mm plate: the 60mm hole goes 0.096 -> 0.053mm, triangles 164 -> 216.
+#   * 6mm cube: 628 -> 7428 tris, 2.5 -> 12.0ms, fillet deviation 0.022 -> 0.006mm.
+#     A 12x ratio at trivial absolute cost — triangle count tracking feature
+#     complexity instead of part size is the POINT of relative deflection.
+#   * bare sphere is the worst case (4002 -> 10108 tris, 17 -> 55ms), still well
+#     inside the stall supervisor's budget.
 _VIEWPORT_RELATIVE = True
 _DEFAULT_RELATIVE_DEFLECTION = 0.002
-# OCCT's ANGULAR deflection is what actually governs how faceted a fillet LOOKS:
-# it caps the turn between adjacent facets. The old 0.5 rad (28.6 degrees) let
-# the worst adjacent-facet angle on a 1mm fillet reach 47 degrees — visible
-# banding across the fillet band no matter how fine the linear term got (the
-# tessellation is anisotropic: plenty of divisions AROUND a ring, almost none
-# ACROSS the fillet, and only the angular term adds those).
+# OCCT's ANGULAR deflection governs how faceted a fillet LOOKS: it caps the turn
+# between adjacent facets. The old 0.5 rad let the worst adjacent-facet angle on a
+# 1mm fillet reach 47 degrees — visible banding however fine the linear term got,
+# because the tessellation is anisotropic (plenty of divisions AROUND a ring, almost
+# none ACROSS the fillet, and only the angular term adds those).
 #
-# Measured on a 60mm ring with a 1mm fillet, worst adjacent-facet angle /
-# whole-shape triangles / mesh time:
+# 60mm ring + 1mm fillet — worst angle / triangles / mesh time:
 #     lin 0.001 ang 0.50   47.38deg    7992 tris    7.9ms   <- old
 #     lin 0.001 ang 0.20   45.96deg   20284 tris   22.8ms
 #     lin 0.002 ang 0.18    5.14deg   10640 tris   11.0ms   <- chosen
 #     lin 0.002 ang 0.15    4.29deg   14784 tris   16.7ms
 #     lin 0.001 ang 0.10    2.86deg   33264 tris   47.9ms
-# 0.18 sits just past a sharp quality cliff (0.20 -> 0.18 drops 46deg to 5deg)
-# and buys a 9x smoother fillet for +33% triangles. Note the linear term must
-# NOT be over-tightened: lin 0.001 + ang 0.18 measures 45.96deg, WORSE than
-# lin 0.002 at the same angle — finer linear subdivision changes which
-# criterion OCCT applies. Re-measure this table before touching either number.
+# 0.18 sits just past a sharp cliff and buys a 9x smoother fillet for +33%
+# triangles. The linear term must NOT be over-tightened: lin 0.001 + ang 0.18 is
+# WORSE than lin 0.002 at the same angle, because finer linear subdivision changes
+# which criterion OCCT applies. Re-measure before touching either number.
 _VIEWPORT_ANG_TOL = 0.18
 
-# DOCUMENT-SIZE tolerance profile. A large assembly's rebuild reply has to fit
-# the 128 MiB websocket frame cap (a security control — see MAX_FRAME), and at
-# shipping quality it does not: measured on the 356 MiB reference assembly
-# (3,071 bodies), 0.002/0.18 yields 9,943,003 triangles and a 263.3 MiB reply
-# even after edge packing. 0.008/0.35 yields 3,809,240 and 121.1 MiB.
+# DOCUMENT-SIZE tolerance profile. A large assembly's reply has to fit the 128 MiB
+# frame cap (a security control — see MAX_FRAME) and at shipping quality it does
+# not: the 356 MiB reference assembly (3,071 bodies) yields 9,943,003 triangles and
+# 263.3 MiB at 0.002/0.18, against 3,809,240 and 121.1 MiB at 0.008/0.35.
 #
-# The LINEAR term alone cannot do this — 4x coarser cut only 13% of the
-# triangles, because the angular term is what binds. Re-measured on the same
-# 60mm ring + 1mm fillet the block above uses, worst adjacent-facet angle:
+# The LINEAR term alone cannot do this — 4x coarser cut only 13% of the triangles,
+# because the angular term binds. Same 60mm ring, worst adjacent-facet angle:
 #     lin 0.002 ang 0.18    5.14deg   10,640 tris   <- shipping
 #     lin 0.004 ang 0.26    7.35deg    5,488 tris
 #     lin 0.008 ang 0.35   10.04deg    2,880 tris   <- large-document tier
-# Note the block above's 45.96deg row is lin 0.001, NOT 0.002; coarsening the
-# ANGULAR term from 0.18 to 0.35 costs 5.14 -> 10.04deg, not the 47deg that
-# table reads as implying. Still a real regression, so it applies only where it
-# buys something: a document small enough to fit keeps full quality.
+# Coarsening the ANGULAR term costs 5.14 -> 10.04deg, not the 47deg the table above
+# reads as implying (that row is lin 0.001, not 0.002). Still a real regression, so
+# a document small enough to fit keeps full quality.
 #
-# Thresholds are anchored on the measured ~86 KiB/body of that assembly at
-# shipping quality (128 MiB / 86 KiB ~= 1,500 bodies). Body count is a PROXY —
-# bodies vary enormously in face count — so _rebuild_job also guards the encoded
-# reply against the cap rather than trusting this to be right.
+# Thresholds are anchored on the measured ~86 KiB/body at shipping quality. Body
+# count is a PROXY — bodies vary enormously in face count — so _rebuild_job also
+# guards the encoded reply against the cap rather than trusting this.
 _VIEWPORT_SIZE_TIERS = (
     # (bodies at or above, linear scale on _DEFAULT_RELATIVE_DEFLECTION, angular)
     (2200, 4.0, 0.35),

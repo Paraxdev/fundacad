@@ -1,27 +1,23 @@
 // Carrying a selection across a rebuild.
 //
-// A completed rebuild replaces the Highlighter, and with it every trace of what
-// was selected. That was tolerable while selecting an edge only lit it up, but
-// direct manipulation makes the selection a live control: the drag handle is
-// drawn FROM the selection, so losing it mid-gesture takes the handle with it.
-// Cancelling a fillet returned you to the sharp model with nothing selected and
-// no arrow — the geometry was back, the affordance was not.
+// A completed rebuild replaces the Highlighter and every trace of what was
+// selected. Tolerable while selecting only lit an edge up, but direct manipulation
+// makes the selection a live control: the drag handle is drawn FROM it, so
+// cancelling a fillet returned you to the sharp model with no arrow — the geometry
+// was back, the affordance was not.
 //
 // Two ways to find an entity again, in cost order:
 //
-//  1. It came through untouched. A body whose etag is unchanged is REUSED whole
-//     by setModel — the same BodyMesh, the same EdgeRef objects, the same faceId
-//     numbering. Nothing to search for; the old reference is still the right
-//     one. This is the overwhelmingly common case, because a rebuild usually
-//     touches one body out of however many exist.
-//  2. Its body was rebuilt. Ids are not stable across a rebuild (the client
-//     renumbers), so geometry is the only identity left: match by the same
-//     world-space point convention selectors already use. Correct, but each
-//     lookup walks the model.
+//  1. It came through untouched. A body whose etag is unchanged is REUSED whole by
+//     setModel — same BodyMesh, same EdgeRefs, same faceId numbering — so the old
+//     reference is still right. The common case, since a rebuild usually touches
+//     one body out of however many exist.
+//  2. Its body was rebuilt. Ids are not stable (the client renumbers), so geometry
+//     is the only identity left: match by the world-space point convention the
+//     selectors already use. Correct, but each lookup walks the model.
 //
-// The policy below is generic over the entity type so all of it — survivor
-// reuse, the fallback, the cap on the fallback, de-duplication — can be tested
-// without a scene, a camera or a GPU. viewport.ts supplies the two resolvers.
+// Generic over entity type so survivor reuse, the fallback, its cap and
+// de-duplication can all be tested with no scene, camera or GPU.
 
 /** Above this many entities needing the geometric fallback, drop them instead.
  *

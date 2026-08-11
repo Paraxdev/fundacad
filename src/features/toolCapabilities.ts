@@ -1,27 +1,19 @@
-// The single inventory of what each modeling tool can ACT ON: the kinds of
-// entity a tool consumes, and — read the other way — which tools a given
-// selection is actually able to feed.
-//
-// Same shape as document/numFields.ts, and for the same reason. That file is the
-// one place that knows which numeric fields a feature carries; this is the one
-// place that knows which entities a tool takes. Before it, the answer was spread
-// across four unrelated readers that each re-derived it from scratch: the
-// selection handle's ranking in app/viewportWiring.ts, the enable/disable rules
-// in the context menus, the "select a face first" refusals inside each starter,
-// and the tools themselves. They disagreed — a face selection offered Press/Pull
-// and nothing else, while Fillet, which can perfectly well round every edge of
-// that face, was reachable only by re-picking the edges by hand.
-//
-// Two directions, one table:
+// The single inventory of what each modeling tool can ACT ON: the kinds of entity a
+// tool consumes and, read the other way, which tools a selection can feed.
 //
 //   consumedKinds("fillet")      -> what can this tool consume?
 //   applicableTools({face: 1})   -> given this selection, which tools apply?
 //
-// It is a capability model, not a dispatcher: it says a face selection COULD
-// feed Fillet, never how Fillet gets from a face to the edges it blends (that is
-// edgeFeatureTool's job) and never whether the document is in a state where the
-// command would succeed. Keeping it to the one claim is what lets every caller
-// trust it.
+// Same shape as document/numFields.ts and for the same reason. The answer used to
+// be spread across four readers that each re-derived it — the handle ranking in
+// app/viewportWiring.ts, the context-menu enable rules, the "select a face first"
+// refusals inside each starter, and the tools themselves — and they disagreed: a
+// face selection offered Press/Pull and nothing else, while Fillet, which can
+// perfectly well round every edge of that face, needed the edges re-picked by hand.
+//
+// A capability model, not a dispatcher: it says a face COULD feed Fillet, never how
+// Fillet gets from a face to the edges it blends, and never whether the document is
+// in a state where the command would succeed.
 
 /** The kinds of thing a selection can hold.
  *

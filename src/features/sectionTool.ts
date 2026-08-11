@@ -1,22 +1,17 @@
-// Cross-section MODE (Inspect): a clipping plane you drag through the model to
-// see inside it, defined by a world axis, a face you click, or a datum plane.
+// Cross-section MODE (Inspect): a clipping plane you drag through the model, defined
+// by a world axis, a face you click, or a datum plane.
 //
-// Two things make it a mode rather than the one-shot it used to be.
+// It STAYS ON — orbit, select, fillet an edge you just exposed, and the cut is still
+// there. The view state lives on the Viewport (setSectionView) so it survives the
+// rebuilds those operations cause, and this file keeps no document state. While
+// another tool owns the gesture the handle and offset box get out of the way and
+// our keys go quiet, the same bargain selectionNudge.ts strikes: a passive
+// affordance that ate Escape would be a mode the user never entered.
 //
-// It STAYS ON. You can orbit, select, fillet an edge you just exposed, and the
-// cut is still there — the view state lives on the Viewport (setSectionView), so
-// it survives the rebuilds those operations cause, and this file keeps no
-// document state at all. While another tool owns the gesture the handle and the
-// offset box get out of the way and our keys go quiet: the same bargain
-// selectionNudge.ts strikes, for the same reason. A passive affordance that ate
-// Escape, or stood a second grabbable glyph next to a tool's own, would be a
-// modal state the user never entered.
-//
-// And what it cuts away does not VANISH — it goes faint. Watching half an
-// assembly disappear tells you nothing about where the half you are looking at
-// sits inside it; a ghost keeps that context and still lets you see in. The dial
-// runs from a strong ghost down to fully hidden, because a clean uncluttered cut
-// is often the right answer — and it was this tool's entire previous behaviour.
+// And what it cuts away goes faint rather than VANISHING — watching half an assembly
+// disappear tells you nothing about where the visible half sits inside it. The dial
+// runs down to fully hidden, because a clean uncluttered cut is often right and was
+// this tool's entire previous behaviour.
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";

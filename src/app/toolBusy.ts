@@ -1,24 +1,20 @@
 import { isChoiceOpen } from "../ui/choice";
 import type { Engine } from "./engine";
 
-/** Guard predicates checked at the top of every start* tool + interactive
- *  helper: they can't fire mid-sketch / mid-drag.
+/** Guard predicates checked at the top of every start* tool and interactive helper:
+ *  they can't fire mid-sketch / mid-drag.
  *
- *  Deliberately plain functions rather than reactive state. `toolBusy` is only
- *  ever read at event time (inside a start*, a viewport callback, a keydown) —
- *  nothing in the UI is *disabled* by it. Making it reactive would mean either
- *  polling eleven `.active` fields on plain class instances every frame, or
- *  bolting change-notification onto ten tool classes, for no present gain.
+ *  Plain functions rather than reactive state, deliberately. `toolBusy` is only read
+ *  at event time and nothing in the UI is disabled by it, so making it reactive
+ *  would mean polling eleven `.active` fields every frame or bolting
+ *  change-notification onto ten tool classes for no present gain.
  *
- *  Cross-section is the one entry that is NOT `.active`. It stopped being a
- *  one-shot and became a MODE you keep working inside — the cut stays while you
- *  orbit, select, and fillet an edge it just exposed — so counting it as busy
- *  made every command in the app return silently for as long as the section was
- *  up (the same dead-app symptom the stale `planePick` flag used to cause, and
- *  just as invisible: no error, nothing happens). Its modal half, `picking`,
- *  waits for the user to click the face to cut along and genuinely does own the
- *  gesture. The section stands its own handle down while another tool runs by
- *  reading this predicate back — see SectionTool's `toolBusy` dep. */
+ *  Cross-section is the one entry that is NOT `.active`. It became a MODE you keep
+ *  working inside, so counting it as busy made every command in the app return
+ *  silently for as long as the section was up — the same invisible dead-app symptom
+ *  the stale `planePick` flag used to cause. Its modal half, `picking`, genuinely
+ *  does own the gesture. The section stands its own handle down while another tool
+ *  runs by reading this predicate back. */
 export function createToolBusy(e: Engine): Pick<Engine, "toolBusy" | "hasBody"> {
   return {
     toolBusy: () => {

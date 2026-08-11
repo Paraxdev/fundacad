@@ -102,24 +102,17 @@ export interface MeshPartition {
   remap: Int32Array;
 }
 
-/** Bucket `result`'s triangles by owning body, in two passes over the model.
- *  Only bodies named in `rebuilding` get a list: a body whose etag is unchanged
- *  keeps its existing GPU objects and is never passed to buildBodyMesh, so
- *  bucketing its triangles would be pure waste.
+/** Bucket `result`'s triangles by owning body, in two passes. Only bodies named in
+ *  `rebuilding` get a list — an unchanged body keeps its GPU objects and is never
+ *  passed to buildBodyMesh.
  *
- *  `opts.range` restricts both passes to a slice of the triangle array, and
- *  `opts.remap` supplies a caller-owned scratch buffer instead of allocating
- *  one. Both exist for PROGRESSIVE loads, where the reply's arrays are
- *  allocated at full size but filled a chunk at a time:
- *
- *   - `range` is a CORRECTNESS requirement there, not a speed one. An unwritten
- *     slice is still zeros, and zero is a legitimate faceId — scanning it would
- *     attribute every not-yet-arrived triangle to whichever body owns face 0.
- *   - `remap` is the speed one: it is sized to the whole model, and
- *     buildBodyMesh hands it back clean, so allocating and re-filling one per
- *     chunk is exactly the O(chunks x model) cost this avoids.
- *
- *  Called without opts the behaviour is unchanged. */
+ *  `opts.range` and `opts.remap` exist for PROGRESSIVE loads, where the reply's
+ *  arrays are full-size but filled a chunk at a time. `range` is a CORRECTNESS
+ *  requirement there: an unwritten slice is still zeros, and zero is a legitimate
+ *  faceId, so scanning it would attribute every not-yet-arrived triangle to
+ *  whichever body owns face 0. `remap` is the speed one — a caller-owned scratch
+ *  buffer sized to the whole model, handed back clean, instead of O(chunks x model)
+ *  allocation. Without opts the behaviour is unchanged. */
 export function partitionMesh(
   result: RebuildResult,
   rebuilding: Iterable<string>,
@@ -269,21 +262,17 @@ export function buildBodyMesh(
     }
   }
 
-  // A textured face arrives fully de-indexed — 3 unique vertices per triangle,
-  // no sharing at all (measured 2.99 verts/tri on a hex texture: 149,950
-  // vertices for 50,074 triangles). That is how the sidecar delivers
-  // per-triangle normals for faceted shading. Weld the duplicates back
-  // together: same position, same normal, same face => same vertex.
+  // A textured face arrives fully de-indexed — 3 unique vertices per triangle
+  // (measured 2.99 verts/tri), which is how the sidecar delivers per-triangle
+  // normals for faceted shading. Weld the duplicates back together.
   //
-  // The key MUST include the faceId. Welding on position+normal alone would let
-  // two coplanar neighbouring faces share a vertex, and then hover-painting one
-  // face bleeds colour into the other — face colour is per-VERTEX here.
+  // The key MUST include the faceId: welding on position+normal alone would let two
+  // coplanar neighbours share a vertex, and face colour is per-VERTEX here, so
+  // hover-painting one would bleed into the other.
   //
-  // Triangle ORDER is untouched, so `localFaceIds` and the `faceTriangles` map
-  // built below stay valid; only vertex numbering changes. Only runs when the
-  // sidecar shipped normals (i.e. a textured body) — everything else already
-  // arrives well-shared at ~1.02 verts/tri, and welding it would change what
-  // computeVertexNormals averages over.
+  // Triangle ORDER is untouched, so localFaceIds and faceTriangles stay valid. Only
+  // runs when the sidecar shipped normals — everything else arrives at ~1.02
+  // verts/tri and welding would change what computeVertexNormals averages over.
   let posOut = localPositions;
   let nrmOut = localNormals;
   if (anyNormal && localIndices.length) {
@@ -399,35 +388,21 @@ export function faceIdOfHit(hit: THREE.Intersection): number {
   return owner?.faceIds[hit.faceIndex ?? 0] ?? 0;
 }
 
-/** The faint second pass that makes cross-section mode readable: what the cut
- *  takes away, drawn again at low alpha instead of simply not being there.
+/** The faint second pass that makes cross-section mode readable: what the cut takes
+ *  away, drawn again at low alpha instead of simply not being there. A hard clip
+ *  answers "what is inside this part" and destroys the answer to "where inside it
+ *  am I looking". Each ghost SHARES its body's geometry (no copy, no upload) and
+ *  carries the mirrored clip plane.
  *
- *  A hard clip alone answers "what is inside this part" and destroys the answer
- *  to "where inside it am I looking" — half an assembly vanishes and the half
- *  left has nothing to sit in. So the cut-away half is drawn a second time, by a
- *  per-body mesh that SHARES the body's geometry (no copy, no upload) and
- *  carries the mirrored clip plane, i.e. keeps exactly what the body's own
- *  material throws away.
+ *  The three material settings are load-bearing: depthWrite OFF so several ghosts
+ *  read through each other; DoubleSide because a cut leaves open shells and culling
+ *  back faces would leave a hollow outline; ONE material recreated per mount rather
+ *  than cached, because disposeBody's traversal disposes whatever it finds, so a
+ *  rebuild replacing one body has already disposed every other ghost's material.
  *
- *  The three material settings are each load-bearing:
- *
- *  · depthWrite OFF, so several ghosted bodies read through each other. A ghost
- *    that occluded the ghost behind it would hide most of the context the pass
- *    exists to provide.
- *  · DoubleSide, because a cut leaves open shells — the inside of the far half
- *    is back faces, and culling them would leave a hollow outline.
- *  · ONE material shared by every ghost, recreated on each mount rather than
- *    cached: a ghost hangs off a body mesh and disposeBody's traversal disposes
- *    whatever it finds on the way down, so a rebuild that replaced one body has
- *    already disposed the material every OTHER body's ghost is wearing.
- *
- *  At alpha 0 nothing is built at all — "hidden" then costs no draw call rather
- *  than a fully transparent pass over the whole model, which is what keeps the
- *  clean uncluttered cut (the tool's entire previous behaviour) free.
- *
- *  The ghosts are CHILDREN of the body meshes: that is what makes them inherit a
- *  move-ghost's live transform and disappear with a body that is hidden or
- *  replaced, without this pass having to track any of it. */
+ *  At alpha 0 nothing is built at all, which keeps the clean uncluttered cut free.
+ *  Ghosts are CHILDREN of the body meshes, so they inherit a move-ghost's live
+ *  transform and vanish with a hidden or replaced body for free. */
 export function buildSectionGhosts(
   bodies: BodyMesh[],
   plane: THREE.Plane,

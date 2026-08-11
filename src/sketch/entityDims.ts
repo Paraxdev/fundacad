@@ -140,28 +140,23 @@ export function diameterDim(
   };
 }
 
-/** Default badge placements that a single entity can't work out on its own,
- *  because they depend on its NEIGHBOURS.
+/** Default badge placements a single entity can't work out alone, because they
+ *  depend on its NEIGHBOURS.
  *
- *  The case that matters: concentric circles. Each one puts its diameter badge
- *  straight above the shared centre by default, so a 60 mm and a 34 mm circle
- *  drawn about the same point land their labels ~9 px apart and neither is
- *  readable — and the top one swallows the other's click. Concentric groups of
- *  2+ therefore fan out, 90° apart, each label MIDWAY BETWEEN ITS OWN RIM AND
- *  THE NEXT ONE IN (the centre, for the innermost): every label then sits in the
- *  annular band its own circle owns, so no label can land on another circle's
- *  rim — which matters because a badge that lands on geometry hands its clicks
- *  to that geometry (SketchDimensions.onOverlapPick). A lone circle is
- *  untouched: it keeps the historical straight-above default.
+ *  The case that matters is concentric circles: each puts its diameter badge above
+ *  the shared centre, so a 60mm and a 34mm circle land their labels ~9px apart,
+ *  neither readable, and the top one swallows the other's click. Groups of 2+ fan
+ *  out 90 degrees apart, each label MIDWAY BETWEEN ITS OWN RIM AND THE NEXT ONE IN
+ *  (the centre, for the innermost), so every label sits in the annular band its own
+ *  circle owns and none can land on another circle's rim — which matters because a
+ *  badge on geometry hands its clicks to that geometry. A lone circle keeps the
+ *  historical straight-above default.
  *
- *  These are DEFAULTS. A user placement (entity.dimPlace, set by dragging the
- *  label) always wins — see placeOf. Callers that render a whole entity SET pass
- *  the result to entityDims; single-entity callers (the inspector, the value
- *  writers) don't need it, since it only moves labels.
+ *  These are DEFAULTS; a user placement (entity.dimPlace) always wins, see placeOf.
  *
- *  "Concentric" is judged with the same screen-space clearance the badges use,
- *  so near-concentric circles — which stack just as badly at that zoom — fan out
- *  too; with no zoom context (unit tests, inspector) it falls back to exact. */
+ *  "Concentric" is judged with the same screen-space clearance the badges use, so
+ *  near-concentric circles fan out too; with no zoom context it falls back to
+ *  exact. */
 export function staggeredDefaults(ents: ResolvedEntity[]): Map<string, DimPlace> {
   const tol = Math.max(dimOffset(0), 1e-9);
   const groups: ResolvedEntity[][] = [];

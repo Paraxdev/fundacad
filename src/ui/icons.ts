@@ -1,26 +1,17 @@
-// Minimal stroke icons (24×24, currentColor) for the whole app — ribbon,
-// browser tree, timeline, modals, panels. Each entry is the INNER SVG markup;
-// Icon.vue and iconElement() wrap it in the <svg> that carries the shared
-// viewBox / stroke / linecap so no single icon can drift off the house weight.
+// Minimal stroke icons (24x24, currentColor) for the whole app. Each entry is the
+// INNER SVG markup; Icon.vue and iconElement() wrap it in the <svg> carrying the
+// shared viewBox / stroke / linecap so no icon can drift off the house weight.
 //
-// Everything here is a compile-time string constant. That is not a style note,
-// it is the security invariant: the markup reaches the DOM through v-html /
-// innerHTML, and it is only safe to do that because no document data, file name
-// or network payload can ever be interpolated into this table. See
-// components/vHtmlPolicy.test.ts, which enforces the Vue half.
+// Everything here is a compile-time string constant. That is the security
+// invariant, not a style note: this markup reaches the DOM through v-html, and it
+// is only safe because no document data, file name or network payload can ever be
+// interpolated into this table. tests/components/vHtmlPolicy.test.ts enforces the
+// Vue half.
 //
-// --- why packs -------------------------------------------------------------
-//
-// The set below is one visual voice: hairline strokes, open counters, nothing
-// filled that doesn't have to be. That is a taste call, and taste calls in a
-// tool people stare at for eight hours are exactly the ones worth making
-// swappable. A pack is a whole named table; the user picks one, and any name
-// the chosen pack doesn't define resolves against the default pack instead.
-//
-// The fallback is what makes a pack cheap to write. A variant does NOT have to
-// redraw all ~120 marks to be usable — it redraws the ones whose weight it
-// actually wants to change and inherits the rest, so a half-finished pack is a
-// legitimate pack rather than a screen full of holes.
+// A pack is a whole named table; the user picks one, and any name the chosen pack
+// does not define resolves against the default pack. That fallback is what makes a
+// pack cheap to write — a variant redraws only the marks whose weight it wants to
+// change, so a half-finished pack is legitimate rather than a screen full of holes.
 
 /** A named, self-contained icon table. `paths` maps a semantic icon name to the
  *  inner SVG markup drawn inside the shared 24×24 stroke wrapper. */

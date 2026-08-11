@@ -2,21 +2,16 @@ import { ref, watch, type Ref } from "vue";
 
 /** An uncontrolled input whose value tracks a source EXCEPT while it has focus.
  *
- *  This replaces liveInputs.ts's `keystrokeGuard`, which wrapped a panel's whole
- *  re-render so an async commit landing mid-edit could not wipe the <input> the
- *  user was typing in.
- *
- *  Vue only solves half of that problem. Keyed patching does stop the element
- *  from being DESTROYED and recreated — that part of keystrokeGuard is genuinely
- *  obsolete. But a `:value` binding still re-fires when the document changes,
- *  which clobbers uncommitted keystrokes just as thoroughly. Parameter commits
- *  are queued on a promise chain in the store and land asynchronously, so this
- *  is not hypothetical.
+ *  Replaces liveInputs.ts's `keystrokeGuard`. Vue solves half the problem: keyed
+ *  patching stops the element being destroyed and recreated, but a `:value` binding
+ *  still re-fires when the document changes and clobbers uncommitted keystrokes just
+ *  as thoroughly. Parameter commits are queued on a promise chain and land
+ *  asynchronously, so this is not hypothetical.
  *
  *  Focus is the right guard HERE (unlike in keystrokeGuard, whose comment warns
- *  focus alone is wrong) because the scope is one input rather than a whole
- *  panel: if this specific field has focus, the user is editing this specific
- *  value, and the incoming update is by definition staler than what they typed. */
+ *  focus alone is wrong) because the scope is one input rather than a whole panel:
+ *  if this field has focus the user is editing this value, and the incoming update
+ *  is by definition staler than what they typed. */
 export function useDraft(
   source: () => string,
   /** The input this draft belongs to — the caller owns the template ref so it

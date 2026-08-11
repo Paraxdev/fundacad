@@ -1,29 +1,20 @@
-// The left tool rail's content: which of the existing tools are really ONE tool
-// with several ways of starting it, which of those is currently on the button,
-// and where that choice is remembered.
+// The left tool rail: which existing tools are really ONE tool with several ways
+// of starting it, which is currently on the button, and where that is remembered.
 //
-// There is no second registry of tools here, on purpose — only lists of action
-// ids that are resolved against ribbonDefs at call time. A rail that carried its
-// own labels and icons would be a copy of the ribbon that nobody re-checks: the
-// day someone renames "Center Rect" the ribbon changes and the rail keeps the
-// old name. Resolving instead means a tool the ribbon no longer has simply drops
-// out of its group (see resolveRail) rather than becoming a button that
-// dispatches an action the app has never heard of.
+// No second registry of tools — only action ids resolved against ribbonDefs at
+// call time. A rail carrying its own labels would be a copy of the ribbon nobody
+// re-checks; resolving means a tool the ribbon no longer has drops out of its
+// group rather than becoming a button that dispatches an unknown action.
 //
-// --- what counts as a variant -------------------------------------------------
+// A variant is only a tool producing THE SAME KIND OF THING by a different
+// construction (rectangle from a corner or its centre; corner rounded or cut).
+// Tools that merely sit next to each other in the ribbon stay on their own
+// buttons — folding them together hides a tool behind a gesture nobody would think
+// to perform on it. Where the ribbon already answered this with a split button,
+// that grouping is reused rather than re-litigated.
 //
-// Only tools that produce THE SAME KIND OF THING by a different construction —
-// a rectangle from a corner or from its centre, a circle from centre/2 points/3
-// points, a corner rounded or cut. Tools that merely live next to each other in
-// the ribbon are not variants and stay on their own buttons, because folding
-// them together would hide a tool behind a gesture that nobody would think to
-// perform on it. Where the ribbon already answered this question with a split
-// button (Revolve/Loft/Sweep, Move/Scale/Mirror/Pattern, Shell/Draft/…), the
-// same grouping is reused rather than re-litigated.
-//
-// The rail is icon-only and deliberately short: it is the PRIMARY tool surface,
-// not a mirror of the ribbon. Import/export, print and the parameter editor are
-// reachable from the ribbon and the menus and are not repeated here.
+// Icon-only and deliberately short: this is the PRIMARY tool surface, not a mirror
+// of the ribbon.
 
 import { MODEL, SKETCH, leavesOf } from "./ribbonDefs";
 import type { Group, RibbonContext, ToolItem } from "./ribbonDefs";
@@ -192,16 +183,12 @@ export function hasVariants(group: RailGroup): boolean {
 
 // --- the remembered variant per group, as a user setting ---------------------
 //
-// Persisted the way every other display preference in this app is (ui/theme.ts,
-// ui/icons.ts, ui/units.ts): one `sindricad.*` localStorage key read once at
-// module load, a validating gate on the way in, and a listener set so the live
-// rail re-renders instead of waiting for a reload. A second mechanism for the
-// same job is a second thing to keep in step.
+// Persisted like every other display preference (ui/theme.ts, icons.ts, units.ts):
+// one `sindricad.*` localStorage key read at module load, a validating gate, and a
+// listener set so the live rail re-renders.
 //
-// The one difference from theme.ts is the shape of the gate. A theme id is a
-// single value and an invalid one is simply refused; this is a MAP, and one
-// unreadable entry must not cost the user every other choice they have made —
-// so the gate sanitises per entry and keeps the rest.
+// Unlike theme.ts this is a MAP, so the gate sanitises PER ENTRY — one unreadable
+// entry must not cost the user every other choice they have made.
 
 const KEY = "sindricad.railDefaults";
 

@@ -1,35 +1,21 @@
-// The geometry of a radial (pie) menu, and the rules that decide what a gesture
-// picked. No DOM, no Vue, no clock — same split, and for the same reason, as
-// ui/holdGesture.ts: the component owns the pointer stream and the pixels, and
-// everything that is either right or quietly ruins the gesture lives here where
-// a test can pin it down.
+// The geometry of a radial (pie) menu, and what a gesture picked. No DOM, no Vue,
+// no clock — same split as ui/holdGesture.ts.
 //
-// A pie menu is not a list drawn in a circle. The choice is the DIRECTION you
-// move, and the whole value of that is muscle memory — after a week the user is
-// not reading the labels, they are flicking left for Fillet. Three properties
-// have to hold for that to be true, and each of them is a decision this file
-// makes rather than a detail a renderer stumbles into:
+// A pie menu is not a list drawn in a circle: the choice is the DIRECTION you
+// move, and the value of that is muscle memory. Three properties make that true:
 //
-//   1. STABLE ANGLES. Item i of a given menu sits at the same angle whatever
-//      else the menu contains. That is why the slots are a fixed sequence that
-//      gets FILLED, never a circle that gets divided: dividing 2π by the item
-//      count means adding a seventh entry silently moves the other six, and
-//      every flick the user had learned now lands somewhere else. A short menu
-//      leaves slots empty instead. Empty space is cheap; relearning is not.
-//
+//   1. STABLE ANGLES. Slots are a fixed sequence that gets FILLED, never a circle
+//      divided by the item count — dividing means a seventh entry moves the other
+//      six and every learned flick lands somewhere else. Short menus leave slots
+//      empty. Empty space is cheap; relearning is not.
 //   2. DIRECTION, NOT DISTANCE. Past the dead zone the nearest item BY ANGLE is
-//      armed however far out the cursor goes. Nothing here hit-tests a
-//      rectangle. An expert flicks 300px in a tenth of a second without
-//      looking, and a menu that only responds inside a 40px-wide label is a
-//      menu that punishes them for being fast.
+//      armed however far out the cursor goes. An expert flicks 300px without
+//      looking; a 40px-wide hit rectangle punishes them for being fast.
+//   3. THE CENTRE MEANS NOTHING. Releasing in the dead zone cancels, which is what
+//      makes the gesture safe to start.
 //
-//   3. THE CENTRE MEANS NOTHING. Releasing inside the dead zone is a cancel,
-//      which is what makes the gesture safe to start: open it, see nothing you
-//      want, let go where you already are.
-//
-// Screen space throughout: +x right, +y DOWN, angles from atan2(dy, dx). That
-// matches what a pointer event hands the caller, so no coordinate flips happen
-// anywhere between the event and the arithmetic.
+// Screen space throughout: +x right, +y DOWN, angles from atan2(dy, dx) — what a
+// pointer event hands the caller, so nothing flips between event and arithmetic.
 
 /** The eight compass directions a pie can put an item in. */
 export type PieSlot = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
@@ -48,18 +34,15 @@ export const SLOT_VECTOR: Record<PieSlot, readonly [number, number]> = {
   NW: [-D, -D],
 };
 
-/** The order slots are FILLED — item 0 goes west, item 1 east, and so on.
+/** The order slots are FILLED — item 0 west, item 1 east, and so on.
  *
- *  Cardinals first, because they are the good slots: a pure left, right, up or
- *  down flick needs no aim at all, while a diagonal has to be roughly right in
- *  two axes at once. Blender fills in this same order and it is not arbitrary
- *  there either — west and east lead because horizontal wrist movement is the
+ *  Cardinals first: a pure left/right/up/down flick needs no aim, a diagonal has
+ *  to be roughly right in two axes at once, and horizontal wrist movement is the
  *  cheapest thing a hand does.
  *
- *  Opposite pairs are adjacent (W/E, S/N, NW/SE, SW/NE) so a menu of two reads
- *  as an axis rather than as two items that happen to be near each other, and
- *  so a menu author can put genuinely opposite verbs — Top and Bottom, Front
- *  and Back — at opposite angles just by declaring them next to each other. */
+ *  Opposite pairs are ADJACENT (W/E, S/N, NW/SE, SW/NE) so a menu of two reads as
+ *  an axis, and so an author can put Top and Bottom at opposite angles just by
+ *  declaring them next to each other. */
 export const SLOT_ORDER = ["W", "E", "S", "N", "NW", "SE", "NE", "SW"] as const satisfies readonly PieSlot[];
 
 /** A pie holds at most eight items. Past that the angular gap between
@@ -178,16 +161,11 @@ export type PieRelease =
 
 /** What a pointer release means.
  *
- *  `travelledPx` is the FURTHEST the pointer has been from the centre since the
- *  pie opened, not where it is now. The distinction is the whole rule: a user
- *  who dragged out to look at the items and came back to the middle is
- *  cancelling, and their release lands at the same place as the release of the
- *  click that opened the menu. Only the peak tells them apart.
- *
- *  No clock is consulted, deliberately — a time threshold here would mean a
- *  slow, careful drag out and back re-opened the menu instead of cancelling it,
- *  and a fast one cancelled instead of opening. Distance is what the user is
- *  actually expressing. */
+ *  `travelledPx` is the FURTHEST the pointer has been from the centre, not where it
+ *  is now. That is the whole rule: someone who dragged out to look and came back is
+ *  cancelling, and their release lands exactly where the opening click's would.
+ *  Only the peak tells them apart. No clock is consulted — a time threshold would
+ *  make a slow careful drag out and back re-open the menu instead of cancelling. */
 export function releaseOutcome(g: { armed: number | null; travelledPx: number }): PieRelease {
   if (g.armed !== null) return "pick";
   if (g.travelledPx <= TRAVEL_SLOP_PX) return "keep-open";

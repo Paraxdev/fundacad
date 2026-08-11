@@ -351,23 +351,18 @@ export class DocumentStore {
     this.isDirty = false;
     this.emitMeta();
   }
-  /** reset to a blank document (New). */
-  /** A document replacement (New / Open) discards the model on screen along
-   *  with the document it belonged to, and stops whatever is still building.
+  /** Reset to a blank document (New / Open): discard the model on screen along with
+   *  the document it belonged to, and stop whatever is still building.
    *
-   *  `rebuildNow` deliberately keeps the last good result when a rebuild fails,
-   *  which is correct within one document and wrong across a replacement: the
-   *  shape left on screen is no longer in the document, so the Browser has
-   *  nothing to hide and the user has no way to tell what they are looking at.
-   *  And a rebuild already in flight holds the queue until it finishes, so the
-   *  replacement's own rebuild cannot even start until then.
+   *  `rebuildNow` keeps the last good result when a rebuild fails, which is correct
+   *  within one document and wrong across a replacement — the shape left on screen
+   *  is no longer in the document, so the Browser has nothing to hide and the user
+   *  cannot tell what they are looking at. And a rebuild in flight holds the queue,
+   *  so the replacement's own rebuild cannot start until it finishes.
    *
-   *  Reported 2026-08-08: File → New during a 3,000-body rebuild left the old
-   *  model on screen over an empty document, said nothing, and hiding the body
-   *  did not help — because there was no body in the document to hide. Both
-   *  halves are needed. Clearing alone would leave New waiting minutes for the
-   *  old rebuild; cancelling alone would leave the stale model up until the
-   *  replacement's rebuild returned. */
+   *  Reported 2026-08-08: File -> New during a 3,000-body rebuild left the old model
+   *  on screen over an empty document. Both halves are needed — clearing alone leaves
+   *  New waiting minutes, cancelling alone leaves the stale model up. */
   private discardModelForReplacement() {
     this.build = {
       ...this.build,

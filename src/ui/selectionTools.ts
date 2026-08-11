@@ -1,37 +1,19 @@
-// What to OFFER for the thing that is currently selected — the one answer both
-// the floating selection toolbar and the selection pie render.
+// What to OFFER for the current selection — the one answer both the floating
+// selection toolbar and the selection pie render. Two surfaces each deriving it
+// their own way means Fillet on the toolbar but not in the pie.
 //
-// features/toolCapabilities.ts already knows which tools consume which kinds of
-// entity; it is deliberately a capability model and nothing else. This file is
-// the thin layer above it that turns "these tools could act on a face" into
-// something with a label, an icon, a key hint and a way to run it, and it is
-// separate for the reason that table's own header gives: the moment two
-// surfaces each derive the answer their own way, they disagree, and the user
-// gets Fillet on the toolbar but not in the pie.
+// Built from ONE kind of the selection, ranked, not from the union: Extrude-the-
+// profile and Press/Pull-the-face are different operations on different geometry,
+// and offering both invites a click on the one you weren't looking at. The ranking
+// is copied from app/viewportWiring.ts, which answers the same question to decide
+// which drag handle to mount, and the two MUST agree — the handle on the geometry
+// and the toolbar above it are one affordance seen twice.
 //
-// --- one selection, one verb set --------------------------------------------
-//
-// A selection can hold several kinds at once — click a face, then ctrl-click a
-// profile area lying on it, and both are live. The offer is built from ONE of
-// them, ranked, rather than from the union, because the union is not a thing a
-// user can act on: Extrude-the-profile and Press/Pull-the-face are different
-// operations on different geometry and showing both invites a click that does
-// the one you were not looking at.
-//
-// The ranking below is copied from app/viewportWiring.ts, which already had to
-// answer exactly this question to decide which drag handle to mount, and the
-// two MUST agree: the handle standing on the geometry and the toolbar floating
-// above it are one affordance seen twice, and if they ranked differently the
-// arrow would push a face while the toolbar offered to extrude a profile.
-//
-// --- shown vs live ----------------------------------------------------------
-//
-// Membership comes from the selection's KIND; enablement comes from its COUNT.
-// A profile selection always offers Extrude, Revolve, Sweep and Loft in that
-// order, and Loft is simply dim until a second profile joins it. That split is
-// what lets the pie keep its slots fixed (pieMath's whole premise) and what
-// makes the answer to "why can't I loft this" visible instead of absent.
-// The toolbar, which has no slots to protect, shows only the live ones.
+// Membership comes from the selection's KIND, enablement from its COUNT. A profile
+// always offers Extrude, Revolve, Sweep and Loft in that order, with Loft dim until
+// a second profile joins; that is what keeps the pie's slots fixed and makes "why
+// can't I loft this" visible rather than absent. The toolbar has no slots to
+// protect and shows only the live ones.
 
 import {
   TOOL_CAPABILITIES,

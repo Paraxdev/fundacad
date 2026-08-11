@@ -7,25 +7,16 @@ import type { CadDocument } from "../types";
  *
  *  THIS IS THE ONLY SANCTIONED WAY FOR A COMPONENT TO READ store.document.
  *
- *  The shape is not incidental. `store.document` returns the same object
- *  identity across in-place mutate() — identity only changes on New/Open/undo/
- *  redo — and Vue 3.4+ computeds short-circuit propagation when a recomputed
- *  value is === the previous one. So a convenience wrapper like
+ *  `store.document` keeps the same object identity across in-place mutate() —
+ *  identity changes only on New/Open/undo/redo — and Vue 3.4+ computeds
+ *  short-circuit propagation when the recomputed value is === the previous one. So
+ *  `computed(() => (bridge.docVersion.value, store.document))` would re-run on
+ *  every edit and then REFUSE TO NOTIFY its dependents, freezing every derived
+ *  panel until an undo or a load. That bug is invisible to a happy-path test.
  *
- *      const doc = computed(() => (bridge.docVersion.value, store.document));
- *
- *  would re-run on every edit and then REFUSE TO NOTIFY its dependents, because
- *  the document object it returns is unchanged. Panels derived from it would
- *  silently freeze on every in-place edit and only "wake up" on undo or load.
- *  That bug is invisible to a happy-path smoke test.
- *
- *  Reading the version ref inside each derived computed — before any early
- *  return — is what avoids it. This helper makes that structural.
- *
- *  Two more rules that follow from the same fact:
- *    * never cache store.document in setup() scope (identity DOES change on
- *      New/Open/undo/redo, so a cached reference goes stale with no error);
- *    * never write a Feature built out of reactive state back to the store.
+ *  Reading the version ref inside each derived computed, before any early return,
+ *  is what avoids it. Two rules follow: never cache store.document in setup()
+ *  scope, and never write a Feature built out of reactive state back to the store.
  */
 export function useDocValue<T>(fn: (doc: CadDocument) => T): ComputedRef<T> {
   const { store, bridge } = useEngine();

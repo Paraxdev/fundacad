@@ -1,27 +1,16 @@
 // The model's outline on a sketch plane — the shape a profile drawn there is
-// actually sitting on.
+// actually sitting on. A sketch made on a face routinely runs off it, and the two
+// halves are separate regions (region.ts says why), but only if the region
+// detector is told where the face ends.
 //
-// A sketch made on a face routinely runs off it. The two halves of such a
-// profile mean different things (region.ts explains why) and are separate
-// regions, but only if the region detector is told where the face ends. This is
-// what tells it.
+// Reads EDGES rather than faces: the viewport already holds every B-rep edge as an
+// exact polyline, so "what bounds the face under this sketch" becomes "which of
+// those lie IN the sketch plane". No triangle walking, no face id to keep in step
+// across a rebuild, nothing extra in the document. A sketch plane is coplanar with
+// its face by construction, so the edges passing that test ARE its boundary.
 //
-// It reads EDGES rather than faces, and that is the cheap part as well as the
-// robust one. The viewport already holds every B-rep edge as an exact polyline,
-// so "what bounds the face under this sketch" reduces to "which of those
-// polylines lie IN the sketch plane" — a distance test per sample, no triangle
-// walking, no face id to keep in step with a rebuild, and nothing that has to be
-// stored in the document and re-resolved later. A sketch plane is coplanar with
-// its face by construction, so the edges that answer that test ARE that face's
-// boundary.
-//
-// It picks up any other geometry sitting in the same plane too. That is correct
-// rather than merely tolerable: a second face flush with the first is also
-// something the profile can sit on, and its edge is also a place the profile
-// stops being supported.
-//
-// THREE-typed but camera-free and DOM-free, so vitest reaches it with no
-// viewport — same split as the rest of sketch/.
+// Other geometry flush with the same plane is picked up too, and that is correct:
+// the profile can sit on it, and its edge is also where support stops.
 
 import * as THREE from "three";
 import { chainLoops } from "./region";

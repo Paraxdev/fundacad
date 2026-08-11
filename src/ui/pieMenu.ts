@@ -1,31 +1,16 @@
-// The one shared pie menu, as a request anybody can post and one component
-// renders — the same arrangement stores/contextMenu.ts + ContextMenuHost.vue
-// have for the right-click list, so the two popups behave alike where they
-// overlap (one at a time, opened at a point, dismissed by Escape).
+// The one shared pie menu: a request anybody can post, one component renders —
+// the same arrangement stores/contextMenu.ts + ContextMenuHost.vue have for the
+// right-click list.
 //
-// Module state with a listener set rather than a Pinia store, matching
-// ui/toolRail.ts and ui/icons.ts. The reason is the same one those files give:
-// it keeps this module free of a Vue import, so the headless *.test.ts suite
-// and the non-component callers (ui/contextMenus.ts, which is plain TypeScript)
-// can both reach it with nothing set up.
+// Module state with a listener set rather than Pinia, matching ui/toolRail.ts and
+// ui/icons.ts: no Vue import, so the headless suite and the plain-TypeScript
+// callers (ui/contextMenus.ts) both reach it with nothing set up.
 //
-// --- pie or list? -----------------------------------------------------------
-//
-// The pie COMPLEMENTS ContextMenuHost, it does not replace it, and the split is
-// not a matter of taste:
-//
-//   * A list can hold anything — twenty rows, submenus, checkmarks, colour
-//     swatches, an item whose label is computed ("Repeat Fillet"), a
-//     destructive row that has to be read before it is clicked. It scrolls. It
-//     costs nothing to add to.
-//   * A pie can hold eight things, must hold the SAME eight every time to be
-//     worth anything, and is read by direction rather than by word. What it
-//     buys for that is speed no list can match.
-//
-// So the fixed, small, frequently-repeated sets become pies (orient the view;
-// act on this selection) and everything else stays a list. A pie built out of
-// whatever happened to be applicable, reordered per invocation, would have the
-// list's flexibility and none of the pie's speed — the worst of both.
+// The pie COMPLEMENTS the list rather than replacing it. A list holds anything,
+// scrolls, and costs nothing to add to; a pie holds eight things, must hold the
+// SAME eight every time to be worth anything, and is read by direction rather than
+// by word. So fixed, small, frequently-repeated sets become pies and everything
+// else stays a list.
 
 /** One wedge. Order in PieRequest.items IS the slot order (pieMath.SLOT_ORDER),
  *  so a menu's author chooses angles by choosing declaration order. */

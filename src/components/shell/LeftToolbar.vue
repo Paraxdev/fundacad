@@ -1,30 +1,23 @@
 <script setup lang="ts">
-// The left tool rail: a slim column of icon buttons that is the primary place
-// to reach for a tool, with the ribbon left intact above it.
+// The left tool rail: a slim column of icon buttons, the primary place to reach
+// for a tool, with the ribbon left intact above it.
 //
-// A button stands for a FAMILY, not a tool — press and release runs whichever
-// variant is on the face, press and hold (or right-click) opens the family and
-// the one you release over both runs and stays. Which tools are a family, and
-// which variant is on the face, is ui/toolRail.ts; when a press is a click and
-// when it is a hold is ui/holdGesture.ts. Neither of those imports Vue, so both
-// are tested headlessly and this component is only the wiring: pointer events
-// in, effects out.
+// A button stands for a FAMILY. Press and release runs whichever variant is on the
+// face; press and hold (or right-click) opens the family and the one you release
+// over both runs and stays. Which tools are a family is ui/toolRail.ts; click vs
+// hold is ui/holdGesture.ts. Neither imports Vue, so this component is only wiring.
 //
-// The pointer bookkeeping that CANNOT move into the state machine, and why it
-// is here:
+// The pointer bookkeeping that cannot move into the state machine:
 //
-//   * The release is listened for on the WINDOW, not on the rows. A hold that
-//     ends over the model, over the ribbon, over nothing at all still has to
-//     end — a row-scoped handler would leave the flyout open and the machine
-//     stuck in `open` the moment the pointer drifted off the list.
+//   * The release listens on the WINDOW. A hold ending over the model or over
+//     nothing still has to end; a row-scoped handler would leave the flyout open
+//     and the machine stuck in `open`.
 //   * Only button 0 is read. A right-click emits pointerdown, contextmenu AND
-//     pointerup; if that trailing pointerup counted, every right-click would
-//     open the flyout and shut it again in the same frame.
-//   * Touch and pen get implicit pointer capture on the element that was
-//     pressed, so the pointerup would be reported on the BUTTON however far the
-//     finger travelled — i.e. every touch hold would read as "released over
-//     nothing". Releasing the capture up front is what makes the gesture work
-//     the same way with a finger as with a mouse.
+//     pointerup — counting that trailing one would open and shut the flyout in the
+//     same frame.
+//   * Touch and pen get implicit pointer capture, so pointerup would be reported on
+//     the BUTTON however far the finger travelled. Releasing the capture up front
+//     is what makes a finger behave like a mouse.
 
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useRibbonStore } from "../../stores/ribbon";
