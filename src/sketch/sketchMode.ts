@@ -38,6 +38,7 @@ import { expandPattern, translated, rotated, scaled } from "./pattern";
 import { candidatesFromEntities, snap, type SnapKind, type SnapCandidate } from "./snap";
 import type { ResolvedEntity } from "./snap";
 import { detectRegions, rectCorners } from "./region";
+import { planeFootprint } from "./faceFootprint";
 import { setSpaceMouseOrbitLocked } from "../input/spacemouse";
 import { setPrompt } from "../ui/prompt";
 import { toast } from "../ui/toast";
@@ -152,6 +153,12 @@ export class SketchMode {
   onState: (() => void) | null = null; // notify UI (tool/active changed)
 
   private plane = new SketchPlane("XY");
+
+  /** The model's outline on this sketch's plane, in sketch 2D — what makes a
+
+   *  profile that runs off the face split there. Empty on a datum plane. */
+
+  private footprint: THREE.Vector2[][] = [];
   private entities: ResolvedEntity[] = [];
   private candidates: SnapCandidate[] = []; // cached; rebuilt when entities change
   private base: THREE.Vector2 | null = null; // pending first point
@@ -383,6 +390,15 @@ export class SketchMode {
     this.plane = this.overlay.planeFor(plane);
     this.planeId = planeId ?? null;
     this.store = store;
+    // Once per session, not per edit. The plane is fixed for the whole sketch
+    // and the body under it cannot change while the sketch is open — nothing is
+    // applied to the model until commit — so re-deriving this on every keystroke
+    // would walk every edge of the body for an answer that cannot have moved.
+    this.footprint = planeFootprint(
+      this.viewport.visibleEdgeLines(),
+      this.plane,
+      this.viewport.modelDiagonal() ?? 0,
+    );
     this.history.reset(); // fresh history per session (armed once entities load)
     if (!this.fonts.length) void fetchFonts().then((f) => { this.fonts = f; });
 
@@ -602,7 +618,14 @@ export class SketchMode {
     // profile-area fills for the active sketch (hidden from overlay.update),
     // so areas are visible + selectable while drawing
     this.overlay.setActiveRegions(
-      detectRegions(this.editingId ?? "__active__", [...this.entities, ...derived]),
+      detectRegions(
+        this.editingId ?? "__active__",
+        [...this.entities, ...derived],
+        // Empty means "no model in this plane" — a datum-plane sketch — and must
+        // reach detectRegions as absent, not as an empty face, or every profile
+        // there would be marked unsupported.
+        this.footprint.length ? this.footprint : undefined,
+      ),
       this.plane,
       this.editingId ?? "__active__",
       [...this.entities, ...derived],

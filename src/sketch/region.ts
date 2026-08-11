@@ -265,6 +265,25 @@ function nestLoops(
   return regions;
 }
 
+/** Chain open polylines into closed loops by their shared endpoints.
+ *
+ *  Exported for the ONE caller outside this file: the model's boundary on a
+ *  sketch plane arrives as a bag of separate B-rep edges, and the footprint
+ *  above needs it as closed loops before it can say what is inside the face and
+ *  what is off the end of it. Same tracer the region detector uses on free line
+ *  work, so a footprint and a profile are assembled by identical rules. */
+export function chainLoops(polylines: readonly (readonly THREE.Vector2[])[]): THREE.Vector2[][] {
+  const segs: Seg[] = [];
+  for (const p of polylines) {
+    for (let i = 0; i + 1 < p.length; i++) {
+      const a = p[i];
+      const b = p[i + 1];
+      if (a && b) segs.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+    }
+  }
+  return traceLoops(segs);
+}
+
 /** Even-odd containment across a set of loops — the face outline plus whatever
  *  holes it has. Odd crossings means inside the material, so a point in the bore
  *  of a washer-shaped face reads as OUTSIDE, which is right: there is nothing
