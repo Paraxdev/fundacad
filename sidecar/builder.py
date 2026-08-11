@@ -1968,14 +1968,64 @@ def _refuse_smooth_edges(shape, edges, label):
     )
 
 
-def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
+# How much smaller the probe below tries. A twentieth is far enough that any
+# genuine clearance problem has gone away; if that fails too, size is not what is
+# wrong.
+SIZE_PROBE_FRACTION = 0.05
+
+
+def _size_would_help(shape, edges, one_edge_at, blend_size):
+    """Does a much SMALLER blend build where this one didn't?
+
+    OCCT answers every blend failure with "try a smaller length value(s)",
+    whatever went wrong. When the real problem is where the blend has to END —
+    an arc dying into a neighbouring face, a corner the kernel cannot close —
+    that message is not merely unhelpful, it sends the user into a retry loop
+    that cannot terminate, because the operation fails identically at 5mm and at
+    0.05mm. Measured on a cylinder half sunk into a plate: the partial rim
+    builds at 1.5mm and fails at 2.0mm (a real size limit), while the corner
+    cases fail flat at every radius tried.
+
+    One extra kernel attempt, only ever on the failure path.
+    """
+    if not blend_size or blend_size <= 0 or len(edges) > 8:
+        return None
+    small = blend_size * SIZE_PROBE_FRACTION
+    for e in edges:
+        try:
+            one_edge_at(shape, e, small)
+        except Exception:
+            return False
+    return True
+
+
+def _blend_failure_message(label, body, unresolved, one_edge_at, blend_size, err):
+    """What to actually tell the user about a blend the kernel would not build."""
+    helps = _size_would_help(body["shape"], unresolved, one_edge_at, blend_size)
+    if helps is not False:
+        # Either a smaller size did build, or there were too many edges to probe.
+        # OCCT's own sentence is the honest one here.
+        return f"{label} failed on {body['name']}: {err}"
+    which = ("that edge" if len(unresolved) == 1
+             else f"{len(unresolved)} of the selected edges")
+    return (
+        f"can't {label.lower()} {which} on {body['name']} at ANY size — it fails "
+        f"the same way at {blend_size * SIZE_PROBE_FRACTION:g}mm as at "
+        f"{blend_size:g}mm, so the value is not what is wrong. The blend has "
+        "nowhere to end: the edge runs into a neighbouring face at a corner the "
+        "kernel cannot close. Try selecting the neighbouring edges into the same "
+        f"{label.lower()} so it has a corner to turn, or blend those first."
+    )
+
+
+def _blend_edges(f, ctx, label, combined, one_edge_at, blend_size):
     """Shared fillet/chamfer body: blend every selected edge, per owning body.
 
     `combined(shape, edges) -> shape` runs the kernel op on a whole group at
-    once; `one_edge(shape, edge) -> shape` does a single edge (the fallback +
-    failure probe). Both take the body they are blending: build123d's own
-    fillet/chamfer infer it from the edges, but a conic profile has to rebuild
-    the solid itself and so needs it handed over.
+    once; `one_edge_at(shape, edge, size) -> shape` does a single edge at a given
+    size (the fallback, the failure probe, and the size probe). Both take the
+    body they are blending: build123d's own fillet/chamfer infer it from the
+    edges, but a conic profile has to rebuild the solid itself.
 
     ALL-OR-NOTHING across bodies: every group's new shape is computed first and
     only assigned once they ALL succeed. Otherwise a two-body fillet whose
@@ -2008,6 +2058,7 @@ def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
             raise
         except Exception as combined_err:
             # Combined call failed: fall back to per-edge blending on the evolving body.
+            one_edge = lambda s, e: one_edge_at(s, e, blend_size)  # noqa: E731
             new_shape, unresolved = _sequential_blend(
                 body["shape"], edges, one_edge, blend_size, body["shape"]
             )
@@ -2017,7 +2068,9 @@ def _blend_edges(f, ctx, label, combined, one_edge, blend_size):
                 # Paint exactly the offenders red, then re-raise the original error.
                 _report_edge_failures(f, ctx, unresolved,
                                       lambda e: one_edge(body["shape"], e))
-                raise ValueError(f"{label} failed on {body['name']}: {combined_err}") from combined_err
+                raise ValueError(_blend_failure_message(
+                    label, body, unresolved, one_edge_at, blend_size, combined_err
+                )) from combined_err
         staged.append((body, new_shape))
     for body, shape in staged:
         body["shape"] = shape
@@ -2047,18 +2100,18 @@ def _handle_fillet(f, ctx):
     if abs(p) < PROFILE_EPS:
         _blend_edges(f, ctx, "Fillet",
                      lambda s, es: fillet(es, radius=r),
-                     lambda s, e: fillet([e], radius=r), r)
+                     lambda s, e, size: fillet([e], radius=size), r)
         return
     _blend_edges(f, ctx, "Fillet",
                  lambda s, es: _conic_fillet(s, es, r, p),
-                 lambda s, e: _conic_fillet(s, [e], r, p), r)
+                 lambda s, e, size: _conic_fillet(s, [e], size, p), r)
 
 
 def _handle_chamfer(f, ctx):
     d = ctx.val(f["distance"])
     _blend_edges(f, ctx, "Chamfer",
                  lambda s, es: chamfer(es, length=d),
-                 lambda s, e: chamfer([e], length=d), d)
+                 lambda s, e, size: chamfer([e], length=size), d)
 
 
 def _handle_press_pull(f, ctx):
