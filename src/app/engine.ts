@@ -16,6 +16,7 @@ import { Geometry, type GeometryBackend } from "../geometry/client";
 import { TauriGeometry } from "../geometry/tauriClient";
 import { DocumentStore, EMPTY_DOCUMENT } from "../document/store";
 import { SketchOverlay } from "../sketch/overlay";
+import { footprintCache } from "../sketch/faceFootprint";
 import { SketchMode } from "../sketch/sketchMode";
 import { setTextBackend } from "../sketch/textCache";
 import { solveSketchFeature } from "../sketch/headlessSolve";
@@ -185,6 +186,15 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
   e.overlay = new SketchOverlay();
   e.viewport.addToScene(e.overlay.group);
   e.sketch = new SketchMode(e.viewport, e.overlay);
+  // Committed sketches get the same cut at the model's edge the open one gets.
+  // The build RESULT is the cache epoch: its identity changes on a real rebuild
+  // and stays put across a visibility toggle, which is exactly when the footprint
+  // does and does not have to be re-walked.
+  e.overlay.footprintFor = footprintCache({
+    edges: () => e.viewport.visibleEdgeLines(),
+    modelScale: () => e.viewport.modelDiagonal() ?? 0,
+    epoch: () => e.store.buildState.result,
+  });
   // params engine ↔ sketcher plumbing: closed sketches re-solve headlessly after
   // a parameter edit; the open one refreshes its live dim values itself.
   e.store.headlessSolve = solveSketchFeature;

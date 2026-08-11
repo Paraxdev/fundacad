@@ -83,3 +83,45 @@ export function planeFootprint(
   if (!flat.length) return [];
   return chainLoops(flat);
 }
+
+/** Where a cache gets the model from. Supplier functions rather than a viewport,
+ *  so this file stays camera-free and vitest can drive it. */
+export interface FootprintSource {
+  edges(): readonly FootprintEdge[];
+  modelScale(): number;
+  /** Any value whose IDENTITY changes exactly when the model does — the build
+   *  result object itself is the natural one, and is what setModel already keys
+   *  its own fast path on. */
+  epoch(): unknown;
+}
+
+/** A memoised planeFootprint, per plane, thrown away whenever the model changes.
+ *
+ *  The committed-sketch overlay rebuilds every sketch on every document edit, and
+ *  a footprint walk is a distance test per sample per edge. Without this, four
+ *  sketches over a 100k-edge assembly would re-walk it four times per keystroke.
+ *  With it, a plane is walked once per model.
+ *
+ *  Keyed on the SketchPlane OBJECT, which is sound because the overlay hands out
+ *  cached instances per plane spec — two sketches on one plane share the entry
+ *  and the walk. */
+export function footprintCache(
+  src: FootprintSource,
+): (plane: SketchPlane) => THREE.Vector2[][] {
+  const NONE = Symbol("no model yet");
+  let epoch: unknown = NONE;
+  let byPlane = new WeakMap<SketchPlane, THREE.Vector2[][]>();
+  return (plane) => {
+    const now = src.epoch();
+    if (now !== epoch) {
+      byPlane = new WeakMap();
+      epoch = now;
+    }
+    let hit = byPlane.get(plane);
+    if (!hit) {
+      hit = planeFootprint(src.edges(), plane, src.modelScale());
+      byPlane.set(plane, hit);
+    }
+    return hit;
+  };
+}

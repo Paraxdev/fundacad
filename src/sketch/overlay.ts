@@ -142,6 +142,15 @@ export class SketchOverlay {
    *  solid's own edges visible/selectable. */
   sketchVisible: (id: string) => boolean = () => true;
 
+  /** The model's outline on a sketch plane, so a committed profile that runs off
+   *  its face splits there instead of picking as one region — the same cut the
+   *  active sketch gets in sketchMode.
+   *
+   *  Injected because the overlay has no viewport. The default answers "no
+   *  footprint", which is both the safe fallback and the literal truth for a
+   *  sketch on a datum plane. See faceFootprint.footprintCache. */
+  footprintFor: (plane: SketchPlane) => THREE.Vector2[][] = () => [];
+
   /** Rebuild committed sketch curves + region fills from the document. */
   update(doc: CadDocument, hiddenSketchId: string | null = null) {
     this.clearGroup(this.committed);
@@ -159,7 +168,8 @@ export class SketchOverlay {
         obj.userData.sketchId = f.id; // + entityId from curveObjects → Project-tool picking
         this.committed.add(obj);
       }
-      for (const region of detectRegions(f.id, ents)) {
+      const footprint = this.footprintFor(plane);
+      for (const region of detectRegions(f.id, ents, footprint.length ? footprint : undefined)) {
         const wr: WorldRegion = {
           sketchId: f.id,
           region,

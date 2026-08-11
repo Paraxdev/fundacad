@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { SketchPlane } from "../../src/sketch/plane";
 import {
   edgeLiesInPlane,
+  footprintCache,
   planeFootprint,
   planeTolerance,
   type FootprintEdge,
@@ -122,5 +123,79 @@ describe("planeFootprint", () => {
     }
     const loops = planeFootprint([...topRim(), ...bore], topPlane(), 28);
     expect(loops).toHaveLength(2);
+  });
+});
+
+describe("footprintCache", () => {
+  const source = (edges: FootprintEdge[], epoch: object) => {
+    let walks = 0;
+    const src = {
+      edges: () => (walks++, edges),
+      modelScale: () => 28,
+      epoch: () => epoch,
+    };
+    return { src, walks: () => walks, retarget: (e: object) => (epoch = e) };
+  };
+
+  it("walks the model once per plane, not once per sketch", () => {
+    // The committed overlay rebuilds every sketch on every document edit. Four
+    // sketches on one plane over a 100k-edge assembly must not be four walks.
+    const model = {};
+    const { src, walks } = source(topRim(), model);
+    const cache = footprintCache(src);
+    const plane = topPlane();
+    const a = cache(plane);
+    const b = cache(plane);
+    expect(walks()).toBe(1);
+    expect(b).toBe(a); // the same array, not an equal one
+  });
+
+  it("walks each distinct plane separately", () => {
+    const { src, walks } = source(topRim(), {});
+    const cache = footprintCache(src);
+    cache(topPlane());
+    cache(topPlane()); // a different SketchPlane INSTANCE, same geometry
+    expect(walks()).toBe(2);
+  });
+
+  it("re-walks when the model changes", () => {
+    // The failure this guards is silent: a stale footprint keeps cutting a
+    // profile along an edge the rebuild moved, and nothing looks wrong.
+    const { src, walks, retarget } = source(topRim(), {});
+    const cache = footprintCache(src);
+    const plane = topPlane();
+    cache(plane);
+    expect(walks()).toBe(1);
+    retarget({});
+    cache(plane);
+    expect(walks()).toBe(2);
+  });
+
+  it("does not re-walk when the model object is re-emitted unchanged", () => {
+    // A visibility toggle re-emits the SAME result object. Keying on identity is
+    // what makes hiding a body free here, as it already is in setModel.
+    const model = {};
+    const { src, walks } = source(topRim(), model);
+    const cache = footprintCache(src);
+    cache(topPlane());
+    cache(topPlane());
+    cache(topPlane());
+    expect(walks()).toBe(3); // three planes
+    const plane = topPlane();
+    cache(plane);
+    cache(plane);
+    expect(walks()).toBe(4); // the fourth plane, walked once
+  });
+
+  it("serves an empty footprint from cache without re-walking", () => {
+    // A datum-plane sketch has no model in its plane. That answer is as cacheable
+    // as any other, and re-deriving it every edit is the expensive way to learn
+    // nothing.
+    const { src, walks } = source(verticals(), {});
+    const cache = footprintCache(src);
+    const plane = topPlane();
+    expect(cache(plane)).toEqual([]);
+    expect(cache(plane)).toEqual([]);
+    expect(walks()).toBe(1);
   });
 });
