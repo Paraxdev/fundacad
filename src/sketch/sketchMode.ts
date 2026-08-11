@@ -37,7 +37,7 @@ import { applyDrivingDimsDirect } from "./directDims";
 import { expandPattern, translated, rotated, scaled } from "./pattern";
 import { candidatesFromEntities, snap, type SnapKind, type SnapCandidate } from "./snap";
 import type { ResolvedEntity } from "./snap";
-import { detectRegions, rectCorners } from "./region";
+import { detectRegions, rectCorners, rectFromThreePoints } from "./region";
 import { planeFootprint } from "./faceFootprint";
 import { setSpaceMouseOrbitLocked } from "../input/spacemouse";
 import { setPrompt } from "../ui/prompt";
@@ -55,6 +55,7 @@ export type SketchTool =
   | "line"
   | "rectangle"
   | "centerRectangle"
+  | "rectangle3"
   | "circle"
   | "circle2"
   | "circle3"
@@ -1383,6 +1384,7 @@ export class SketchMode {
     if (this.tool === "circle2") return this.circle2Click(p);
     if (this.tool === "circle3") return this.circle3Click(p);
     if (this.tool === "centerRectangle") return this.centerRectClick(p);
+    if (this.tool === "rectangle3") return this.rect3Click(p);
     if (this.tool === "mirror") return this.mirrorClick(p);
     if (this.tool === "trim") return this.trimClick(p);
     if (this.tool === "fillet") return this.filletClick(p);
@@ -1521,6 +1523,23 @@ export class SketchMode {
         pv.push({ type: "rectangle", id: "", width: w, height: h, x: c.x, y: c.y });
         dims = { width: w, height: h };
       }
+    } else if (this.tool === "rectangle3") {
+      // First leg is a bare LINE, like circle3's: there is no rectangle yet, and
+      // previewing one from two points would have to invent a thickness.
+      if (this.clickPts.length === 1) {
+        const a = this.clickPts[0];
+        if (a) {
+          pv.push({ type: "line", id: "", x1: a.x, y1: a.y, x2: cursor.x, y2: cursor.y });
+          dims = { width: a.distanceTo(cursor) };
+        }
+      } else if (this.clickPts.length === 2) {
+        const [a, b] = this.clickPts;
+        const r = a && b ? this.rect3From(a, b, cursor) : null;
+        if (r) {
+          pv.push({ type: "rectangle", id: "", width: r.width, height: r.height, x: r.x, y: r.y, angle: r.angle });
+          dims = { width: r.width, height: r.height };
+        }
+      }
     }
     if (dims) {
       this.dim.updateFromCursor(dims);
@@ -1542,6 +1561,13 @@ export class SketchMode {
           ? [{ name: "radius", label: "R" }, { name: "sides", label: "N", kind: "count" as const }]
           : t === "centerRectangle"
             ? [{ name: "width", label: "W" }, { name: "height", label: "H" }]
+            : t === "rectangle3"
+              // W is live from the first click (it is the edge being drawn); H
+              // only means anything once that edge exists, and typing into it
+              // early would be typing into a field with no geometry behind it.
+              ? this.clickPts.length === 1
+                ? [{ name: "width", label: "W" }]
+                : [{ name: "width", label: "W" }, { name: "height", label: "H" }]
             : t === "slot"
               ? this.clickPts.length === 1
                 ? [{ name: "length", label: "L" }]
@@ -1556,6 +1582,7 @@ export class SketchMode {
     else if (this.tool === "slot") this.slotClick(p);
     else if (this.tool === "circle2") this.circle2Click(p);
     else if (this.tool === "centerRectangle") this.centerRectClick(p);
+    else if (this.tool === "rectangle3") this.rect3Click(p);
   }
 
   /** circle2: the second diameter endpoint, honoring a typed ⌀ (along a→cursor) */
@@ -1913,6 +1940,76 @@ export class SketchMode {
     if (w < 1e-4 || h < 1e-4) return;
     this.dim.hide();
     const ent: ResolvedEntity = { type: "rectangle", id: newEntityId(), width: w, height: h, x: center.x, y: center.y };
+    if (this.constructionMode) ent.construction = true;
+    this.entities.push(ent);
+    this.refreshActive();
+    this.requestSolve();
+    this.onState?.();
+  }
+
+  // --- three-point rectangle: click one full EDGE, then its thickness -----
+  //
+  // The tool the rectangle's `angle` field was added for. Clicking two corners
+  // gives a rectangle a DIRECTION, which is the thing neither of the other two
+  // rectangle tools can express — and it stays one rectangle rather than four
+  // lines, so it keeps its W/H dimension, its "<rectId>~k" edge addressing and
+  // its row in the browser tree.
+
+  /** The rectangle for the current three points, with a typed W/H applied.
+   *
+   *  A typed WIDTH stretches the edge along its own direction (the angle is the
+   *  user's, drawn, and must not be overwritten by a number). A typed HEIGHT
+   *  replaces the thickness while keeping the side the cursor is on — otherwise
+   *  entering a value would flip the rectangle to whichever side the sign of the
+   *  raw distance happened to be. */
+  private rect3From(a: THREE.Vector2, b: THREE.Vector2, cursor: THREE.Vector2) {
+    let end = b;
+    if (this.dim.isUserDriven("width")) {
+      const w = this.dim.getValue("width");
+      if (w != null && w > 0) {
+        const dir = b.clone().sub(a);
+        if (dir.lengthSq() < 1e-8) dir.set(1, 0);
+        else dir.normalize();
+        end = a.clone().add(dir.multiplyScalar(w));
+      }
+    }
+    let third = cursor;
+    if (this.dim.isUserDriven("height")) {
+      const h = this.dim.getValue("height");
+      if (h != null && h > 0) {
+        // Move the third POINT rather than the finished rectangle's centre:
+        // one code path, and the side the cursor is on is preserved for free.
+        const u = end.clone().sub(a);
+        if (u.lengthSq() < 1e-8) u.set(1, 0);
+        else u.normalize();
+        const n = new THREE.Vector2(-u.y, u.x);
+        const side = Math.sign(cursor.clone().sub(a).dot(n)) || 1;
+        third = a.clone().addScaledVector(n, side * h);
+      }
+    }
+    return rectFromThreePoints(a, end, third);
+  }
+
+  private rect3Click(p: THREE.Vector2) {
+    if (this.clickPts.length < 2) {
+      this.clickPts.push(p.clone());
+      this.showMultiDimFields(); // W after the first click, W+H after the second
+      return;
+    }
+    const [a, b] = this.clickPts;
+    this.clickPts = [];
+    this.overlay.setPreview([]);
+    if (!a || !b) return;
+    const r = this.rect3From(a, b, p);
+    if (!r) return; // no edge, or the third click landed on it
+    this.dim.hide();
+    const ent: ResolvedEntity = {
+      type: "rectangle", id: newEntityId(),
+      width: r.width, height: r.height, x: r.x, y: r.y,
+      // Omitted when it is 0, so an axis-aligned rectangle drawn with this tool
+      // is byte-identical to one drawn with the others.
+      ...(r.angle ? { angle: r.angle } : {}),
+    };
     if (this.constructionMode) ent.construction = true;
     this.entities.push(ent);
     this.refreshActive();
@@ -2472,7 +2569,7 @@ export class SketchMode {
       return;
     }
     if (this.tool === "polygon" || this.tool === "slot" || this.tool === "circle2" ||
-        this.tool === "circle3" || this.tool === "centerRectangle") {
+        this.tool === "circle3" || this.tool === "centerRectangle" || this.tool === "rectangle3") {
       this.multiClickPreview(hit.p, e);
       return;
     }

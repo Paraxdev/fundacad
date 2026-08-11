@@ -2,7 +2,7 @@
 // detectRegions, pointInLoop/pointInRegion.
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { detectRegions, entityPolyline, glyphRegion, pointInRegion, rectCorners } from "../../src/sketch/region";
+import { detectRegions, entityPolyline, glyphRegion, pointInRegion, rectCorners, rectFromThreePoints } from "../../src/sketch/region";
 import type { ResolvedEntity } from "../../src/sketch/snap";
 
 const line = (id: string, x1: number, y1: number, x2: number, y2: number): ResolvedEntity =>
@@ -359,5 +359,56 @@ describe("rectCorners rotation", () => {
     expect(at(p, 0).x).toBeCloseTo(at(p, 4).x, 9);
     expect(at(p, 0).y).toBeCloseTo(at(p, 4).y, 9);
     expect(at(p, 0).y).not.toBeCloseTo(at(p, 1).y, 6); // genuinely rotated
+  });
+});
+
+describe("rectFromThreePoints", () => {
+  const v = (x: number, y: number) => new THREE.Vector2(x, y);
+  const corner = (pts: THREE.Vector2[], i: number) => pts[i]!;
+
+  it("is the exact inverse of rectCorners", () => {
+    // Three of the four corners a rotated rectangle already has must give that
+    // rectangle back. This is the seam: the tool writes what this returns, and
+    // everything downstream reads it through rectCorners.
+    const pts = rectCorners(-7, 2, 10, 4, 37.5);
+    const r = rectFromThreePoints(corner(pts, 0), corner(pts, 1), corner(pts, 2))!;
+    expect(r.x).toBeCloseTo(-7, 9);
+    expect(r.y).toBeCloseTo(2, 9);
+    expect(r.width).toBeCloseTo(10, 9);
+    expect(r.height).toBeCloseTo(4, 9);
+    expect(r.angle).toBeCloseTo(37.5, 9);
+  });
+
+  it("takes a→b as the full edge, and its direction as the angle", () => {
+    const r = rectFromThreePoints(v(0, 0), v(10, 0), v(10, 4))!;
+    expect(r).toEqual({ x: 5, y: 2, width: 10, height: 4, angle: 0 });
+    const turned = rectFromThreePoints(v(0, 0), v(0, 10), v(-4, 10))!;
+    expect(turned.width).toBeCloseTo(10, 9);
+    expect(turned.height).toBeCloseTo(4, 9);
+    expect(turned.angle).toBeCloseTo(90, 9);
+  });
+
+  it("measures the third point PERPENDICULARLY to the edge", () => {
+    // Sliding the cursor ALONG the edge must not change the shape — otherwise
+    // the rectangle creeps sideways while the user is choosing its thickness.
+    const base = rectFromThreePoints(v(0, 0), v(10, 0), v(3, 4))!;
+    for (const x of [-50, 0, 5, 10, 60]) {
+      expect(rectFromThreePoints(v(0, 0), v(10, 0), v(x, 4))).toEqual(base);
+    }
+  });
+
+  it("grows toward the cursor rather than jumping across the edge", () => {
+    const up = rectFromThreePoints(v(0, 0), v(10, 0), v(5, 4))!;
+    const down = rectFromThreePoints(v(0, 0), v(10, 0), v(5, -4))!;
+    expect(up.y).toBeCloseTo(2, 9);
+    expect(down.y).toBeCloseTo(-2, 9);
+    expect(up.height).toBeCloseTo(down.height, 9); // magnitude only, never negative
+  });
+
+  it("refuses the degenerate clicks instead of emitting a zero rectangle", () => {
+    // A committed rectangle of no area is invisible, unselectable and extrudes
+    // to nothing — a rejected click is the honest answer.
+    expect(rectFromThreePoints(v(3, 3), v(3, 3), v(9, 9))).toBeNull(); // no edge
+    expect(rectFromThreePoints(v(0, 0), v(10, 0), v(4, 0))).toBeNull(); // c on the edge
   });
 });

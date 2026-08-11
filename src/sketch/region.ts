@@ -115,6 +115,61 @@ export function rectCorners(
   return local.map(([lx, ly]) => new THREE.Vector2(x + lx * c - ly * s, y + lx * s + ly * c));
 }
 
+/** Structural, not THREE.Vector2: the solver reads its points back out of
+ *  planegcs as plain {x, y} and has no THREE import to gain. A Vector2 is one. */
+export interface Pt2 { x: number; y: number }
+
+/** A rectangle field set, as the document stores one. */
+export interface RectDef {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** degrees about its own centre — 0 for an axis-aligned one */
+  angle: number;
+}
+
+/** The rectangle through three points: `a`→`b` is one full EDGE, and `c` sets
+ *  how far the opposite edge lies from it. The exact inverse of rectCorners, and
+ *  what the three-point rectangle tool commits.
+ *
+ *  This is the whole reason `rectangle.angle` exists. Decomposing a tilted
+ *  rectangle into four lines would have been easier, and would have cost it its
+ *  W/H dimension, its "<rectId>~k" edge addressing and its identity in the
+ *  browser tree — so instead it stays one rectangle that happens to be turned.
+ *
+ *  `c` is measured PERPENDICULARLY to a→b, not to where the cursor is: while
+ *  dragging the third point the user is choosing a thickness, and letting the
+ *  along-edge component leak in would slide the whole shape sideways under the
+ *  cursor. Which SIDE of a→b it falls on is kept, so the rectangle grows toward
+ *  the cursor rather than jumping across the edge at the crossing.
+ *
+ *  Null when the three points do not describe a rectangle with area — a and b in
+ *  the same place (no edge, and so no angle), or c on the line a→b. */
+export function rectFromThreePoints(
+  a: Pt2,
+  b: Pt2,
+  c: Pt2,
+): RectDef | null {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const width = Math.hypot(dx, dy);
+  if (!(width > EPS)) return null;
+  // the edge's own unit frame: u along a→b, n its left-hand normal
+  const ux = dx / width;
+  const uy = dy / width;
+  const signedHeight = (c.x - a.x) * -uy + (c.y - a.y) * ux;
+  if (!(Math.abs(signedHeight) > EPS)) return null;
+  return {
+    // The centre is half a height off the MIDPOINT of a→b, on c's side.
+    x: (a.x + b.x) / 2 + -uy * (signedHeight / 2),
+    y: (a.y + b.y) / 2 + ux * (signedHeight / 2),
+    width,
+    height: Math.abs(signedHeight),
+    angle: (Math.atan2(dy, dx) * 180) / Math.PI,
+  };
+}
+
 /** sample a circle as a closed polygon (no repeat) */
 export function circleLoop(
   cx: number,

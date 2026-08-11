@@ -125,9 +125,12 @@ describe("a hold", () => {
     vi.advanceTimersByTime(HOLD_MS);
     await nextTick();
     expect(w.find(".rail-flyout").exists()).toBe(true);
+    // The rectangle family in ribbon order — the same rectangle anchored at a
+    // corner, at its centre, or on a drawn edge.
     expect(w.findAll("[data-rail-action]").map((r) => r.attributes("data-rail-action"))).toEqual([
       "rectangle",
       "centerRectangle",
+      "rectangle3",
     ]);
     expect(acted).toEqual([]);
   });

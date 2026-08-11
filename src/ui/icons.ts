@@ -40,6 +40,10 @@ const FORGE_PATHS: Record<string, string> = {
   honeycomb: `<polygon points="12,2 16,4.5 16,9.5 12,12 8,9.5 8,4.5" fill="none"/><polygon points="12,12 16,14.5 16,19.5 12,22 8,19.5 8,14.5" fill="none"/><polygon points="20,7 24,9.5 24,14.5 20,17 16,14.5 16,9.5" fill="none"/><polygon points="4,7 8,9.5 8,14.5 4,17 0,14.5 0,9.5" fill="none"/>`,
   gridHoles: `<circle cx="6" cy="6" r="2" fill="currentColor"/><circle cx="12" cy="6" r="2" fill="currentColor"/><circle cx="18" cy="6" r="2" fill="currentColor"/><circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="18" cy="12" r="2" fill="currentColor"/><circle cx="6" cy="18" r="2" fill="currentColor"/><circle cx="12" cy="18" r="2" fill="currentColor"/><circle cx="18" cy="18" r="2" fill="currentColor"/>`,
   centerRectangle: `<rect x="4" y="6" width="16" height="12" rx="0.5"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="12" y1="9" x2="12" y2="15"/>`,
+  // Three-point rectangle: a TILTED rectangle with the two edge corners and the
+  // thickness point marked — the tilt is the whole point of the tool, so an
+  // upright box here would read as the ordinary Rectangle.
+  rectangle3: `<polygon points="3,13 12,4.5 21,11 12,19.5" fill="none"/><circle cx="3" cy="13" r="1.6" fill="currentColor"/><circle cx="12" cy="4.5" r="1.6" fill="currentColor"/><circle cx="21" cy="11" r="1.6" fill="currentColor"/>`,
   circle2: `<circle cx="12" cy="12" r="8"/><circle cx="4.5" cy="12" r="1.4" fill="currentColor"/><circle cx="19.5" cy="12" r="1.4" fill="currentColor"/>`,
   circle3: `<circle cx="12" cy="12" r="8"/><circle cx="12" cy="4" r="1.4" fill="currentColor"/><circle cx="19" cy="16" r="1.4" fill="currentColor"/><circle cx="5" cy="16" r="1.4" fill="currentColor"/>`,
   dimension: `<line x1="4" y1="7" x2="4" y2="17"/><line x1="20" y1="7" x2="20" y2="17"/><line x1="4" y1="12" x2="20" y2="12"/><path d="M7 9l-3 3 3 3"/><path d="M17 9l3 3-3 3"/>`,

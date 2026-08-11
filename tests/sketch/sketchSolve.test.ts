@@ -354,3 +354,70 @@ describe("offset constraint — the copy stays tied to its source", () => {
     expect(b.radius).toBeCloseTo(8, 5); // the live pair still holds
   });
 });
+
+describe("a rotated rectangle survives the solver", () => {
+  // The failure this exists for is silent and total. A rectangle used to be
+  // pinned to the sketch axes with four horizontal/vertical rules; those do not
+  // FAIL on a rectangle drawn at an angle, they succeed — quietly straightening
+  // it on the first solve after it was placed. And the read-back took the
+  // axis-aligned bounding box of the solved corners, which for a 10x4 turned
+  // 37.5 degrees is 10.4 x 9.3, so the shape inflated too.
+  const rect = (angle?: number): ResolvedEntity =>
+    ({ type: "rectangle", id: "r1", x: -7, y: 2, width: 10, height: 4, ...(angle ? { angle } : {}) }) as ResolvedEntity;
+
+  const solved = async (e: ResolvedEntity, cs: SketchConstraint[] = []) => {
+    const r = await compileAndSolve([e], cs);
+    return r.entities[0] as { x: number; y: number; width: number; height: number; angle?: number };
+  };
+
+  it("keeps its angle, size and place with nothing else constraining it", async () => {
+    const out = await solved(rect(37.5));
+    expect(out.angle).toBeCloseTo(37.5, 6);
+    expect(out.width).toBeCloseTo(10, 6);
+    expect(out.height).toBeCloseTo(4, 6);
+    expect(out.x).toBeCloseTo(-7, 6);
+    expect(out.y).toBeCloseTo(2, 6);
+  });
+
+  it("survives repeated solves rather than creeping", async () => {
+    // Every edit re-solves, so a small error per pass is a rectangle that walks.
+    let e = rect(37.5);
+    for (let i = 0; i < 5; i++) e = (await compileAndSolve([e], [])).entities[0]!;
+    const out = e as { width: number; height: number; angle?: number };
+    expect(out.angle).toBeCloseTo(37.5, 6);
+    expect(out.width).toBeCloseTo(10, 6);
+    expect(out.height).toBeCloseTo(4, 6);
+  });
+
+  it("is RIGID: another entity's constraints cannot deform or spin it", async () => {
+    // The alternative that was tried and rejected: hold the shape with
+    // parallel/perpendicular rules instead of the axis rules. That keeps the
+    // rectangle a rectangle but leaves its ANGLE free — and a free angle is one
+    // the solver moves. Measured, dimensioning both edges spun a 37.5-degree
+    // rectangle to 33.8. So the corners are pinned instead, as a polygon's are.
+    const other = line("u", 0, 0, 10, 0);
+    const r = await compileAndSolve([rect(37.5), other], [
+      { type: "distance", id: "k0", line: "u", value: 25 },
+      { type: "vertical", line: "u" },
+    ]);
+    const out = r.entities[0] as { width: number; height: number; angle?: number };
+    expect(out.angle).toBeCloseTo(37.5, 9);
+    expect(out.width).toBeCloseTo(10, 9);
+    expect(out.height).toBeCloseTo(4, 9);
+  });
+
+  it("leaves an axis-aligned rectangle on exactly the path it was on", async () => {
+    const out = await solved(rect());
+    expect(out).toEqual({ type: "rectangle", id: "r1", x: -7, y: 2, width: 10, height: 4 });
+    expect("angle" in out).toBe(false); // no angle field written into a plain rectangle
+  });
+
+  it("still lets the axis rules straighten a rectangle that has no angle", async () => {
+    // The other half of the branch: without an angle the four horizontal/
+    // vertical rules are still what holds it, so a rectangle whose corners were
+    // nudged off-axis is pulled back square to the sketch.
+    const out = await solved(rect(), [{ type: "distance", id: "k0", line: "r1~1", value: 9 }]);
+    expect(out.height).toBeCloseTo(9, 4);
+    expect(out.width).toBeCloseTo(10, 4);
+  });
+});

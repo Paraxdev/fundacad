@@ -136,6 +136,7 @@ export const SKETCH: Group[] = [
       { action: "line", label: "Line", iconName: "line", key: "L" },
       { action: "rectangle", label: "Rectangle", iconName: "rectangle", key: "R" },
       { action: "centerRectangle", label: "Center Rect", iconName: "centerRectangle" },
+      { action: "rectangle3", label: "Rect 3-Pt", iconName: "rectangle3" },
       { action: "circle", label: "Circle", iconName: "circle", key: "C" },
       { action: "circle2", label: "Circle 2-Pt", iconName: "circle2" },
       { action: "circle3", label: "Circle 3-Pt", iconName: "circle3" },

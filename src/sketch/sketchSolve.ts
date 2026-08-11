@@ -18,7 +18,7 @@
 import type { ResolvedEntity } from "./snap";
 import { solveSketch, type SConstraint, type SPoint, type SLine, type SCircle, type SArc } from "./solver";
 import { circumcenter } from "./arc";
-import { rectCorners } from "./region";
+import { rectCorners, rectFromThreePoints } from "./region";
 import { asRound, lineOperand, refPoint, rimNesting, type Round } from "./entityDims";
 import type { SketchConstraint } from "../types";
 import { isDriven, projEndSamples } from "../types";
@@ -155,10 +155,32 @@ export async function compileAndSolve(
         // edge's corner points.
         ends.set(`${e.id}~${k}`, [a, b]);
       }
-      cons.push({ id: `${e.id}~h0`, type: "horizontal", line: `${e.id}~0` }); // bottom
-      cons.push({ id: `${e.id}~h2`, type: "horizontal", line: `${e.id}~2` }); // top
-      cons.push({ id: `${e.id}~v1`, type: "vertical", line: `${e.id}~1` }); // right
-      cons.push({ id: `${e.id}~v3`, type: "vertical", line: `${e.id}~3` }); // left
+      if (e.angle) {
+        // A ROTATED rectangle is RIGID — its corners are pinned, the same way a
+        // polygon's shape is not the solver's to change (see
+        // RIGID_ENTITY_NUM_FIELDS in document/numFields.ts).
+        //
+        // The axis rules below cannot be used on it: they would not fail, they
+        // would SUCCEED, quietly straightening a rectangle the user drew at an
+        // angle on the first solve after placing it. The obvious replacement —
+        // opposite sides parallel plus one square corner — keeps the shape but
+        // leaves the ANGLE free, and a free angle is one the solver moves:
+        // measured, dimensioning both edges of a 37.5-degree rectangle spun it
+        // to 33.8. A rectangle that rotates when you dimension it is worse than
+        // one that refuses to be dimensioned.
+        //
+        // Pinned rather than merely constrained, so the corners still register
+        // as solver points: snapping and coincidence against a rotated
+        // rectangle's corners and edges go on working, and a dimension that
+        // fights the pin is reported as over-constrained rather than silently
+        // reshaping the part.
+        for (const p of cp) if (p !== undefined) fixedPts.add(p);
+      } else {
+        cons.push({ id: `${e.id}~h0`, type: "horizontal", line: `${e.id}~0` }); // bottom
+        cons.push({ id: `${e.id}~h2`, type: "horizontal", line: `${e.id}~2` }); // top
+        cons.push({ id: `${e.id}~v1`, type: "vertical", line: `${e.id}~1` }); // right
+        cons.push({ id: `${e.id}~v3`, type: "vertical", line: `${e.id}~3` }); // left
+      }
       rectMap.set(e.id, cp);
     } else if (e.type === "arc") {
       compileArc(e.id, e.x1, e.y1, e.x2, e.y2, e.mx, e.my);
@@ -536,6 +558,15 @@ export async function compileAndSolve(
       const cp = rectMap.get(e.id);
       const pts = cp?.map((id) => r.points[id]);
       if (!pts || pts.some((p) => !p)) return e;
+      if (e.angle) {
+        // Read the rectangle back OUT of its solved corners, which is the same
+        // three-point recovery the tool commits with. The axis-aligned bounding
+        // box below cannot do it: for a 10x4 turned 37.5 degrees that box is
+        // 10.4 x 9.3, so every solve would inflate the shape while leaving the
+        // angle field saying 37.5.
+        const rec = rectFromThreePoints(pts[0]!, pts[1]!, pts[2]!);
+        return rec ? { ...e, ...rec } : e; // degenerate solve: keep what we had
+      }
       const xs = pts.map((p) => p!.x), ys = pts.map((p) => p!.y);
       const minX = Math.min(...xs), maxX = Math.max(...xs);
       const minY = Math.min(...ys), maxY = Math.max(...ys);

@@ -3,7 +3,7 @@ import type { SketchTool } from "../sketch/sketchMode";
 /** Ribbon/keymap actions that create sketch geometry. Inside a sketch they
  *  switch the active tool; outside one they start a sketch with that tool. */
 export const SKETCH_TOOLS = new Set([
-  "line", "rectangle", "centerRectangle", "circle", "circle2", "circle3",
+  "line", "rectangle", "centerRectangle", "rectangle3", "circle", "circle2", "circle3",
   "arc", "polygon", "slot", "spline", "point", "text", "project",
   "boltCircle", "hexHoles", "gridHoles", "patternRect", "patternCircular", "honeycomb",
 ]);
@@ -63,6 +63,7 @@ export const SKETCH_PROMPTS: Record<string, string> = {
   circle2: "Circle (2-point): click two points on the diameter · Esc",
   circle3: "Circle (3-point): click three points the circle passes through · Esc",
   centerRectangle: "Center Rectangle: click the center, then a corner · Esc",
+  rectangle3: "Rectangle (3-point): click two corners of one EDGE (this sets the angle), then a point for the thickness · Esc",
   mirror: "Mirror: with entities selected, click a line to mirror across · Esc",
   dimension: "Dimension: click a line (length) or circle (⌀), type a value + Enter · Esc",
   trim: "Trim: click a curve (line/arc/circle) to remove it up to the nearest crossings · Esc",

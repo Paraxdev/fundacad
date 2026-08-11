@@ -80,11 +80,9 @@ export const MODEL_RAIL: RailGroupDef[] = [
 
 export const SKETCH_RAIL: RailGroupDef[] = [
   { id: "line", label: "Line", actions: ["line"] },
-  // The user's example, and the one everybody expects: same rectangle, anchored
-  // at a corner or at its centre. (A 3-point rectangle would belong here too —
-  // this build has no such tool, and inventing an action id would give the
-  // flyout a row that dispatches into nothing.)
-  { id: "rectangle", label: "Rectangle", actions: ["rectangle", "centerRectangle"] },
+  // The user's example, and the one everybody expects: the same rectangle
+  // anchored at a corner, at its centre, or on a drawn edge.
+  { id: "rectangle", label: "Rectangle", actions: ["rectangle", "centerRectangle", "rectangle3"] },
   { id: "circle", label: "Circle", actions: ["circle", "circle2", "circle3"] },
   { id: "arc", label: "Arc", actions: ["arc"] },
   { id: "polygon", label: "Polygon", actions: ["polygon"] },
