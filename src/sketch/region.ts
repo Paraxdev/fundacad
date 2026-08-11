@@ -14,6 +14,17 @@ export interface Region {
   holes: THREE.Vector2[][]; // inner boundaries (directly-nested loops) cut out of the material
   centroid: THREE.Vector2; // outer-loop centroid (label placement; may sit in a hole)
   interior: THREE.Vector2; // a point inside the material (outside all holes) — selection anchor
+  /** Whether this region has the model under it.
+   *
+   *  A sketch drawn on a face routinely runs off its edge, and the two halves
+   *  mean different things: the part ON the face can cut into the body or add
+   *  flush to it, while the overhanging part has nothing behind it and can only
+   *  add. They are therefore separate regions, and this says which is which.
+   *
+   *  `null` is not a third kind of region — it means the question was not asked,
+   *  because the sketch is on a datum plane with no face behind it. Callers must
+   *  not read null as "overhang". */
+  support?: "on-face" | "overhang" | null;
 }
 
 const EPS = 1e-4;
@@ -141,6 +152,10 @@ export function slotOutline(x1: number, y1: number, x2: number, y2: number, w: n
 export function detectRegions(
   sketchId: string,
   allEntities: ResolvedEntity[],
+  /** Closed loops, in sketch 2D mm, bounding the face this sketch sits on —
+   *  outline first, then any holes in it. Omit for a sketch on a datum plane,
+   *  which has nothing behind it to be supported by. */
+  footprint?: THREE.Vector2[][],
 ): Region[] {
   // construction geometry is reference-only — it never forms a profile. Text glyphs
   // are their own filled meshes (overlay), never part of line/arc region detection.
@@ -190,6 +205,31 @@ export function detectRegions(
   //    two concentric circles yield a ring (outer, hole=inner) AND a disk (inner).
   //    parent(i) = the smallest-area loop that contains loop i. Uses a guaranteed-
   //    interior point (not the centroid) so non-convex arrangement cells nest right.
+  // A sketch drawn ON a face is bounded by that face as well as by its own
+  // curves. Splitting against it is what makes the overhanging part of a
+  // profile a thing you can point at, rather than the whole profile being one
+  // region that extrudes off the edge of the part.
+  if (footprint && footprint.length) {
+    const split = splitByFootprint(perEntity, loops, footprint);
+    if (split) loops = split;
+  }
+
+  return nestLoops(sketchId, loops, footprint);
+}
+
+/** Turn a flat list of arrangement cells into Regions, resolving which loops are
+ *  HOLES in which others.
+ *
+ *  parent(i) = the smallest-area loop that contains loop i — so two concentric
+ *  circles yield a ring (outer, hole=inner) AND a disk (inner). Uses a
+ *  guaranteed-interior point rather than the centroid, because an arrangement
+ *  cell can be non-convex enough that its centroid lies outside it and would
+ *  nest under the wrong parent. */
+function nestLoops(
+  sketchId: string,
+  loops: THREE.Vector2[][],
+  footprint?: THREE.Vector2[][],
+): Region[] {
   const areas = loops.map(loopAbsArea);
   const reps = loops.map(loopInteriorPoint);
   const parent = loops.map((_loopI, i) => {
@@ -216,9 +256,92 @@ export function detectRegions(
     const loop = loops[i];
     if (!loop) continue;
     const holes = loops.filter((_, j) => parent[j] === i);
-    regions.push(mkRegion(sketchId, loop, holes));
+    const r = mkRegion(sketchId, loop, holes);
+    r.support = footprint && footprint.length
+      ? (pointInLoops(r.interior, footprint) ? "on-face" : "overhang")
+      : null;
+    regions.push(r);
   }
   return regions;
+}
+
+/** Even-odd containment across a set of loops — the face outline plus whatever
+ *  holes it has. Odd crossings means inside the material, so a point in the bore
+ *  of a washer-shaped face reads as OUTSIDE, which is right: there is nothing
+ *  under it to extrude against. */
+export function pointInLoops(p: THREE.Vector2, loops: THREE.Vector2[][]): boolean {
+  let inside = false;
+  for (const loop of loops) if (pointInLoop(p, loop)) inside = !inside;
+  return inside;
+}
+
+/** Re-cut the sketch's own cells against the boundary of the face behind them.
+ *
+ *  Returns null when the footprint does not actually cross the sketch — a
+ *  profile wholly on the face, or wholly off it, is already one region and
+ *  re-running the arrangement would only cost time and risk perturbing loops
+ *  that were correct.
+ *
+ *  The filtering step is the subtle half. Feeding the face outline into the
+ *  arrangement makes it produce cells for the FACE as well as for the sketch —
+ *  most obviously "the face minus the profile", which is bounded by the outline
+ *  and by the profile and so looks exactly like a legitimate mixed cell. Those
+ *  are not profiles and must not become selectable regions; the user drew a
+ *  circle, not a plate with a hole in it. So a cell survives only if its
+ *  interior lies inside the sketch's OWN material, computed before the footprint
+ *  was ever introduced. */
+function splitByFootprint(
+  perEntity: EntSegs[],
+  sketchLoops: THREE.Vector2[][],
+  footprint: THREE.Vector2[][],
+): THREE.Vector2[][] | null {
+  const fpGroups: EntSegs[] = footprint.map((loop) => {
+    const segs: Seg[] = [];
+    for (let i = 0; i < loop.length; i++) {
+      const a = loop[i];
+      const b = loop[(i + 1) % loop.length];
+      if (a && b) segs.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+    }
+    return { segs, box: segsBBox(segs) };
+  }).filter((g) => g.segs.length > 0);
+  if (!fpGroups.length) return null;
+
+  // Only the sketch-vs-footprint pairs matter here: the sketch's own crossings
+  // were already resolved above, and a footprint that merely self-touches is not
+  // a reason to redo anything.
+  //
+  // A strict crossing is NOT enough of a test, and assuming it was is what made
+  // the first version of this silently do nothing. Curves are sampled as
+  // polylines, so a circle centred on the edge it straddles lands VERTICES
+  // exactly on that edge — 64 samples of a circle at (10,0) put points on
+  // (10,+6) and (10,-6) — and a vertex touching a segment is not a crossing of
+  // two spans. anyCrossing already knows this; the same touch test has to be
+  // here or the common case is exactly the one that is missed.
+  let crosses = false;
+  outer: for (const s of perEntity) {
+    for (const f of fpGroups) {
+      if (!boxesOverlap(s.box, f.box)) continue;
+      for (const a of s.segs)
+        for (const b of f.segs) {
+          if (segCross(a, b)) { crosses = true; break outer; }
+          if (pointOnSegInterior(b.x1, b.y1, a) !== null) { crosses = true; break outer; }
+          if (pointOnSegInterior(b.x2, b.y2, a) !== null) { crosses = true; break outer; }
+          if (pointOnSegInterior(a.x1, a.y1, b) !== null) { crosses = true; break outer; }
+          if (pointOnSegInterior(a.x2, a.y2, b) !== null) { crosses = true; break outer; }
+        }
+    }
+  }
+  if (!crosses) return null;
+
+  const cells = traceLoops(planarize([...perEntity, ...fpGroups]));
+  const kept = cells.filter((cell) => {
+    const p = loopInteriorPoint(cell);
+    return sketchLoops.some((l) => pointInLoop(p, l));
+  });
+  // Never hand back fewer cells than the sketch had on its own: that would mean
+  // the arrangement lost material the user drew, and silently dropping a profile
+  // is far worse than not splitting it.
+  return kept.length >= sketchLoops.length ? kept : null;
 }
 
 function mkRegion(

@@ -184,3 +184,110 @@ describe("detectRegions — projected reference geometry forms profiles", () => 
     expect(detectRegions("s1", [pc])).toHaveLength(0);
   });
 });
+
+describe("detectRegions — splitting a profile at the edge of the face it sits on", () => {
+  // The 20x20 face of a box, in sketch coordinates. A sketch drawn on a face is
+  // bounded by that face as much as by its own curves, and until this existed
+  // the whole profile was one region that extruded off the side of the part.
+  const face: THREE.Vector2[][] = [
+    [
+      new THREE.Vector2(-10, -10),
+      new THREE.Vector2(10, -10),
+      new THREE.Vector2(10, 10),
+      new THREE.Vector2(-10, 10),
+    ],
+  ];
+
+  /** Shoelace area of a loop, for checking that a split conserves material. */
+  const area = (loop: THREE.Vector2[]) => {
+    let a = 0;
+    for (let i = 0; i < loop.length; i++) {
+      const p = loop[i]!;
+      const q = loop[(i + 1) % loop.length]!;
+      a += p.x * q.y - q.x * p.y;
+    }
+    return Math.abs(a) / 2;
+  };
+
+  it("cuts a profile that hangs off the edge into an on-face part and an overhang", () => {
+    // A circle centred on the face's right edge: half on the part, half in air.
+    const regions = detectRegions("s1", [circle("c", 10, 0, 6)], face);
+    expect(regions.length).toBe(2);
+    const kinds = regions.map((r) => r.support).sort();
+    expect(kinds).toEqual(["on-face", "overhang"]);
+  });
+
+  it("keeps the two halves' anchors on the side they claim to be on", () => {
+    // The support flag is what a tool will branch on, so it has to agree with
+    // the geometry rather than merely be present. The anchor is the point the
+    // selection is stored as, so it is the one that must be on the right side.
+    const regions = detectRegions("s1", [circle("c", 10, 0, 6)], face);
+    for (const r of regions) {
+      const inside = r.interior.x < 10;
+      expect(r.support).toBe(inside ? "on-face" : "overhang");
+    }
+  });
+
+  it("conserves the profile's area across the split", () => {
+    // The failure this prevents is the quiet one: an arrangement that drops a
+    // cell leaves the user with a profile smaller than the one they drew, and
+    // nothing on screen says so until the extrude comes out wrong.
+    const whole = detectRegions("s1", [circle("c", 10, 0, 6)]);
+    const split = detectRegions("s1", [circle("c", 10, 0, 6)], face);
+    const before = whole.reduce((s, r) => s + area(r.loop), 0);
+    const after = split.reduce((s, r) => s + area(r.loop), 0);
+    expect(after).toBeCloseTo(before, 3);
+  });
+
+  it("leaves a profile wholly on the face as one region", () => {
+    // Re-running the arrangement when nothing crosses would cost time and risk
+    // perturbing loops that were already right, so that path is skipped — but
+    // the region must still be MARKED, because a tool needs to know it is
+    // supported, not merely that it was not split.
+    const regions = detectRegions("s1", [circle("c", 0, 0, 4)], face);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]!.support).toBe("on-face");
+  });
+
+  it("marks a profile wholly off the face as overhanging, without splitting it", () => {
+    const regions = detectRegions("s1", [circle("c", 40, 0, 4)], face);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]!.support).toBe("overhang");
+  });
+
+  it("says null, not overhang, when there is no face behind the sketch", () => {
+    // A datum-plane sketch was never measured against anything. Reading that as
+    // "overhang" would make every such profile look unsupported and would send a
+    // tool down the wrong branch for the most ordinary sketch there is.
+    const regions = detectRegions("s1", [circle("c", 0, 0, 4)]);
+    expect(regions[0]!.support ?? null).toBeNull();
+  });
+
+  it("does not turn the face itself into a selectable region", () => {
+    // Feeding the outline into the arrangement makes it produce cells for the
+    // FACE as well — most obviously "the face minus the profile", which is
+    // bounded by the outline and the profile and looks just like a legitimate
+    // mixed cell. The user drew a circle, not a plate with a hole in it.
+    const regions = detectRegions("s1", [circle("c", 10, 0, 6)], face);
+    const faceArea = 20 * 20;
+    for (const r of regions) expect(area(r.loop)).toBeLessThan(faceArea / 2);
+  });
+
+  it("treats a hole in the face as nothing to sit on", () => {
+    // Even-odd, so a profile over the bore of a washer-shaped face is
+    // overhanging: there is no material under it to cut into or add flush to.
+    const washer: THREE.Vector2[][] = [face[0]!, circleLoopFor(0, 0, 5)];
+    const regions = detectRegions("s1", [circle("c", 0, 0, 2)], washer);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]!.support).toBe("overhang");
+  });
+});
+
+function circleLoopFor(cx: number, cy: number, r: number): THREE.Vector2[] {
+  const out: THREE.Vector2[] = [];
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * Math.PI * 2;
+    out.push(new THREE.Vector2(cx + Math.cos(a) * r, cy + Math.sin(a) * r));
+  }
+  return out;
+}
