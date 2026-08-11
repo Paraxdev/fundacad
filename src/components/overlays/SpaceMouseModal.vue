@@ -295,7 +295,7 @@ onUnmounted(() => {
     <div class="modal-body sm-grid">
       <!-- left column: live axes + test cube -->
       <div class="sm-col">
-        <div class="sm-section">Live axes — move the puck</div>
+        <div class="sm-section">Live axes, move the puck</div>
         <div class="sm-hint">Push/tilt/twist and watch which bar reacts, then map it below.</div>
         <div v-for="a in AXIS_NAMES" :key="a" class="sm-axis-row">
           <span class="sm-axis-label">{{ AXIS_LABELS[a] }}</span>
@@ -303,7 +303,7 @@ onUnmounted(() => {
             <div class="sm-axis-bar" :ref="(el) => setBar(a, el)"></div>
           </div>
         </div>
-        <div class="sm-section">Test — rotate the cube</div>
+        <div class="sm-section">Test, rotate the cube</div>
         <canvas ref="testCanvas" class="sm-test" width="240" height="170"></canvas>
       </div>
 

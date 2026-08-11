@@ -384,7 +384,7 @@ export class SectionTool {
 
   private prompt() {
     setPrompt(
-      `Section on (ghost: ${ghostLabel(this.ghost)}) — drag the handle to move the cut · ` +
+      `Section on (ghost: ${ghostLabel(this.ghost)}), drag the handle to move the cut · ` +
         `type a value + Enter · G ghosts more/less · F flips the kept side · Esc closes`,
     );
   }

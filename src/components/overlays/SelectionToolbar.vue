@@ -243,7 +243,7 @@ function openMore(e: PointerEvent) {
         type="button"
         class="seltool-btn seltool-more"
         data-tool="__pie"
-        title="All tools for this selection — press and flick, or click"
+        title="All tools for this selection, press and flick, or click"
         aria-label="All tools for this selection"
         aria-haspopup="menu"
         @pointerdown="openMore"

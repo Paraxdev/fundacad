@@ -279,13 +279,13 @@ export class TextureTool {
     if (this.mode === "body") {
       const ids = this.viewport.getSelectedBodies();
       const id = ids[0];
-      if (!id) return "Whole body: nothing selected — click a body";
+      if (!id) return "Whole body: nothing selected, click a body";
       const b = (this.store.buildState.result?.bodies ?? []).find((x) => x.id === id);
       const name = this.store.bodyName(id) ?? b?.name ?? id;
       return ids.length > 1 ? `Whole body: ${name} (using first of ${ids.length} selected)` : `Whole body: ${name}`;
     }
     const n = this.viewport.getSelectedFaceIds().length;
-    return n ? `${n} face${n === 1 ? "" : "s"} selected` : "No faces selected — click one or more faces";
+    return n ? `${n} face${n === 1 ? "" : "s"} selected` : "No faces selected, click one or more faces";
   }
 
   private refreshSummary() {
@@ -395,8 +395,8 @@ export class TextureTool {
     if (!feature) {
       setPrompt(
         this.mode === "faces"
-          ? "No faces selected — click one or more faces · Esc to cancel"
-          : "No body selected — click a body · Esc to cancel",
+          ? "No faces selected, click one or more faces · Esc to cancel"
+          : "No body selected, click a body · Esc to cancel",
       );
       return;
     }

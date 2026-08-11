@@ -21,7 +21,7 @@ const v = (x: number, y: number) => new THREE.Vector2(x, y);
 
 /** The one guard toast for projected (linked, fixed) reference geometry — every
  *  modify/transform/constraint seam that refuses to touch it shows this. */
-export const PROJECTED_FIXED_MSG = "Projected geometry is fixed — Break Link to edit it";
+export const PROJECTED_FIXED_MSG = "Projected geometry is fixed, Break Link to edit it";
 
 /** Break Link (Fusion): convert the given projected entities to native
  *  geometry KEEPING their ids, so attached constraints/dims stay valid — and

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// "Send to printer — filament mapping": one row per colored slot the sliced job
+// "Send to printer, filament mapping": one row per colored slot the sliced job
 // uses, each choosing which physical U1 toolhead is loaded with that filament,
 // plus the three U1 start flags. Pre-matched by print/printDialog.ts's
 // autoMatch (material first, then nearest color).

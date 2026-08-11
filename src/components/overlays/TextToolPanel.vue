@@ -55,7 +55,7 @@ const root: CSSProperties = {
   position: "fixed", zIndex: "50", padding: "8px",
   background: "#20242c", border: "1px solid #3a4150", borderRadius: "6px",
   boxShadow: "0 6px 20px rgba(0,0,0,0.4)", font: "12px system-ui, sans-serif",
-  color: "#dce3ee", width: "300px", maxWidth: "calc(100vw - 24px)", boxSizing: "border-box",
+  color: "#dce3ee", width: "300px", maxWidth: "calc(100vw, 24px)", boxSizing: "border-box",
   colorScheme: "dark", // native <select> dropdown + number spinners render dark
   left: `${pos.left}px`, top: `${pos.top}px`,
 };

@@ -22,10 +22,45 @@
    drift out of step with the chrome around it.
    ============================================================================ */
 
-/* --- FORGE: the default. Deep graphite, a single molten-amber accent. -------
-   Defined on :root rather than [data-theme="forge"] so the app is themed before
-   any script runs — no flash of an unstyled palette on a cold load, and the
-   stylesheet stands on its own if the theme module never initialises. */
+/* --- CONCRETE: the default. Flat neutral grey, one cool blue. --------------
+   Defined on :root in _tokens.scss rather than [data-theme="concrete"] so the
+   app is themed before any script runs — no flash of an unstyled palette on a
+   cold load, and the stylesheet stands on its own if the theme module never
+   initialises. */
+
+/* --- FORGE: deep graphite, a single molten-amber accent. -------------------
+   Was the default and lived on :root; it is a named theme now, so the palette
+   is written out here in full rather than inherited. */
+:root[data-theme="forge"] {
+  color-scheme: dark;
+
+  --bg: #0e0f12;
+  --panel: #16181d;
+  --panel-2: #1c1f26;
+  --raised: #22262e;
+  --raised-2: #2a2f38;
+
+  --line: #262a31;
+  --line-strong: #323843;
+
+  --text: #e6e8ec;
+  --text-dim: #9aa3af;
+  --text-mute: #6b7280;
+
+  --accent: #ff7a3c;
+  --accent-hot: #ff9a5c;
+  --accent-tint: rgba(255, 122, 60, 0.14);
+  --accent-tint-2: rgba(255, 122, 60, 0.22);
+  --accent-glow: rgba(255, 122, 60, 0.35);
+  --on-accent: #160a04;
+
+  --ok: #4ad07d;
+  --warn: #ffd24a;
+  --error: #ff5c5c;
+  --error-tint: rgba(255, 92, 92, 0.14);
+
+  --accent-blue: var(--accent);
+}
 
 /* --- SLATE: cooler graphite, steel-blue accent. The quiet one. ------------- */
 :root[data-theme="slate"] {

@@ -26,7 +26,7 @@ export function installSpaceMouse(viewport: Viewport): void {
   void listen<{ name: string; detail: string }>("spacemouse:blocked", (e) => {
     console.warn("SpaceMouse blocked:", e.payload.detail);
     toast(
-      `Found "${e.payload.name}" but can't read it — see the SpaceMouse section of the README (Linux needs a one-time udev rule; a running spacenavd/3Dconnexion driver also holds the device)`,
+      `Found "${e.payload.name}" but can't read it, see the SpaceMouse section of the README (Linux needs a one-time udev rule; a running spacenavd/3Dconnexion driver also holds the device)`,
       { kind: "error", timeout: 15000 },
     );
   });
@@ -46,7 +46,7 @@ export function installSpaceMouse(viewport: Viewport): void {
     const fingerprint = `${picked}|${note}|${seen.join(",")}`;
     if (fingerprint === recorded) return;
     recorded = fingerprint;
-    stickyFact(`[spacemouse] picked ${picked ?? "nothing"} — of ${seen.length} HID interfaces:`);
+    stickyFact(`[spacemouse] picked ${picked ?? "nothing"}, of ${seen.length} HID interfaces:`);
     if (note) stickyFact(`[spacemouse] ${note}`);
     const PER_LINE = 3;
     const MAX_LINES = 8;

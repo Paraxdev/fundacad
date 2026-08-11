@@ -66,8 +66,8 @@ const root: CSSProperties = {
   position: "fixed", top: "60px", right: "16px", zIndex: "50",
   padding: "8px", background: "#20242c", border: "1px solid #3a4150", borderRadius: "6px",
   boxShadow: "0 6px 20px rgba(0,0,0,0.4)", font: "12px system-ui, sans-serif",
-  color: "#dce3ee", width: "270px", maxWidth: "calc(100vw - 24px)", boxSizing: "border-box",
-  maxHeight: "calc(100vh - 80px)", overflowY: "auto",
+  color: "#dce3ee", width: "270px", maxWidth: "calc(100vw, 24px)", boxSizing: "border-box",
+  maxHeight: "calc(100vh, 80px)", overflowY: "auto",
   colorScheme: "dark", // native <select>/checkbox/number-spinner render dark
 };
 const row: CSSProperties = { display: "flex", gap: "6px", alignItems: "center", marginBottom: "6px" };
@@ -204,7 +204,7 @@ const noBtn: CSSProperties = { ...btn, background: "#555" };
         </div>
       </details>
 
-      <div :style="note">Preview is real geometry at display resolution — exports keep full detail.</div>
+      <div :style="note">Preview is real geometry at display resolution, exports keep full detail.</div>
 
       <div :style="btnRow">
         <button :style="okBtn" @pointerdown.prevent.stop="panels.commitTexture(toTextureValues(form))">

@@ -45,7 +45,7 @@ export async function openInOrca(store: DocumentStore, geometry: GeometryBackend
       filamentCount: store.colorPalette.length,
     });
   } catch (e) {
-    console.warn("slicer_project_settings failed — falling back to minimal settings:", e);
+    console.warn("slicer_project_settings failed, falling back to minimal settings:", e);
   }
   const written = await exportPrintProject(store, geometry, { path: stagingPath, ...(settings !== undefined ? { settings } : {}) });
   if (!written) return; // exportPrintProject already surfaced any error
@@ -53,8 +53,8 @@ export async function openInOrca(store: DocumentStore, geometry: GeometryBackend
     await invoke("slicer_open", { path: written });
     toast(
       settings
-        ? "Opened in OrcaSlicer on your U1 preset — slice, then Upload & Print."
-        : "Opened in OrcaSlicer — pick your U1 printer, slice, then Upload & Print.",
+        ? "Opened in OrcaSlicer on your U1 preset, slice, then Upload & Print."
+        : "Opened in OrcaSlicer, pick your U1 printer, slice, then Upload & Print.",
     );
   } catch (e) {
     toast(`Couldn't launch OrcaSlicer: ${String(e)}`, { kind: "error" });
@@ -110,14 +110,14 @@ export async function sendToPrinter(store: DocumentStore, _geometry: GeometryBac
     await printerUploadAndPrint(id, picked, remoteName, mapping.mapTable, mapping.opts);
   } catch (e) {
     const pe = asPrinterError(e);
-    if (pe?.code === "Busy") toast("Printer is busy — job not sent.", { kind: "error" });
-    else if (pe?.code === "NozzleMismatch") toast(`Nozzle mismatch — ${pe.message}`, { kind: "error" });
-    else if (pe?.code === "Unreachable") toast("Printer not reachable — is it on?", { kind: "error" });
+    if (pe?.code === "Busy") toast("Printer is busy, job not sent.", { kind: "error" });
+    else if (pe?.code === "NozzleMismatch") toast(`Nozzle mismatch, ${pe.message}`, { kind: "error" });
+    else if (pe?.code === "Unreachable") toast("Printer not reachable, is it on?", { kind: "error" });
     else toast(pe ? `Print rejected: ${pe.message}` : `Send failed: ${String(e)}`, { kind: "error" });
     return;
   }
 
-  toast(`Sent ${remoteName} — printing`, { kind: "info" });
+  toast(`Sent ${remoteName}, printing`, { kind: "info" });
   void startMonitoring(id);
 }
 

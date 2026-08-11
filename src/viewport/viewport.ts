@@ -2149,7 +2149,7 @@ export class Viewport {
     const side = this.setOverrideSide!;
     const plane = this.pickFacePlane(e.clientX, e.clientY);
     if (!plane) {
-      setPrompt("No face there — click a model face (Esc to cancel)");
+      setPrompt("No face there, click a model face (Esc to cancel)");
       return;
     }
     // store the face normal (faces the camera when this side is applied) and an

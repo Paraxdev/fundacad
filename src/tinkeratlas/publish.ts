@@ -40,13 +40,13 @@ export async function publishToTinkerAtlas(
   }
   const bodies = store.buildState.result?.bodies ?? [];
   if (!bodies.length) {
-    toast("Nothing to publish yet — build a body first", { kind: "error" });
+    toast("Nothing to publish yet, build a body first", { kind: "error" });
     return;
   }
   // publish requires an account; sign-in stays optional everywhere else.
   if (!currentAccount() && !(await openSignInDialog())) return;
 
-  const fmt = await choose<"3mf" | "stl">("Publish — model format?", [
+  const fmt = await choose<"3mf" | "stl">("Publish, model format?", [
     { value: "3mf", label: "3MF", hint: "recommended" },
     { value: "stl", label: "STL" },
   ]);
@@ -68,7 +68,7 @@ export async function publishToTinkerAtlas(
       // export-what-built: failed features are missing from the upload — say so
       // BEFORE it goes public, so the user can back out.
       const lines = res.warnings.map(
-        (w) => `Warning: ${w.feature_id ?? "feature"} failed — its result is NOT in the upload: ${w.message}`,
+        (w) => `Warning: ${w.feature_id ?? "feature"} failed, its result is NOT in the upload: ${w.message}`,
       );
       await listModal("Publishing with warnings", lines);
     }
@@ -94,7 +94,7 @@ export async function publishToTinkerAtlas(
         action: { label: "Sign in…", onClick: () => void openSignInDialog() },
       });
     } else if (ta?.code === "Unreachable") {
-      toast("Can't reach TinkerAtlas — check your connection", { kind: "error" });
+      toast("Can't reach TinkerAtlas, check your connection", { kind: "error" });
     } else {
       toast(`Publish failed: ${ta?.message ?? String(e)}`, { kind: "error" });
     }

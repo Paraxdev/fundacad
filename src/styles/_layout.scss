@@ -48,7 +48,7 @@
   position: relative;
   min-width: 0;
   background:
-    radial-gradient(120% 120% at 50% 0%, #15171c 0%, var(--bg) 60%);
+    var(--bg);
 }
 
 #canvas {

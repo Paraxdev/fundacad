@@ -125,9 +125,9 @@ export const MIN_PLACE_PX = 18;
 export const MAX_PLACE_PX = 600;
 
 const PROJECTED_PAIR_MSG =
-  `${PROJECTED_FIXED_MSG} — pick a second entity to dimension to it`;
+  `${PROJECTED_FIXED_MSG}, pick a second entity to dimension to it`;
 const CONCENTRIC_MSG =
-  "These circles are concentric — centre distance is 0. Dimension each diameter, or " +
+  "These circles are concentric, centre distance is 0. Dimension each diameter, or " +
   "right-click → Pick Circle/Arc Tangent before each pick for the radial gap (wall thickness).";
 
 // --- small geometry helpers (kept local; all take plain {x,y}) ---------------
@@ -285,7 +285,7 @@ type Operand = PointOp | LineOp | RoundOp;
  *  SketchMode raises it for TEXT, which `pickEntity` can never return (text has
  *  no entitySegments — it is hit-tested through its glyph bounding box). */
 export const unsupportedMessage = (kind: string): string =>
-  `A ${kind} can't be dimensioned yet — pick a line, arc, circle or rectangle edge.`;
+  `A ${kind} can't be dimensioned yet, pick a line, arc, circle or rectangle edge.`;
 
 const unsupported = (e: ResolvedEntity): DimError => ({
   error: "unsupported",
@@ -294,7 +294,7 @@ const unsupported = (e: ResolvedEntity): DimError => ({
 
 const degenerate = (what: string): DimError => ({
   error: "degenerate",
-  message: `That ${what} measures 0 — nothing to drive.`,
+  message: `That ${what} measures 0, nothing to drive.`,
 });
 
 /** A pick reduced to what the constraint schema can actually reference: a
@@ -432,13 +432,13 @@ function roundRoundPlan(a: RoundOp, b: RoundOp, forceDriven: boolean, drivenHint
   // centre) — without this they read as two coincident, equal rims and the
   // radial-gap branch would report "the same circle" instead of the truth.
   if (a.eid === b.eid) {
-    return { error: "same-entity", message: "That is one circle picked twice — pick a second entity to measure to." };
+    return { error: "same-entity", message: "That is one circle picked twice, pick a second entity to measure to." };
   }
   const d = Math.hypot(b.c.x - a.c.x, b.c.y - a.c.y);
   if (d < MEASURE_EPS) {
     const gap = Math.abs(b.c.r - a.c.r);
     if (gap < MEASURE_EPS) {
-      return { error: "degenerate", message: "These two rims are the same circle — the radial gap measures 0." };
+      return { error: "degenerate", message: "These two rims are the same circle, the radial gap measures 0." };
     }
     const inner = a.c.r <= b.c.r ? a : b;
     const outer = a.c.r <= b.c.r ? b : a;
@@ -464,12 +464,12 @@ function roundRoundPlan(a: RoundOp, b: RoundOp, forceDriven: boolean, drivenHint
   // with a jump at internal tangency, so the sign alone would call a pair of
   // internally-tangent rims "overlapping"
   if (Math.abs(d - sum) < MEASURE_EPS || Math.abs(d - diff) < MEASURE_EPS) {
-    return { error: "degenerate", message: "These two rims touch — the edge-to-edge distance measures 0, nothing to drive." };
+    return { error: "degenerate", message: "These two rims touch, the edge-to-edge distance measures 0, nothing to drive." };
   }
   if (d > diff && d < sum) {
     return {
       error: "overlapping",
-      message: "These two circles overlap — there is no edge-to-edge clearance to dimension. " +
+      message: "These two circles overlap, there is no edge-to-edge clearance to dimension. " +
         "Dimension their centres, or each diameter.",
     };
   }
@@ -500,18 +500,18 @@ function roundLinePlan(rd: RoundOp, ln: LineOp, forceDriven: boolean, drivenHint
   if (segLen(ln.seg) < MEASURE_EPS) return degenerate("line");
   const pts = lineRimPoints(ln.seg, rd.c);
   if (!pts) {
-    return { error: "point-on-line", message: "That circle's centre lies on the line — there is no edge-to-edge distance to dimension." };
+    return { error: "point-on-line", message: "That circle's centre lies on the line, there is no edge-to-edge distance to dimension." };
   }
   const gap = perpDist(rd.c, ln.seg) - rd.c.r;
   if (gap < -MEASURE_EPS) {
     return {
       error: "crossing",
-      message: "That line crosses the circle — there is no edge-to-edge distance to dimension. " +
+      message: "That line crosses the circle, there is no edge-to-edge distance to dimension. " +
         "Dimension the centre to the line instead.",
     };
   }
   if (gap < MEASURE_EPS) {
-    return { error: "degenerate", message: "That line is tangent to the circle — the edge-to-edge distance measures 0, nothing to drive." };
+    return { error: "degenerate", message: "That line is tangent to the circle, the edge-to-edge distance measures 0, nothing to drive." };
   }
   const cid = rd.eid, lid = ln.opId;
   return buildPlan({
@@ -535,13 +535,13 @@ function pointRoundPlan(pt: PointOp, rd: RoundOp, forceDriven: boolean, drivenHi
   if (d < MEASURE_EPS) {
     return {
       error: "coincident-points",
-      message: "That point sits at the circle's centre — the distance to its edge IS its radius, " +
+      message: "That point sits at the circle's centre, the distance to its edge IS its radius, " +
         "so dimension the radius instead.",
     };
   }
   const gap = Math.abs(d - rd.c.r);
   if (gap < MEASURE_EPS) {
-    return { error: "degenerate", message: "That point lies on the circle — the distance to the edge measures 0, nothing to drive." };
+    return { error: "degenerate", message: "That point lies on the circle, the distance to the edge measures 0, nothing to drive." };
   }
   const pts = pointRimPoints(pt.pos, rd.c);
   if (!pts) return degenerate("circle");
@@ -665,7 +665,7 @@ function resolvePair(t1: DimTarget, t2: DimTarget): DimResolution {
   // both operands fixed ⇒ nothing can move to satisfy a driving dim: make it a
   // reference (driven) dim instead of an unsatisfiable one
   const forceDriven = a.fixed && b.fixed;
-  const drivenHint = forceDriven ? " · reference geometry — created as a driven dimension" : "";
+  const drivenHint = forceDriven ? " · reference geometry, created as a driven dimension" : "";
   // --- rim (tangent) rows: at least one operand contributes its EDGE ---------
   if (a.kind === "round" || b.kind === "round") {
     const rd = a.kind === "round" ? a : (b as RoundOp);
@@ -674,7 +674,7 @@ function resolvePair(t1: DimTarget, t2: DimTarget): DimResolution {
     if (other.kind === "line") return roundLinePlan(rd, other, forceDriven, drivenHint);
     if (other.eid === rd.eid) {
       // the round's own centre picked alongside its rim: that is its radius
-      return { error: "same-entity", message: "That is the circle's own centre and rim — dimension its radius instead." };
+      return { error: "same-entity", message: "That is the circle's own centre and rim, dimension its radius instead." };
     }
     return pointRoundPlan(other, rd, forceDriven, drivenHint);
   }
@@ -697,7 +697,7 @@ function resolvePair(t1: DimTarget, t2: DimTarget): DimResolution {
       }
       return a.round && b.round
         ? { error: "concentric", message: CONCENTRIC_MSG }
-        : { error: "coincident-points", message: "Those two points are coincident — the distance measures 0, nothing to drive." };
+        : { error: "coincident-points", message: "Those two points are coincident, the distance measures 0, nothing to drive." };
     }
     return p2pPlan(a, b, forceDriven, `Distance: type a value · click to place${drivenHint}`);
   }
@@ -706,7 +706,7 @@ function resolvePair(t1: DimTarget, t2: DimTarget): DimResolution {
     const ln = a.kind === "line" ? a : (b as LineOp);
     if (segLen(ln.seg) < MEASURE_EPS) return degenerate("line");
     if (perpDist(pt.pos, ln.seg) < MEASURE_EPS) {
-      return { error: "point-on-line", message: "That point lies on the line — the distance measures 0, nothing to drive." };
+      return { error: "point-on-line", message: "That point lies on the line, the distance measures 0, nothing to drive." };
     }
     return p2lPlan(pt, ln, forceDriven, `Distance to line: type a value · click to place${drivenHint}`);
   }
@@ -752,7 +752,7 @@ function lineLine(l1: LineOp, l2: LineOp, forceDriven: boolean, drivenHint: stri
     kind: "point", eid: pl.eid, p: pl.p0, pos: v(pl.seg.x1, pl.seg.y1), round: false, fixed: pl.fixed,
   };
   if (perpDist(pt.pos, ll.seg) < MEASURE_EPS) {
-    return { error: "point-on-line", message: "Those lines are collinear — the distance measures 0, nothing to drive." };
+    return { error: "point-on-line", message: "Those lines are collinear, the distance measures 0, nothing to drive." };
   }
   const pair = pl.eid === ll.eid ? undefined : { l1: pl.opId, l2: ll.opId };
   return p2lPlan(pt, ll, forceDriven, `Parallel lines: type the distance · click to place${drivenHint}`, pair);

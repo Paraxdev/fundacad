@@ -6,7 +6,7 @@
   align-items: center;
   gap: var(--s-4);
   padding: 0 var(--s-4);
-  background: linear-gradient(180deg, #181a20 0%, var(--panel) 100%);
+  background: var(--panel);
   border-bottom: 1px solid var(--line);
   /* Let the row be narrower than its content (see #app). Deliberately NOT
      `overflow: hidden`: .menu-popup is absolutely positioned at top:100%, i.e.

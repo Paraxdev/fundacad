@@ -119,7 +119,7 @@ function onPackInput(ev: Event) {
       type="button"
       class="status"
       :class="ui.statusClass"
-      :title="ui.statusText + ' — click for the full text'"
+      :title="ui.statusText + ', click for the full text'"
       @click="toggleConsole()"
     >{{ ui.statusText }}</button>
   </header>

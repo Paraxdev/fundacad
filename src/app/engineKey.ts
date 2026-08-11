@@ -8,6 +8,6 @@ export const ENGINE: InjectionKey<Engine> = Symbol("sindri.engine");
  *  ever be wrapped in a reactive proxy (see app/docBridge.ts for why). */
 export function useEngine(): Engine {
   const e = inject(ENGINE);
-  if (!e) throw new Error("useEngine() called outside the app — ENGINE was not provided");
+  if (!e) throw new Error("useEngine() called outside the app, ENGINE was not provided");
   return e;
 }

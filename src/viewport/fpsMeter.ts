@@ -61,7 +61,7 @@ export class FpsMeter {
     const last = this.stamps[this.stamps.length - 1];
     if (last === undefined || now - last > IDLE_AFTER_MS) {
       this.el.textContent = "idle";
-      this.el.title = "The viewport only draws when something changes — nothing to render right now." + gpuLine;
+      this.el.title = "The viewport only draws when something changes, nothing to render right now." + gpuLine;
       return;
     }
     // Rate over the window, and the mean interval between the frames in it.

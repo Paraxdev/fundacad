@@ -239,7 +239,7 @@ function openMenu(e: MouseEvent, id: string, i: number) {
   <footer id="timeline" class="timeline-shell">
     <div class="timeline-transport">
       <button class="tl-btn" title="Roll back to the start" :disabled="rollback <= 0" @click="store.setRollback(0)"><Icon name="skipStart" /></button>
-      <button class="tl-btn" title="Step one feature back" :disabled="rollback <= 0" @click="store.setRollback(Math.max(0, rollback - 1))"><Icon name="stepBack" /></button>
+      <button class="tl-btn" title="Step one feature back" :disabled="rollback <= 0" @click="store.setRollback(Math.max(0, rollback, 1))"><Icon name="stepBack" /></button>
       <button class="tl-btn" title="Step one feature forward" :disabled="rollback >= features.length" @click="store.setRollback(Math.min(features.length, rollback + 1))"><Icon name="stepForward" /></button>
       <button class="tl-btn" title="Roll forward to the end" :disabled="rollback >= features.length" @click="store.setRollback(features.length)"><Icon name="skipEnd" /></button>
     </div>
@@ -312,7 +312,7 @@ function openMenu(e: MouseEvent, id: string, i: number) {
     <button
       class="timeline-errbadge"
       :class="{ hidden: errors.size === 0 }"
-      title="Failing features — click to jump to the next one"
+      title="Failing features, click to jump to the next one"
       @click="jumpToNextError()"
     ><Icon name="warning" :size="14" /> {{ errors.size }}</button>
   </footer>

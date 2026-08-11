@@ -86,17 +86,41 @@ export function snap(v: number, step: number): number {
 // the input-side consumers that historically import it from units.
 import type { FieldKind } from "../document/numFields";
 export type { FieldKind };
+import { tryParseMeasure, unitById } from "./measure";
 
 /** numeric value to show in a field: angles stay in degrees, lengths convert */
 export function displayValue(mm: number, kind: FieldKind = "length"): number {
   return kind === "length" ? round(toDisplay(mm)) : round(mm); // angle/count: raw
 }
 
-/** parse a typed field back to mm (length) or degrees (angle); null if invalid */
+/** Parse a typed field back to mm (length) or degrees (angle); null if invalid.
+ *
+ *  This was `parseFloat`, which is why every field in the app was quietly NOT
+ *  unit agnostic: "2mm" came back as 2 in whatever the field was showing, "1
+ *  inch" as 1, "1/2" as 1. parseFloat never fails on those — it stops at the
+ *  first character it does not like and returns what it has, so there was
+ *  nothing to report and the part was simply the wrong size.
+ *
+ *  It now goes through ui/measure, so anything typeable in one field is
+ *  typeable in all of them: units, symbols, compounds, fractions, arithmetic.
+ *  A COUNT stays a plain number — "6 sides" has no unit to infer and a fraction
+ *  of a side is not a thing. */
 export function parseField(raw: string, kind: FieldKind = "length"): number | null {
-  const v = parseFloat(raw);
-  if (Number.isNaN(v)) return null;
-  return kind === "length" ? fromDisplay(v) : v; // angle/count: raw number
+  if (kind === "count") {
+    const v = parseFloat(raw);
+    return Number.isFinite(v) ? v : null;
+  }
+  const display = kind === "length" ? unitById(current) : unitById("deg");
+  return tryParseMeasure(raw, display)?.value ?? null;
+}
+
+/** The unit a typed field NAMED, if it named one — so a surface can adopt it as
+ *  its display unit rather than showing the number back in a unit the user just
+ *  told it not to use. Null for a bare number. */
+export function parsedUnit(raw: string, kind: FieldKind = "length"): string | null {
+  if (kind === "count") return null;
+  const display = kind === "length" ? unitById(current) : unitById("deg");
+  return tryParseMeasure(raw, display)?.unit?.id ?? null;
 }
 
 /** A plain numeric literal (display-unit semantics at input surfaces) as

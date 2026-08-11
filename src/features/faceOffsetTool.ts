@@ -172,7 +172,7 @@ export class FaceOffsetTool {
   }
 
   private prompt() {
-    const n = this.faces.length > 1 ? `${this.faces.length} faces — ` : "";
+    const n = this.faces.length > 1 ? `${this.faces.length} faces, ` : "";
     const sym = this.mode === "thicken" ? ` · S = symmetric${this.symmetric ? " (on)" : ""}` : "";
     setPrompt(`${n}drag the handle or type a distance${sym} · click empty space to commit · Esc to cancel`);
   }
@@ -272,13 +272,13 @@ export class FaceOffsetTool {
     if (this.phase !== "drag") return this.cancel();
     const v = this.dim.getValue("distance");
     if (v == null && this.dim.isUserDriven("distance")) {
-      setPrompt("Can't read that number — fix the value, or Esc to cancel");
+      setPrompt("Can't read that number, fix the value, or Esc to cancel");
       return;
     }
     if (v != null && this.dim.isUserDriven("distance")) this.value = v;
     if (Math.abs(this.value) < 1e-3) {
       // keep the tool alive: silently cancelling reads as "nothing happened"
-      setPrompt("Nothing to commit — drag the handle or type a distance first");
+      setPrompt("Nothing to commit, drag the handle or type a distance first");
       return;
     }
     const feature = this.buildFeature();

@@ -66,7 +66,7 @@ watch(
 
 <template>
   <FloatingPanel :open="!!panels.camera" close-on-esc @close="panels.camera = null">
-    <div class="measure-title">Camera — {{ panels.camera }}</div>
+    <div class="measure-title">Camera, {{ panels.camera }}</div>
     <img
       class="camera-frame"
       alt="printer camera"

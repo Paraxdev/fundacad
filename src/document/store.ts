@@ -479,7 +479,7 @@ export class DocumentStore {
       .then(() => this.commitWithCascade(fn))
       .catch((e) => {
         console.error("param commit failed:", e);
-        this.onWarning?.("Parameter change failed to apply — see the console for details.");
+        this.onWarning?.("Parameter change failed to apply, see the console for details.");
       });
   }
   private async commitWithCascade(fn: (d: CadDocument) => void): Promise<void> {
@@ -544,7 +544,7 @@ export class DocumentStore {
     if (this.projStreak >= 5) {
       if (this.projValveOpen) {
         this.projValveOpen = false;
-        this.onWarning?.("Projected geometry keeps changing on every rebuild — paused automatic refresh (edit the model or Compute All to retry).");
+        this.onWarning?.("Projected geometry keeps changing on every rebuild, paused automatic refresh (edit the model or Compute All to retry).");
       }
       return;
     }
@@ -558,7 +558,7 @@ export class DocumentStore {
       .then(() => this.commitProjectionRefresh(updates))
       .catch((e) => {
         console.error("projection refresh failed:", e);
-        this.onWarning?.("Projected geometry failed to refresh — see the console for details.");
+        this.onWarning?.("Projected geometry failed to refresh, see the console for details.");
       });
   }
 
@@ -578,7 +578,7 @@ export class DocumentStore {
     // on the not-stale -> stale transition, so every entry here is news)
     for (const sid of new Set(valid.filter((u) => u.stale).map((u) => u.sketch))) {
       const f = sketchOf.get(sid)!;
-      this.onWarning?.(`Projected geometry in ${f.name ?? sid} lost its source — keeping last shape`);
+      this.onWarning?.(`Projected geometry in ${f.name ?? sid} lost its source, keeping last shape`);
     }
 
     const open = this.openSketchId?.() ?? null;

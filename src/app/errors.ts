@@ -8,10 +8,10 @@ import { toast } from "../ui/toast";
 export function installGlobalErrorHandlers(): void {
   window.addEventListener("unhandledrejection", (e) => {
     console.error("Unhandled rejection:", e.reason);
-    toast("Something went wrong — check the console for details", { kind: "error" });
+    toast("Something went wrong, check the console for details", { kind: "error" });
   });
   window.onerror = (message, source, lineno, colno, error) => {
     console.error("Uncaught error:", error ?? message, source, lineno, colno);
-    toast("Something went wrong — check the console for details", { kind: "error" });
+    toast("Something went wrong, check the console for details", { kind: "error" });
   };
 }

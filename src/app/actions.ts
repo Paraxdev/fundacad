@@ -190,7 +190,7 @@ export function createActions(e: Engine): (action: string) => void {
         // they need no aiming at all — on a part with no face facing the way you
         // want to look, Z is one click away and a pick is not.
         void (async () => {
-          const src = await choose<"pick" | "X" | "Y" | "Z">("Section — cut along what?", [
+          const src = await choose<"pick" | "X" | "Y" | "Z">("Section, cut along what?", [
             { value: "pick", label: "Face or plane", hint: "click one" },
             { value: "Z", label: "Z", hint: "horizontal cut" },
             { value: "X", label: "X" },
@@ -295,7 +295,7 @@ export function createActions(e: Engine): (action: string) => void {
         toggleShortcutHUD();
         break;
       case "compute-all":
-        e.setStatus("Compute All — rebuilding everything from scratch…", "");
+        e.setStatus("Compute All, rebuilding everything from scratch…", "");
         void e.store.computeAllNow();
         break;
     }

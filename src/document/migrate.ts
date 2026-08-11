@@ -51,7 +51,7 @@ export function migrateDocument(parsed: CadDocument): string[] {
   if (version > FORMAT_VERSION) {
     // Best effort: load what we understand, but don't rewrite shapes we don't.
     return [
-      "This file was made by a newer version of SindriCAD — unknown data (e.g. parameter expressions) may be lost if you save it here.",
+      "This file was made by a newer version of SindriCAD, unknown data (e.g. parameter expressions) may be lost if you save it here.",
     ];
   }
 

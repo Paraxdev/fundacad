@@ -141,7 +141,7 @@ export async function submitBugReport(deps: BugReportDeps, form: BugReportForm):
     const res = await taBugReport(payload);
     toast(
       res.deduplicated
-        ? "Thanks — this matches a known report; the existing one was updated."
+        ? "Thanks, this matches a known report; the existing one was updated."
         : "Bug report sent. Thank you!",
       { kind: "info" },
     );
@@ -153,7 +153,7 @@ export async function submitBugReport(deps: BugReportDeps, form: BugReportForm):
     const copied = await copyFallback(form.description, form.version, connected, crumbList);
     toast(
       `Couldn't send the report${te ? `: ${te.message}` : ""}.` +
-        (copied ? " A copy is on your clipboard — paste it in the SindriCAD Discord." : ""),
+        (copied ? " A copy is on your clipboard, paste it in the SindriCAD Discord." : ""),
       { kind: "error", timeout: 10000 },
     );
     return false;

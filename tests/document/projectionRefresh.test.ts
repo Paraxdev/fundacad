@@ -130,7 +130,7 @@ describe("projection refresh (derived commit loop)", () => {
     expect(p1?.stale).toBe(true);
     expect(p1?.curve).toEqual(CURVE0); // last shape kept
     expect(warnings.filter((w) => w.includes("lost its source"))).toEqual([
-      "Projected geometry in Sketch1 lost its source — keeping last shape",
+      "Projected geometry in Sketch1 lost its source, keeping last shape",
     ]);
   });
 

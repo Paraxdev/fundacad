@@ -241,7 +241,7 @@ const nodes = useDocValue((doc): TreeNode[] => {
       extraMenu: [{ label: "Cut all bodies", onClick: () => void engine.starters.startCutByPlane(f.id) }],
       rename: (name: string) => store.updateFeature(f.id, { name } as Partial<Feature>),
       remove: () => store.removeFeature(f.id),
-      title: "Construction plane — select then Split Body cuts by it · right-click for Cut / Rename / Delete · eye to show/hide",
+      title: "Construction plane, select then Split Body cuts by it · right-click for Cut / Rename / Delete · eye to show/hide",
     })));
   }
 
@@ -382,7 +382,7 @@ const dotStyle = computed(() => ({
 }));
 const dotTitle = computed(() =>
   stale.value
-    ? `Printer filaments changed since sync (slot${staleSlots.value.length > 1 ? "s" : ""} ${staleSlots.value.map((i) => i + 1).join(", ")}) — click the sync button to re-sync`
+    ? `Printer filaments changed since sync (slot${staleSlots.value.length > 1 ? "s" : ""} ${staleSlots.value.map((i) => i + 1).join(", ")}), click the sync button to re-sync`
     : "Printer connection",
 );
 

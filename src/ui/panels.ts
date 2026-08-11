@@ -90,7 +90,7 @@ export function createPanels(deps: PanelsDeps) {
     }));
     panels.showInterference({
       title: pairs.length
-        ? `Interference — ${pairs.length} clash${pairs.length > 1 ? "es" : ""}`
+        ? `Interference, ${pairs.length} clash${pairs.length > 1 ? "es" : ""}`
         : "Interference",
       clashes,
     });

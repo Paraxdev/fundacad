@@ -204,7 +204,7 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
   // owns it) and patch the live entities instead
   e.store.onProjectionsApplied = (updates) => e.sketch.syncProjectedCurves(updates);
   e.store.onParamSolveIssue = (id) =>
-    toast(`Sketch ${id}: dimensions could not be satisfied after the parameter change — geometry left unchanged`);
+    toast(`Sketch ${id}: dimensions could not be satisfied after the parameter change, geometry left unchanged`);
   // Sidecar owns fonts: glyph outlines arrive async via tessellateText; repaint the
   // right surface (active sketch or committed overlay) when they land.
   setTextBackend(e.geometry, () => {
@@ -246,7 +246,7 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
   // startup (field report, 0.1.73 on Windows). The real, specific error is raised
   // if and when a sketch actually needs to solve.
   void initSolver().then((ok) => {
-    if (!ok) crumb("[solver] constraint solver unavailable — sketching without constraints");
+    if (!ok) crumb("[solver] constraint solver unavailable, sketching without constraints");
   });
 
   installSpaceMouse(e.viewport);

@@ -2,7 +2,7 @@
    TIMELINE  (slimmer; modern feature chips)
    ============================================================================ */
 #timeline {
-  background: linear-gradient(180deg, #131519 0%, var(--panel) 100%);
+  background: var(--panel);
   border-top: 1px solid var(--line);
   /* Matches #titlebar and .ribbon-context: the three full-width bars share one
      left edge so nothing in the chrome looks a couple of pixels out. */

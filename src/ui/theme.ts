@@ -29,6 +29,7 @@ export interface Theme {
  *  listed here without a block applies an attribute that matches no rule and so
  *  silently leaves the previous palette on screen. */
 export const THEMES: Theme[] = [
+  { id: "concrete", label: "Concrete", mode: "dark" },
   { id: "forge", label: "Forge", mode: "dark" },
   { id: "slate", label: "Slate", mode: "dark" },
   { id: "moss", label: "Moss", mode: "dark" },
@@ -37,7 +38,7 @@ export const THEMES: Theme[] = [
 
 /** The palette on :root, so it needs no attribute and survives a cold load with
  *  no script. */
-export const DEFAULT_THEME_ID = "forge";
+export const DEFAULT_THEME_ID = "concrete";
 
 const KEY = "sindricad.theme";
 

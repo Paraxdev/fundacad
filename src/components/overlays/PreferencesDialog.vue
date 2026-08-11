@@ -89,7 +89,7 @@ function onHistory(ev: Event) { const v = asHistorySide(value(ev)); if (v) setLa
           <option value="in">Inches</option>
         </select>
       </label>
-      <div class="sm-hint">Geometry is always stored in millimetres — this is display only.</div>
+      <div class="sm-hint">Geometry is always stored in millimetres, this is display only.</div>
 
       <div class="sm-section">Layout</div>
       <label class="prefs-row">

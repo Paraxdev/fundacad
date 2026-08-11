@@ -2,7 +2,7 @@
    RIBBON  (the most visible element — icon-forward, grouped, amber-accented)
    ============================================================================ */
 #ribbon {
-  background: linear-gradient(180deg, var(--panel) 0%, #131519 100%);
+  background: var(--panel);
   border-bottom: 1px solid var(--line);
   /* The auto row above is not enough on its own: #ribbon scrolls horizontally,
      and a scroll container's automatic minimum size is ZERO in both axes, so a
@@ -115,7 +115,7 @@
   bottom: 22px;
   right: 0;
   width: 1px;
-  background: linear-gradient(180deg, transparent, var(--line) 20%, var(--line) 80%, transparent);
+  background: var(--line);
 }
 .ribbon-tools {
   display: flex;

@@ -84,7 +84,7 @@ export const SKETCH_PROMPTS: Record<string, string> = {
   tangent: "Tangent: click two curves (line, circle or arc) to make them tangent · Esc",
   coincident: "Coincident: click two endpoints to make them coincide · Esc",
   concentric: "Concentric: click two circles/arcs to share a center · Esc",
-  midpoint: "Midpoint: click a point/endpoint, then a line — the point sits at its midpoint · Esc",
+  midpoint: "Midpoint: click a point/endpoint, then a line, the point sits at its midpoint · Esc",
   collinear: "Collinear: click two lines to put them on the same axis · Esc",
   symmetric: "Symmetric: click two endpoints, then the symmetry axis line · Esc",
   fix: "Fix: click a point, endpoint or circle/arc center to lock it in place · Esc",

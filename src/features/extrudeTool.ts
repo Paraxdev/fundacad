@@ -165,7 +165,7 @@ export class ExtrudeTool {
       this.beginDrag();
     } else {
       setPrompt(
-        "Editing extrude: its areas were not found (sketch changed?) — select a profile · Esc to cancel",
+        "Editing extrude: its areas were not found (sketch changed?), select a profile · Esc to cancel",
       );
     }
     return true;
@@ -419,16 +419,16 @@ export class ExtrudeTool {
       const opts: { value: Op; label: string; hint: string }[] = [
         { value: "join", label: "Join", hint: into ? "likely no effect (profile is inside)" : "merge" },
         { value: "cut", label: "Cut", hint: into ? "remove" : "nothing to cut here" },
-        { value: "new", label: "New Body", hint: isTextProfile ? "separate — assign its own print color" : "separate" },
+        { value: "new", label: "New Body", hint: isTextProfile ? "separate, assign its own print color" : "separate" },
         { value: "intersect", label: "Intersect", hint: "keep overlap" },
       ];
       opts.sort((a, b) => (a.value === guess ? -1 : b.value === guess ? 1 : 0)); // default first
-      const chosen = await choose<Op>("Extrude — operation", opts);
+      const chosen = await choose<Op>("Extrude, operation", opts);
       this.committing = false;
       if (!chosen) {
         // modal dismissed — the tool is STILL ALIVE; say so instead of leaving
         // the user staring at an unchanged screen ("nothing happened")
-        setPrompt("Extrude not committed — Enter or the confirm button to choose an operation · Esc to cancel");
+        setPrompt("Extrude not committed, Enter or the confirm button to choose an operation · Esc to cancel");
         return;
       }
       op = chosen;

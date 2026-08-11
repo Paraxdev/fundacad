@@ -154,7 +154,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       const why = target?.kind === "unusable";
       if (why !== sayingWhy) {
         sayingWhy = why;
-        setPrompt(why ? `${promptText} — this face is neither flat nor round, so it implies no plane` : promptText);
+        setPrompt(why ? `${promptText}, this face is neither flat nor round, so it implies no plane` : promptText);
       }
     };
     const onDown = (e: PointerEvent) => {
@@ -298,7 +298,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     const sel = selId ? store.document.features.find((f) => f.id === selId) : null;
     if (sel?.type === "datumPlane") return void startCutByPlane(sel.id);
 
-    const keep = await choose<"both" | "top" | "bottom">("Split Body — keep which side?", [
+    const keep = await choose<"both" | "top" | "bottom">("Split Body, keep which side?", [
       { value: "both", label: "Both", hint: "two bodies" },
       { value: "top", label: "Top", hint: "+normal side" },
       { value: "bottom", label: "Bottom", hint: "−normal side" },
@@ -327,7 +327,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       setStatus("Cut: create or import a body first", "");
       return;
     }
-    const keep = await choose<"both" | "top" | "bottom">("Cut — keep which side?", [
+    const keep = await choose<"both" | "top" | "bottom">("Cut, keep which side?", [
       { value: "both", label: "Both", hint: "two bodies" },
       { value: "top", label: "Top", hint: "+normal side" },
       { value: "bottom", label: "Bottom", hint: "−normal side" },
@@ -346,7 +346,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     if (toolBusy()) return;
     const bodies = store.buildState.result?.bodies ?? [];
     if (bodies.length < 2) {
-      setStatus("Combine: needs at least two bodies — model or import another", "");
+      setStatus("Combine: needs at least two bodies, model or import another", "");
       return;
     }
     const op = await choose<"join" | "cut" | "intersect">("Combine bodies", [
@@ -429,7 +429,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       return;
     }
     store.addFeature({ id: store.nextId(), type: "cleanUp" } as Feature);
-    setStatus("Clean Up added — bodies unified + debris collapsed from here on", "");
+    setStatus("Clean Up added, bodies unified + debris collapsed from here on", "");
   }
 
   // Scale: resize the active body about the origin (handy for fixing the units of
@@ -510,7 +510,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       { value: "Z", label: "Z axis" },
     ]);
     if (!axis) return;
-    const operation = await chooseSolidOperation("Revolve — operation");
+    const operation = await chooseSolidOperation("Revolve, operation");
     if (!operation) return;
     store.addFeature({ id: store.nextId(), type: "revolve", sketch: wr.sketchId, axis, angle: 360, operation } as Feature);
   }
@@ -623,7 +623,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
     if (!feature) return;
     const site = findSelectorAt(feature, at);
     if (!site) {
-      setStatus("That reference has already changed — nothing to re-pick", "");
+      setStatus("That reference has already changed, nothing to re-pick", "");
       return;
     }
     pickFaceInteractive("Pick the face this feature should use · Esc to cancel", (sel) => {
@@ -633,7 +633,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       if (!cur) return;
       const site2 = findSelectorAt(cur, at);
       if (!site2) {
-        setStatus("That reference has already changed — nothing to re-pick", "");
+        setStatus("That reference has already changed, nothing to re-pick", "");
         return;
       }
       store.updateFeature(featureId, replaceSelectorAt(cur, site2, sel));

@@ -694,7 +694,7 @@ export class SketchMode {
     this.viewport.setSketchFlat(false);
     if (this.releaseAnnounced) return;
     this.releaseAnnounced = true;
-    toast("View unlocked — orbit freely. Everything you draw still lands on the sketch plane. (Look At re-squares it.)");
+    toast("View unlocked, orbit freely. Everything you draw still lands on the sketch plane. (Look At re-squares it.)");
   }
 
   /** Re-arm the lock and re-baseline it. Called by anything that deliberately
@@ -748,7 +748,7 @@ export class SketchMode {
     const drivenable = isPlacedDim(c);
     const driven = drivenable && (this.referenceMode || forceDriven);
     if (this.referenceMode && !drivenable) {
-      toast("A line length / circle diameter can't be a reference dimension yet — created as driving.");
+      toast("A line length / circle diameter can't be a reference dimension yet, created as driving.");
     }
     const out = driven ? ({ ...c, driven: true } as SketchConstraint) : c;
     this.setDrivingDimension(out);
@@ -2174,7 +2174,7 @@ export class SketchMode {
     const r = resolveDim(this.dimPicks, this.dimOptions());
     this.dimPlan = isDimError(r) ? null : r;
     if (this.dimPicks.map(targetKey).join("+") !== before) {
-      toast("The geometry this dimension referenced is gone — dimension cancelled");
+      toast("The geometry this dimension referenced is gone, dimension cancelled");
       this.cancelDim();
       return;
     }
@@ -2272,7 +2272,7 @@ export class SketchMode {
       this.dimFieldKey = plan.fieldKey;
       this.dimPlanKey = key;
       this.dim.show(plan.fields, () => this.commitDim(), () => this.cancelDim());
-      if (discarded) toast("This is a different dimension now — retype the value");
+      if (discarded) toast("This is a different dimension now, retype the value");
     }
     this.dim.updateFromCursor({ [plan.field]: plan.measure() });
     this.positionDimBox(ev);
@@ -2298,7 +2298,7 @@ export class SketchMode {
     if (raw !== "") {
       const r = this.evalDimInput(raw, kind, null);
       if ("error" in r) {
-        toast(`Dimension not created — ${r.error}`);
+        toast(`Dimension not created, ${r.error}`);
         this.dim.focus(); // leave the box open on the bad value
         return;
       }
@@ -2997,7 +2997,7 @@ export class SketchMode {
         onClick: () => {
           this.dimTangentArmed = !this.dimTangentArmed;
           setPrompt(this.dimTangentArmed
-            ? "Tangent pick armed — click a circle or arc to measure to its EDGE"
+            ? "Tangent pick armed, click a circle or arc to measure to its EDGE"
             : "Tangent pick cleared");
         },
       },
@@ -3034,8 +3034,8 @@ export class SketchMode {
         onClick: () => {
           this.offsetChainMode = !this.offsetChainMode;
           setPrompt(this.offsetChainMode
-            ? "Chain Selection on — the whole connected profile offsets as a unit"
-            : "Chain Selection off — only the clicked curve offsets");
+            ? "Chain Selection on, the whole connected profile offsets as a unit"
+            : "Chain Selection off, only the clicked curve offsets");
         },
       },
       {
@@ -3312,7 +3312,7 @@ export class SketchMode {
       // the associative link + its single editable dimension
       this.setDrivingDimension({ type: "offset", pairs: res.pairs, value: pick.side * pick.mag });
     } else if (!res.linked) {
-      toast("Offset copy created — not linked to the source (this shape type is rigid)");
+      toast("Offset copy created, not linked to the source (this shape type is rigid)");
     }
     this.afterModify();
   }
@@ -3416,7 +3416,7 @@ export class SketchMode {
         return;
       }
       if (!this.committedSource(hit.sketchId, hit.entityId)) {
-        toast("Pattern copies can't be projected — pick the pattern's source curve");
+        toast("Pattern copies can't be projected, pick the pattern's source curve");
         return;
       }
       const dup = this.entities.some(
@@ -3773,7 +3773,7 @@ export class SketchMode {
             // mid-gesture (yanking it to the cursor on release).
             if (!this.dragRefusedToast) {
               this.dragRefusedToast = true;
-              toast(r.dragRefused === "projected" ? PROJECTED_FIXED_MSG : "That point is fixed — delete its Fix constraint to move it");
+              toast(r.dragRefused === "projected" ? PROJECTED_FIXED_MSG : "That point is fixed, delete its Fix constraint to move it");
             }
           } else if (this.dragFrom) {
             this.dragFrom.set(d.toX, d.toY); // track grabbed pt
@@ -3810,7 +3810,7 @@ export class SketchMode {
         toast(
           err instanceof SolverUnavailable
             ? err.message
-            : "The 2D constraint solver stopped responding — sketching continues without constraints",
+            : "The 2D constraint solver stopped responding, sketching continues without constraints",
           { kind: "error", timeout: 12000 },
         );
       }

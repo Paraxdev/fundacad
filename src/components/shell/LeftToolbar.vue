@@ -69,7 +69,7 @@ function title(group: RailGroup): string {
   const key = tool.key ? ` (${tool.key})` : "";
   // The affordance has to be spelled out somewhere: a corner mark says "there
   // is more here", but nothing on screen can say HOW to get at it.
-  return hasVariants(group) ? `${tool.label}${key} — hold for variants` : `${tool.label}${key}`;
+  return hasVariants(group) ? `${tool.label}${key}, hold for variants` : `${tool.label}${key}`;
 }
 
 // --- the gesture ----------------------------------------------------------

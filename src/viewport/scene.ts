@@ -94,7 +94,7 @@ function recordGpu(renderer: THREE.WebGLRenderer) {
     /* querying the renderer must never break startup */
   }
   const spoofed = /apple/i.test(desc) && !/mac/i.test(navigator.platform ?? "");
-  const note = spoofed ? " — reported by WebKitGTK, which spoofs this; not the real GPU" : "";
+  const note = spoofed ? ", reported by WebKitGTK, which spoofs this; not the real GPU" : "";
   (window as { __gpu?: string }).__gpu = desc + note;
   stickyFact(`[gpu] ${desc}${note}`);
 }

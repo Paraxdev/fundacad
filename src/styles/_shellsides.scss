@@ -50,9 +50,8 @@
 
 :root[data-ribbon="left"] {
   #ribbon {
-    /* The gradient runs along the bar's long axis in both orientations, and the
-       border is on the edge that faces the viewport. */
-    background: linear-gradient(90deg, var(--panel) 0%, #131519 100%);
+    /* The border moves to the edge that faces the viewport. */
+    background: var(--panel);
     border-bottom: none;
     border-right: 1px solid var(--line);
     /* Swapped with the horizontal bar's: a column scrolls down, not across.
@@ -60,11 +59,13 @@
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
-    /* Wide enough for a 60px button plus the group's padding and its divider.
-       Fixed rather than fit-content because an `auto` column would be sized to
-       the widest group CAPTION, and the captions are the one part of a ribbon
-       group that is allowed to be narrower than its tools. */
-    width: 92px;
+    /* Fixed rather than fit-content: an `auto` column would be sized to the
+       widest group CAPTION, and the captions are the one part of a ribbon group
+       that is allowed to be narrower than its tools. Wide enough for a 60px
+       button plus the group's own inline padding, and then some: at 92px every
+       label came out clipped ("...trude", "et Pla...", "mplify ..."), and at
+       112px the longer ones still did ("Press/...", "Param..."). */
+    width: 136px;
   }
   .ribbon-context {
     flex-direction: column;
@@ -73,8 +74,46 @@
     min-height: 100%;
     /* The horizontal bar pads its ends; the vertical one pads its top and
        bottom, so the first and last group are not flush against the chrome. */
-    padding: var(--s-4) 0;
+    padding: var(--s-3) 0;
   }
+  /* The tools inside a group have to turn with the bar. Left as a row they run
+     off the side of a 112px column and are clipped — which is not a near miss
+     that a wider column fixes, because a group holds up to seven of them. */
+  .ribbon-tools {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--s-0);
+  }
+  .ribbon-btn {
+    /* Icon beside the label rather than above it: a column of stacked
+       icon-over-label buttons is mostly whitespace, and the width is there. */
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-2);
+    text-align: left;
+  }
+  .ribbon-btn span {
+    max-width: none;
+    flex: 1;
+  }
+  .ribbon-group {
+    align-items: stretch;
+    padding: var(--s-2) var(--s-2) var(--s-3);
+  }
+  /* The caption reads as a heading for the rows under it, so it goes ABOVE
+     them and to the left, not centred underneath. */
+  .ribbon-group-label {
+    order: -1;
+    margin: 0 0 var(--s-2) var(--s-2);
+    text-align: left;
+  }
+  /* A split button's caret sits at the end of the row, not glued to a 60px
+     tile — the row is full width now. */
+  .ribbon-split { width: 100%; }
+  .ribbon-split .ribbon-btn { flex: 1; }
   /* A group's divider moves from its right edge to its bottom one — it is
      separating rows now, not columns. */
   .ribbon-group:not(:last-child)::after {
@@ -84,7 +123,7 @@
     right: 14px;
     width: auto;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent);
+    background: var(--line);
   }
   /* The spacer that pushes Finish Sketch to the far end pushes it DOWN here;
      `flex: 1` already does that once the axis is vertical, so nothing to add —

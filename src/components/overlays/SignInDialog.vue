@@ -37,9 +37,9 @@ function showError(e: unknown) {
   const ta = asTaError(e);
   error.value =
     ta?.code === "Unauthorized"
-      ? "TinkerAtlas didn't accept the sign-in — try again."
+      ? "TinkerAtlas didn't accept the sign-in, try again."
       : ta?.code === "Unreachable"
-        ? "Can't reach TinkerAtlas — check your connection and retry."
+        ? "Can't reach TinkerAtlas, check your connection and retry."
         : `Sign-in failed: ${ta?.message ?? String(e)}`;
 }
 
@@ -167,7 +167,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey, true));
           <p>Finish signing in in your <strong>browser</strong>.</p>
           <p class="ta-signin-hint">
             This dialog completes automatically when you click
-            <em>Authorize SindriCAD</em>. Creating an account first? Take your time —
+            <em>Authorize SindriCAD</em>. Creating an account first? Take your time,
             if this times out, just press Sign in again afterwards.
           </p>
         </div>

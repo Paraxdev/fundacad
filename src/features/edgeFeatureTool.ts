@@ -267,7 +267,7 @@ export class EdgeFeatureTool {
       if (opts?.grabAt) this.grabHandle(opts.grabAt.x, opts.grabAt.y);
     } else {
       setPrompt(
-        `Select an edge to ${kind} — Ctrl-click adds a tangent chain, Shift-click adds a single edge, ` +
+        `Select an edge to ${kind}, Ctrl-click adds a tangent chain, Shift-click adds a single edge, ` +
           `or select a face to ${kind} every edge around it`,
       );
     }
@@ -604,7 +604,7 @@ export class EdgeFeatureTool {
     const next = switchTreatment(this.kind, this.value, bounds);
     if (this.paramBlocked(next.kind)) {
       setPrompt(
-        `Can't switch: this feature's ${treatmentField(next.kind).name} is driven by a parameter — ` +
+        `Can't switch: this feature's ${treatmentField(next.kind).name} is driven by a parameter, ` +
           `change it in the inspector · Esc to cancel`,
       );
       return;
@@ -636,14 +636,14 @@ export class EdgeFeatureTool {
   private promptForPhase() {
     const n = this.currentSelectors().length;
     if (!n) {
-      setPrompt("No edges selected — click an edge to add one · Esc to cancel");
+      setPrompt("No edges selected, click an edge to add one · Esc to cancel");
       return;
     }
     if (this.neutral) {
       // The one state with no preview to explain itself: say which way each
       // treatment lies, and that staying here is how you back out.
       setPrompt(
-        `Nothing applied — drag the handle out for a ${this.positiveKind}, ` +
+        `Nothing applied, drag the handle out for a ${this.positiveKind}, ` +
           `the other way for a ${otherTreatment(this.positiveKind)} · ` +
           `let go here to cancel`,
       );
@@ -1132,7 +1132,7 @@ export class EdgeFeatureTool {
     // origin on purpose, and that means "don't do this after all".
     if (this.neutral) return this.cancel();
     if (this.currentSelectors().length === 0) {
-      setPrompt("No edges selected — click an edge to add one · Esc to cancel");
+      setPrompt("No edges selected, click an edge to add one · Esc to cancel");
       return; // deleting is an explicit timeline action, not an implicit empty commit
     }
     const feature = this.buildFeature();

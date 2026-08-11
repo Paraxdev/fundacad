@@ -13,7 +13,7 @@ const panels = usePanelsStore();
 <template>
   <FloatingPanel :open="!!panels.properties" close-on-esc @close="panels.properties = null">
     <template v-if="panels.properties">
-      <div class="measure-title">Properties — {{ panels.properties.title }}</div>
+      <div class="measure-title">Properties, {{ panels.properties.title }}</div>
       <div v-for="r in panels.properties.rows" :key="r.k" class="measure-row">
         <span class="measure-k">{{ r.k }}</span>
         <span class="measure-v">{{ r.v }}</span>

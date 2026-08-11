@@ -201,7 +201,7 @@ export function validateExpr(doc: CadDocument, name: string | null, expr: string
     if (cycle) return { ok: false, error: `circular reference: ${cycle.join(" → ")}` };
   }
   if (kind === "count" && hasUnitLiteral(node)) {
-    return { ok: false, error: "this field is unitless — write a plain number" };
+    return { ok: false, error: "this field is unitless, write a plain number" };
   }
   const values = Object.fromEntries(Object.entries(defs).map(([n, d]) => [n, d.value]));
   let value: number;

@@ -175,7 +175,7 @@ onUnmounted(() => {
           <p>Connecting to TinkerAtlas…</p>
         </div>
         <div v-else class="welcome-offline">
-          <p>TinkerAtlas is unreachable — you're offline or the service is down.</p>
+          <p>TinkerAtlas is unreachable, you're offline or the service is down.</p>
           <button class="choice-btn" @click="probe()"><span>Retry</span></button>
         </div>
       </div>

@@ -83,7 +83,7 @@ export function installViewportWiring(e: Engine): void {
     browser.setSelectedBodies(e.viewport.getSelectedBodies());
     if (e.toolBusy()) return;
     const n = e.viewport.getSelectedBodies().length;
-    setPrompt(n ? `${n} bod${n > 1 ? "ies" : "y"} selected — Move (M) to drag · Esc to clear` : null);
+    setPrompt(n ? `${n} bod${n > 1 ? "ies" : "y"} selected, Move (M) to drag · Esc to clear` : null);
   };
   // Esc clears the body selection while in Bodies mode
   window.addEventListener("keydown", (ev) => {
@@ -143,22 +143,22 @@ export function installViewportWiring(e: Engine): void {
     const plural = (n: number, one: string) => `${n} ${one}${n > 1 ? "s" : ""}`;
     if (edges.length) {
       setPrompt(
-        `${plural(edges.length, "edge")} selected — drag the handle to round it off ` +
+        `${plural(edges.length, "edge")} selected, drag the handle to round it off ` +
           `(out fillets, back past zero chamfers) · Esc to clear`,
       );
     } else if (regions.length) {
       setPrompt(
-        `${plural(regions.length, "profile area")} selected — drag the handle to pull it into a solid ` +
+        `${plural(regions.length, "profile area")} selected, drag the handle to pull it into a solid ` +
           `(in cuts) · Ctrl-click adds · Esc clears`,
       );
     } else if (faces?.round) {
       setPrompt(
-        `Round face selected (⌀${(faces.round.radius * 2).toFixed(2)}mm) — drag the handle to resize it ` +
+        `Round face selected (⌀${(faces.round.radius * 2).toFixed(2)}mm), drag the handle to resize it ` +
           `· drag it away to nothing to remove it · Esc to clear`,
       );
     } else if (faces?.faceIds.length) {
       setPrompt(
-        `${plural(faces.faceIds.length, "face")} selected — drag the handle to push or pull ` +
+        `${plural(faces.faceIds.length, "face")} selected, drag the handle to push or pull ` +
           `(out adds, in cuts) · Del removes it and heals · Esc to clear`,
       );
     } else {

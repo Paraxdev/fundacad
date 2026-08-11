@@ -1,8 +1,17 @@
 /* ============================================================================
-   SindriCAD — "FORGE" theme
-   Deep graphite near-black, a single molten-amber accent, soft layered depth.
-   The 3D viewport is the hero; the chrome stays quiet, crisp, and comfortable.
-   Token-driven: tweak :root and the whole app follows.
+   SindriCAD — "CONCRETE", the default
+   ============================================================================
+
+   Flat grey, square corners, visible structure. The chrome is meant to read as
+   panels butted against each other rather than as cards floating on a page:
+   nothing is rounded, nothing glows, and every edge that separates two things
+   is a line you can see.
+
+   The SHAPE lives here and is shared by every theme — radii, the spacing ramp,
+   borders, shadows and motion. Only the PALETTE varies (_themes.scss). That
+   split is deliberate and predates this look: a theme is a repaint, never a
+   relayout, so a palette can be added without re-checking every layout against
+   it. Changing the app's shape is therefore a change to this file, once.
    ============================================================================ */
 
 :root {
@@ -14,57 +23,62 @@
      the selects below then only have to handle the closed control's shape. */
   color-scheme: dark;
 
-  /* --- surfaces (dark → light, back → front) --- */
-  --bg: #0e0f12;          /* app background, deepest */
-  --panel: #16181d;       /* docked panels (browser/inspector/ribbon/timeline) */
-  --panel-2: #1c1f26;     /* nested surfaces, inputs, popups */
-  --raised: #22262e;      /* hover / raised interactive surface */
-  --raised-2: #2a2f38;    /* pressed / stronger hover */
+  /* --- surfaces (dark → light, back → front) ---
+     Neutral grey throughout: no blue cast, no gradient. The steps are close
+     together on purpose — structure is carried by the BORDERS here, not by
+     luminance, so a panel does not need to glow to be a panel. */
+  --bg: #0f0f0f;          /* app background, deepest */
+  --panel: #181818;       /* docked panels (browser/inspector/ribbon/timeline) */
+  --panel-2: #1e1e1e;     /* nested surfaces, inputs, popups */
+  --raised: #272727;      /* hover / raised interactive surface */
+  --raised-2: #353535;    /* pressed / stronger hover */
 
-  /* --- borders --- */
-  --line: #262a31;        /* hairline divider */
-  --line-strong: #323843; /* stronger border (focusable controls) */
+  /* --- borders ---
+     Both rungs are lifted well clear of their surfaces. The old --line was 4%
+     off the panel it sat on, which is a seam you infer rather than see; the
+     whole look depends on the opposite. */
+  --line: #2f2f2f;        /* divider — visible, not a hairline */
+  --line-strong: #384149; /* stronger border (focusable controls, popups) */
 
   /* --- text --- */
-  --text: #e6e8ec;        /* primary */
-  --text-dim: #9aa3af;    /* secondary / labels */
-  --text-mute: #6b7280;   /* tertiary / hints */
+  --text: #dddddd;        /* primary */
+  --text-dim: #bababa;    /* secondary / labels */
+  --text-mute: #6f7a82;   /* tertiary / hints */
 
-  /* --- molten amber accent --- */
-  --accent: #ff7a3c;
-  --accent-hot: #ff9a5c;
-  --accent-tint: rgba(255, 122, 60, 0.14);
-  --accent-tint-2: rgba(255, 122, 60, 0.22);
-  --accent-glow: rgba(255, 122, 60, 0.35);
-  --on-accent: #160a04;   /* text on a filled amber surface */
+  /* --- accent: one cool blue, used sparingly --- */
+  --accent: #4ca5e0;
+  --accent-hot: #9fccea;
+  --accent-tint: rgba(76, 165, 224, 0.14);
+  --accent-tint-2: rgba(76, 165, 224, 0.24);
+  --accent-glow: rgba(76, 165, 224, 0.35);
+  --on-accent: #0f0f0f;   /* text on a filled accent surface */
 
   /* --- semantic --- */
-  --ok: #4ad07d;
-  --warn: #ffd24a;
-  --error: #ff5c5c;
-  --error-tint: rgba(255, 92, 92, 0.14);
+  --ok: #bbef6e;
+  --warn: #f0c674;
+  --error: #fc4e4e;
+  --error-tint: rgba(252, 78, 78, 0.14);
 
   /* legacy alias (kept so any stray reference still resolves) */
   --accent-blue: var(--accent);
 
   /* --- radii ---
-     One rung per SIZE OF THING, not per corner style, so a component picks its
-     radius from how big it is and the whole app stays coherent:
-       xs   badges, swatches and grips — anything under ~16px, where 6px would
-            eat the shape rather than soften it (this rung is new; the marker
-            grip, the constraint glyph and the filament swatch had each guessed
-            2px or 3px on their own)
+     All zero. The rungs are KEPT rather than deleted because ~200 rules name
+     them, and each still says what size of thing it is on, so a future theme
+     that wants soft corners has one file to edit rather than a search.
+       xs   badges, swatches and grips
        sm   controls: inputs, buttons, chips, menu rows
        md   containers: popups, cards, the ribbon button
        lg   dialogs and the docked palette
-       pill fully-rounded — capsules AND thin bars, where "half the height" is
-            what you actually mean and 999px is the way to say it without
-            knowing the height */
-  --r-xs: 3px;
-  --r-sm: 6px;
-  --r-md: 8px;
-  --r-lg: 10px;
-  --r-pill: 999px;
+       pill was fully-rounded capsules and thin bars
+     Square is most of the look. A rounded rectangle reads as a card sitting on
+     a surface; a square one reads as a region OF the surface, which is what a
+     panel in a CAD tool is. */
+  --r-xs: 0;
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
+  --r-pill: 0;
 
   /* --- spacing scale ---
      Every gap, padding and margin in the app comes from this ramp. It is not a
@@ -79,27 +93,37 @@
                  ribbon's tool row). New rung: 2px was the third most common
                  literal in the sheet and had nowhere to live.
        s-1  4px  inside a small control; popup shell padding
-       s-2  6px  list-row and field padding (vertical), icon-to-label
-       s-3  8px  the workhorse — row padding (horizontal), control padding
-       s-4  12px panel padding, bar padding, popup row padding (horizontal)
-       s-5  16px dialog padding, major gaps between groups
-       s-6  20px card padding
-       s-7  24px section-level separation inside a dialog. New rung: the two
-            widest gaps in the sheet were 22px and 24px, both meaning this. */
+       s-2  8px  list-row and field padding (vertical), icon-to-label
+       s-3  12px the workhorse — row padding (horizontal), control padding
+       s-4  16px panel padding, bar padding, popup row padding (horizontal)
+       s-5  20px dialog padding, major gaps between groups
+       s-6  28px card padding
+       s-7  36px section-level separation inside a dialog
+
+     Every rung from s-2 up is one step larger than it was. Density is still
+     right for a CAD tool, so the two smallest are untouched: they are what
+     holds a segmented control together, and loosening them would break the
+     reading that those buttons are ONE thing. The air goes where it is read as
+     structure instead — row padding, panel padding, the gaps between groups. */
   --s-0: 2px;
   --s-1: 4px;
-  --s-2: 6px;
-  --s-3: 8px;
-  --s-4: 12px;
-  --s-5: 16px;
-  --s-6: 20px;
-  --s-7: 24px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 28px;
+  --s-7: 36px;
 
-  /* --- elevation (soft, layered, low-spread) --- */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45);
-  --shadow-pill: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  /* --- elevation ---
+     Hard offsets, zero blur. A blurred shadow is how a surface says it is
+     floating above the page; these say the popup is a solid object with
+     something behind it. --shadow-1 is gone to nothing rather than kept small:
+     it was on things that sit IN the layout (rows, chips), and those are
+     separated by their borders now. */
+  --shadow-1: none;
+  --shadow-2: 3px 3px 0 rgba(0, 0, 0, 0.55);
+  --shadow-3: 6px 6px 0 rgba(0, 0, 0, 0.65);
+  --shadow-pill: 3px 3px 0 rgba(0, 0, 0, 0.55);
 
   /* --- motion --- */
   --ease: cubic-bezier(0.2, 0.6, 0.2, 1);

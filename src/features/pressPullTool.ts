@@ -187,7 +187,7 @@ export class PressPullTool {
         this.faces.push(hit.selector);
         this.faceIds.push(hit.faceId);
         this.refreshPreview();
-        setPrompt(`${this.faces.length} faces — drag or type a distance · click to commit · Esc to cancel`);
+        setPrompt(`${this.faces.length} faces, drag or type a distance · click to commit · Esc to cancel`);
       }
       return;
     }
@@ -410,7 +410,7 @@ export class PressPullTool {
     if (v == null && this.dim.isUserDriven("distance")) {
       // the field holds unparseable text — committing the stale drag value
       // instead would be a silent wrong-number surprise
-      setPrompt("Can't read that number — fix the value, or Esc to cancel");
+      setPrompt("Can't read that number, fix the value, or Esc to cancel");
       return;
     }
     // Typed sign wins (out = +, cut = −) — but ONLY when the user actually
@@ -420,7 +420,7 @@ export class PressPullTool {
     if (v != null && this.dim.isUserDriven("distance")) this.value = this.fromReadout(v);
     if (Math.abs(this.value) < 1e-3) {
       // keep the tool alive: silently cancelling here read as "nothing happened"
-      setPrompt(this.round ? "Nothing to commit — the diameter is unchanged" : "Nothing to commit — drag the handle or type a distance first");
+      setPrompt(this.round ? "Nothing to commit, the diameter is unchanged" : "Nothing to commit, drag the handle or type a distance first");
       return;
     }
     const feature = this.buildFeature();

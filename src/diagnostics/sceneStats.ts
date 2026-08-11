@@ -64,7 +64,7 @@ export function sceneStats(s: SceneStatsSource): string[] {
   if (s.render) out.push(`[draw] ${s.render.calls} calls · ${s.render.triangles} tris last frame`);
   if (s.seam) {
     out.push(s.seam.skipped
-      ? "[seams] flush-seam hiding SKIPPED (model too large) — seams left visible"
+      ? "[seams] flush-seam hiding SKIPPED (model too large), seams left visible"
       : `[seams] ${s.seam.ms.toFixed(1)}ms`);
   }
   return out;

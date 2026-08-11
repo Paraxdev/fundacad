@@ -96,7 +96,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKey, true));
         ></textarea>
         <label class="bug-check">
           <input v-model="includeLog" type="checkbox" class="bug-log" />
-          Include geometry-engine log (recommended — usernames are removed)
+          Include geometry-engine log (recommended, usernames are removed)
         </label>
         <label class="bug-check">
           <input v-model="includeDocument" type="checkbox" class="bug-doc" />

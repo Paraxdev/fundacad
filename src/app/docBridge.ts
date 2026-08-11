@@ -52,7 +52,7 @@ export function createDocBridge(store: DocumentStore): DocBridge {
     store.onDocChange((doc) => {
       if (isProxy(doc) || doc.features.some((f) => isProxy(f))) {
         throw new Error(
-          "[docBridge] a reactive Proxy reached CadDocument — this breaks undo " +
+          "[docBridge] a reactive Proxy reached CadDocument, this breaks undo " +
             "(structuredClone) and the delta protocol's reference identity. " +
             "Use toRaw()/markRaw() at whatever put it there.",
         );

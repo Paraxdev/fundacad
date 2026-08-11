@@ -68,9 +68,9 @@ export function glyphClass(st: ConstraintDiagnosis | null): string {
 
 export function glyphTitle(st: ConstraintDiagnosis | null): string {
   return st === "conflict"
-    ? "Conflicting constraint — click to delete"
+    ? "Conflicting constraint, click to delete"
     : st === "over"
-      ? "Redundant (over-defined) constraint — click to delete"
+      ? "Redundant (over-defined) constraint, click to delete"
       : "Click to delete this constraint";
 }
 

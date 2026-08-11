@@ -248,7 +248,7 @@ export async function exportModel(store: DocumentStore, geometry: GeometryBacken
   const opts: { body?: string; separate?: boolean } = {};
   if (bodies.length > 1) {
     const { choose } = await import("../ui/choice");
-    const scope = await choose<"all" | "separate" | "one">("Export — which bodies?", [
+    const scope = await choose<"all" | "separate" | "one">("Export, which bodies?", [
       { value: "all", label: "All in one file", hint: `${bodies.length} bodies merged` },
       { value: "separate", label: "Each body separately", hint: `${bodies.length} files` },
       { value: "one", label: "A specific body", hint: "pick one" },
@@ -308,12 +308,12 @@ export async function exportModel(store: DocumentStore, geometry: GeometryBacken
   const written = res.paths?.length ? res.paths : res.path ? [res.path] : [];
   const lines = [...written];
   for (const w of res.warnings ?? []) {
-    lines.push(`Warning: ${w.feature_id ?? "feature"} failed — its result is NOT in the export: ${w.message}`);
+    lines.push(`Warning: ${w.feature_id ?? "feature"} failed, its result is NOT in the export: ${w.message}`);
   }
   if (lines.length) {
     const { listModal } = await import("../ui/choice");
     const title = res.warnings?.length
-      ? `Exported ${written.length} file${written.length === 1 ? "" : "s"} — with warnings`
+      ? `Exported ${written.length} file${written.length === 1 ? "" : "s"}, with warnings`
       : `Exported ${written.length} file${written.length === 1 ? "" : "s"}`;
     await listModal(title, lines);
   }
@@ -360,7 +360,7 @@ export async function exportPrintProject(
   }
   const bodies = store.buildState.result?.bodies ?? [];
   if (!bodies.length) {
-    await reportError("Nothing to export yet — build a body first.");
+    await reportError("Nothing to export yet, build a body first.");
     return null;
   }
 
@@ -398,10 +398,10 @@ export async function exportPrintProject(
   // the silent-staging path (Stage D) shouldn't pop a dialog on the happy path.
   if (res.warnings?.length) {
     const lines = res.warnings.map(
-      (w) => `Warning: ${w.feature_id ?? "feature"} failed — its result is NOT in the export: ${w.message}`,
+      (w) => `Warning: ${w.feature_id ?? "feature"} failed, its result is NOT in the export: ${w.message}`,
     );
     const { listModal } = await import("../ui/choice");
-    await listModal("Exported project — with warnings", [res.path ?? path, ...lines]);
+    await listModal("Exported project, with warnings", [res.path ?? path, ...lines]);
   }
   return res.path ?? path;
 }
