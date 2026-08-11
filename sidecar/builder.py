@@ -5047,6 +5047,25 @@ def _draft(shape, faces, angle_deg, axis):
     return _wrap_topods(drafter.Shape())
 
 
+#: Curved surfaces BRepOffset can be trusted with. Analytic every one: the
+#: offset of a sphere is a sphere, of a torus a torus, of a cone a cone, so the
+#: kernel has a closed form and never has to approximate its way into trouble.
+#:
+#: A FREEFORM surface has no such form and OCCT does not fail gracefully on one.
+#: Measured, in isolated subprocesses so a crash reports as a return code: a
+#: swept BSPLINE face offset by +-1mm is fine, and the same face at +-8mm and
+#: +-20mm dies with an access violation, in BOTH directions. That is a dead
+#: worker and a lost rebuild, not an error message.
+#:
+#: The tempting fix is a magnitude cap, and it is the wrong one: the threshold
+#: where a freeform surface stops being offsettable depends on its own local
+#: curvature, which is exactly the quantity nobody has a bound for here. Being
+#: wrong costs a crash, while refusing costs a message, so the asymmetry decides
+#: it. This list is what has been PROVEN safe at large offsets, and anything
+#: joining it should arrive the same way.
+OFFSETTABLE_CURVED = (GeomType.CYLINDER, GeomType.CONE, GeomType.SPHERE, GeomType.TORUS)
+
+
 def _press_pull(part, face, d, clamp=True):
     """Push/pull a single solid face by signed distance `d` (mm): +d grows the body
     (boss), -d cuts inward (pocket). `clamp=False` skips the inward-push safety
@@ -5059,21 +5078,20 @@ def _press_pull(part, face, d, clamp=True):
     holed faces fine in practice. Every CURVED face goes through the local offset
     (_offset_faces), which is what resizes a hole, a boss or a blend cleanly.
 
-    Curved faces used to be restricted to cylinders on the grounds that OCCT's
-    offset was too unreliable elsewhere to risk taking the sidecar down. Measured,
-    that is not what happens. Every surface type was offset in an isolated
-    subprocess, in both directions, so that a crash would show up as a signal
-    rather than as an exception: cone, sphere and torus all produced valid solids,
-    a swept freeform (BSPLINE) offset correctly both ways, and the one case that
-    could not be done — a loft between a circle and a square — came back as a
-    clean ValueError from MakeOffsetShape. Nothing segfaulted.
+    Curved faces used to be restricted to cylinders, which rejected work the
+    kernel does perfectly well — most importantly a TORUS, which is what a fillet
+    on a round edge is, i.e. exactly the face someone reaches for after blending
+    a part. The permitted set is now every ANALYTIC surface (OFFSETTABLE_CURVED),
+    each measured safe in an isolated subprocess at offsets up to +-20mm.
 
-    So the type gate was rejecting work the kernel does perfectly well, and the
-    surface it most often rejected is a TORUS — which is what a fillet on a round
-    edge is, i.e. exactly the face someone reaches for after blending a part.
-    What replaces the gate is attempt-and-verify: _offset_faces now checks its own
-    result and refuses an invalid one, which is a stronger guarantee than a
-    whitelist ever gave, since a cylinder could always be offset into nonsense.
+    Freeform surfaces stay refused, and that refusal is load-bearing rather than
+    conservative: they crash. See the note on OFFSETTABLE_CURVED — a small offset
+    on a BSPLINE works, which is precisely what makes a magnitude cap look
+    sufficient when it is not.
+
+    Separately, _offset_faces now validates its own result, which is a guarantee
+    the old whitelist never gave: a cylinder could always be offset into an
+    invalid solid, and IsDone() did not notice.
     """
     if abs(d) < 1e-9:
         return part
@@ -5101,11 +5119,16 @@ def _press_pull(part, face, d, clamp=True):
         return (part + prism) if dd > 0 else (part - prism)
     # Curved. The radius cap applies only where a radius is what runs out: pushing
     # a cylinder or a cone inward past its own axis collapses it, and OCCT does
-    # not survive that gracefully. Everything else is left to _offset_faces, which
-    # refuses an offset it cannot make and validates the one it can.
+    # not survive that gracefully.
     if gt in (GeomType.CYLINDER, GeomType.CONE):
         return _offset_face(part, face, _clamp_cylinder(face, d))
-    return _offset_face(part, face, d)
+    if gt in OFFSETTABLE_CURVED:
+        return _offset_face(part, face, d)
+    raise ValueError(
+        "can't press/pull this face — its surface is freeform, and offsetting "
+        "one is not something the kernel can do reliably. Use Extrude from a "
+        "sketch, or push a neighbouring flat or round face instead."
+    )
 
 
 def _distance_to_target(src_face, target_pt, target_n):
@@ -5163,20 +5186,19 @@ def _guard_offsetable(part, faces, label):
     reduce (MAX_IMPORT_FACES), and server.py's out-of-process worker is the
     backstop for whatever still manages to crash OCCT."""
     for f in faces:
-        # No surface-TYPE gate. It used to refuse everything but planes and
-        # cylinders; measurement (see _press_pull) shows cones, spheres, tori and
-        # swept freeforms all offset to valid solids, and the ones that cannot
-        # come back as a clean refusal from MakeOffsetShape rather than as a
-        # crash. A whitelist here only ever denied work that would have succeeded
-        # — the result check in _offset_faces is the guarantee that actually
-        # matters, and it covers the whitelisted types too.
-        #
-        # The facet check below stays: that one is about the BODY being a mesh
-        # rather than about the surface being curved, and it is still real.
+        # The type gate is WIDER than it was (cone, sphere and torus join the
+        # planes and cylinders — see OFFSETTABLE_CURVED for the measurements) but
+        # it is still a gate, because freeform surfaces do not fail on this path,
+        # they crash it.
         try:
-            _ = f.geom_type
+            gt = f.geom_type
         except Exception:
-            pass
+            gt = None
+        if gt != GeomType.PLANE and gt not in OFFSETTABLE_CURVED:
+            raise ValueError(
+                f"{label} needs a flat or a regularly-curved face "
+                "(round, cone, sphere or torus) — this one is freeform"
+            )
         # a lone mesh facet on a dense body: reject rather than offset a sliver
         try:
             if len(part.faces()) > 300 and f.area < 1.0:
