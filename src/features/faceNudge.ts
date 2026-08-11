@@ -13,24 +13,35 @@
 
 import * as THREE from "three";
 import type { NudgePlacement } from "./selectionNudge";
+import type { RoundFace } from "./radialDrag";
 
 /** What selectedFacesForPressPull() gives us, narrowed to what a handle needs. */
 export interface FacePreselection {
   normal: THREE.Vector3;
   anchor: THREE.Vector3;
+  /** set when the face is a lone cylinder — the drag resizes it instead */
+  round?: RoundFace | null;
 }
 
 /** The placement for a face selection, or null when there is none.
  *
  *  A multi-face selection gets ONE handle, standing on the first face and
  *  pointing along its normal — again matching the tool, which pushes every
- *  selected face by the one distance measured along that same first normal. */
+ *  selected face by the one distance measured along that same first normal.
+ *
+ *  On a round face the arrow points AWAY FROM THE AXIS rather than along the
+ *  face normal, because the drag it arms is a resize. Away from the axis on a
+ *  bore as well as a boss: pulling the handle outward means a bigger hole and a
+ *  bigger shaft alike, and the difference between them is a sign the tool
+ *  applies on the way to the kernel, not a direction the user has to think
+ *  about. The face normal is not merely unhelpful here — on a closed cylinder it
+ *  is the average of normals that cancel, so it is not a direction at all. */
 export function faceNudgePlacement(
   pre: FacePreselection | null,
   onGrab: (clientX: number, clientY: number) => void,
 ): NudgePlacement | null {
   if (!pre) return null;
-  const axis = pre.normal.clone().normalize();
+  const axis = (pre.round?.radial ?? pre.normal).clone().normalize();
   if (axis.lengthSq() < 0.5) return null; // degenerate normal — nothing to point along
   return {
     anchor: pre.anchor.clone(),

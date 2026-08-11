@@ -6,6 +6,18 @@ import type { Feature } from "../types";
 export function createSelection(
   e: Engine,
 ): Pick<Engine, "selectFeature" | "editFeature" | "featureForFace" | "deleteSelectedFace"> {
+  // `selectedFeature` has to be defined here, not returned with the rest: the
+  // engine installs these with Object.assign, which COPIES a getter's current
+  // value instead of the getter. It was a plain `e.selectedFeature = null` in
+  // createEngine and nothing ever wrote it again, so every non-Vue reader saw a
+  // permanent null — Delete on a selected feature, and Edit ▸ Delete/Suppress,
+  // all silently did nothing.
+  Object.defineProperty(e, "selectedFeature", {
+    get: () => useSelectionStore().featureId,
+    enumerable: true,
+    configurable: true, // tests re-install onto the same object
+  });
+
   const selectFeature = (id: string | null) => {
     // Writing the store is what updates the inspector, the timeline AND the
     // browser tree — all three render from it rather than being pushed at.

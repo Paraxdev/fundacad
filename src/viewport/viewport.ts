@@ -79,7 +79,9 @@ import { nearestEdgeByMid, midMatchTol, edgeSelectorFrom, polylineMid } from "./
 import { mergeScope, pickScope, type ScopeDecision, type ScopeView } from "./pickScope";
 import { edgesOnFace, faceEdgeTol, faceSurface, type Tri } from "./faceEdges";
 import { remapSelection } from "./selectionMemo";
-import type { Plane3, PlaneDef, RebuildResult, Selector } from "../types";
+import { cylinderFromFace, radialAt, solidInsideCylinder } from "../features/planeMath";
+import type { RoundFace } from "../features/radialDrag";
+import type { Plane3, PlaneDef, RebuildResult, Selector, Vec3 } from "../types";
 import { niceStep } from "../ui/units";
 import { faceSketchPlane } from "../sketch/sketchView";
 
@@ -1023,8 +1025,14 @@ export class Viewport {
 
   /** Pre-selection for Press/Pull: return a selector for EACH selected face (one
    *  by:"nearest" per face so refs survive renumbering), plus the normal/centroid
-   *  of the first face to anchor the drag arrow. Null if nothing is selected. */
-  selectedFacesForPressPull(): { selectors: Selector[]; faceIds: number[]; normal: THREE.Vector3; anchor: THREE.Vector3; bodyId: string | null } | null {
+   *  of the first face to anchor the drag arrow. Null if nothing is selected.
+   *
+   *  `round` is set only for a lone CYLINDRICAL face, and it is what turns the
+   *  gesture from a translation into a resize. It rides along here rather than
+   *  being fetched separately for the reason the normal and the anchor do: the
+   *  handle is drawn from this call and the tool arms from this call, so a second
+   *  derivation is a second chance to disagree. */
+  selectedFacesForPressPull(): { selectors: Selector[]; faceIds: number[]; normal: THREE.Vector3; anchor: THREE.Vector3; bodyId: string | null; round: RoundFace | null } | null {
     if (!this.highlighter || !this.model) return null;
     const faces = this.highlighter.getSelectedFaces();
     if (faces.length === 0) return null;
@@ -1034,12 +1042,48 @@ export class Viewport {
     });
     const first = faces[0];
     if (first === undefined) return null;
+    const anchor = this.faceCentroidWorld(first);
     return {
       selectors,
       faceIds: [...faces],
       normal: this.faceNormalWorld(first),
-      anchor: this.faceCentroidWorld(first),
+      anchor,
       bodyId: this.faceIdToBodyId(first),
+      // Only when ONE face is selected. A multi-face press/pull shares a single
+      // distance along a single normal; a diameter is a property of one face and
+      // has no meaning spread across several.
+      round: faces.length === 1 ? this.roundFaceAt(first, anchor) : null,
+    };
+  }
+
+  /** The cylinder a face lies on, or null when it is not one.
+   *
+   *  Deliberately NOT derived from faceNormalWorld: that averages the facet
+   *  normals, and a closed cylinder's cancel to zero — which is how grabbing a
+   *  round face used to drag it along world +Z. The axis, the radius and which
+   *  side the material is on all come from the tessellation directly. */
+  roundFaceAt(faceId: number, at: THREE.Vector3): RoundFace | null {
+    const tris = this.faceTriangles(faceId);
+    if (tris.length < 3) return null;
+    const points: Vec3[] = [];
+    const normals: Vec3[] = [];
+    const n = new THREE.Vector3();
+    for (const t of tris) {
+      points.push([t.a.x, t.a.y, t.a.z], [t.b.x, t.b.y, t.b.z], [t.c.x, t.c.y, t.c.z]);
+      t.getNormal(n);
+      normals.push([n.x, n.y, n.z]);
+    }
+    const cylinder = cylinderFromFace(points, normals);
+    if (!cylinder) return null;
+    const solidInside = solidInsideCylinder(cylinder, points, normals);
+    if (solidInside === null) return null;
+    const radial = radialAt(cylinder, [at.x, at.y, at.z]);
+    if (!radial) return null;
+    return {
+      cylinder,
+      radius: cylinder.radius,
+      solidInside,
+      radial: new THREE.Vector3(radial[0], radial[1], radial[2]),
     };
   }
 
@@ -2176,7 +2220,11 @@ export class Viewport {
   // on commit). For each selected face we offset its triangles by distance·normal
   // (the cap) and raise walls from the face's boundary edges → a translucent prism.
   private ppGhost: THREE.Mesh | null = null;
-  setPressPullGhost(faceIds: number[], distance: number) {
+  /** `round` makes the offset RADIAL and per-vertex instead of one constant
+   *  vector: a resized cylinder is not a translated one, and its face normal is
+   *  the average that cancels to nothing anyway. `distance` is then the outward
+   *  radial delta (bigger = away from the axis), not the kernel's signed push. */
+  setPressPullGhost(faceIds: number[], distance: number, round?: RoundFace | null) {
     this.clearPressPullGhost();
     if (!this.model || faceIds.length === 0 || Math.abs(distance) < 1e-4) return;
     const out: number[] = [];
@@ -2191,13 +2239,18 @@ export class Viewport {
       const index = body.mesh.geometry.getIndex()!;
       const mw = body.mesh.matrixWorld;
       const wv = (vi: number) => new THREE.Vector3().fromBufferAttribute(pos, vi).applyMatrix4(mw);
-      const off = this.faceNormalWorld(faceId).multiplyScalar(distance);
+      const flat = round ? null : this.faceNormalWorld(faceId).multiplyScalar(distance);
+      const moved = (v: THREE.Vector3) => {
+        if (flat) return v.clone().add(flat);
+        const r = round && radialAt(round.cylinder, [v.x, v.y, v.z]);
+        return r ? v.clone().addScaledVector(new THREE.Vector3(r[0], r[1], r[2]), distance) : v.clone();
+      };
       const tris: [number, number, number][] = triIdx.map(
         (t) => [index.getX(t * 3), index.getX(t * 3 + 1), index.getX(t * 3 + 2)] as [number, number, number],
       );
-      // cap (the face moved by `off`)
+      // cap (the face at its new size / position)
       for (const [i0, i1, i2] of tris) {
-        push(wv(i0).add(off)); push(wv(i1).add(off)); push(wv(i2).add(off));
+        push(moved(wv(i0))); push(moved(wv(i1))); push(moved(wv(i2)));
       }
       // boundary walls: an edge interior to the face appears in two triangles
       // (toggled out); a boundary edge appears once (kept).
@@ -2210,7 +2263,7 @@ export class Viewport {
       for (const [i0, i1, i2] of tris) { bump(i0, i1); bump(i1, i2); bump(i2, i0); }
       for (const [a, b] of edges.values()) {
         const A = wv(a), B = wv(b);
-        const Ao = A.clone().add(off), Bo = B.clone().add(off);
+        const Ao = moved(A), Bo = moved(B);
         push(A); push(B); push(Bo);
         push(A); push(Bo); push(Ao);
       }

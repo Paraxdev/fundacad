@@ -244,6 +244,55 @@ export function cylinderFromFace(points: Vec3[], normals: Vec3[]): Cylinder | nu
   return { axis, point, radius: fit.r };
 }
 
+/** The unit "away from the axis" direction at a point on (or near) a cylinder.
+ *  Null on the axis itself, where radially-outward has no meaning. */
+export function radialAt(cyl: Cylinder, at: Vec3): Vec3 | null {
+  const rel = sub(at, cyl.point);
+  return unit(sub(rel, scale(cyl.axis, dot(rel, cyl.axis))));
+}
+
+/** Does the material lie INSIDE this cylindrical face — a shaft or boss — rather
+ *  than outside it, as on a bore?
+ *
+ *  Asked per triangle against that triangle's own radial, and summed. The
+ *  face-wide average normal cannot answer this: on a CLOSED cylinder the normals
+ *  cancel to zero by symmetry, which is exactly the degeneracy that had a round
+ *  face's drag handle pointing at world +Z. Every triangle agrees with its own
+ *  radial or opposes it, so the per-triangle test has no cancellation to suffer
+ *  and a half-cylinder answers the same as a whole one.
+ *
+ *  Weighted by nothing: a facet's area says how much of the surface it is, not
+ *  how confident it is about which side the material is on, and the vote is
+ *  unanimous on any real cylinder. Null when the normals do not agree at all —
+ *  a face that is not the cylinder we were told it was.
+ *
+ *  This is the same asymmetry `tangentPlaneOnCylinder`'s `facing` handles, and it
+ *  is what decides the SIGN sent to the kernel: a positive offset moves a face
+ *  along its own outward normal, so it grows a boss and shrinks a bore.
+ *
+ *  `points` must be three-per-normal — the triangles' own corners, as
+ *  facePlanePick collects them. Refused outright rather than read loosely: the
+ *  other packing a caller might reach for (one point per normal) would index
+ *  into the wrong facet and answer plausibly, and the answer is a sign. */
+export function solidInsideCylinder(cyl: Cylinder, points: Vec3[], normals: Vec3[]): boolean | null {
+  if (points.length !== normals.length * 3) return null;
+  let vote = 0;
+  for (let i = 0; i < normals.length; i++) {
+    const n = normals[i];
+    const a = points[i * 3];
+    const b = points[i * 3 + 1];
+    const c = points[i * 3 + 2];
+    if (!n || !a || !b || !c) break;
+    const mid = scale(add(add(a, b), c), 1 / 3);
+    const r = radialAt(cyl, mid);
+    if (!r) continue;
+    const d = dot(n, r);
+    if (Math.abs(d) < 0.5) continue; // grazing: this facet is not on the wall
+    vote += d > 0 ? 1 : -1;
+  }
+  return vote === 0 ? null : vote > 0;
+}
+
 /** The plane that touches a cylinder at the point you clicked.
  *
  *  `at` comes from a raycast against the tessellation, so it sits a sagitta INSIDE

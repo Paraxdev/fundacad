@@ -122,7 +122,8 @@ export interface Engine {
   hasBody(): boolean;
   planePick: boolean;
 
-  selectedFeature: string | null;
+  /** Read-only accessor over the selection store — write it with selectFeature. */
+  readonly selectedFeature: string | null;
   selectFeature(id: string | null): void;
   editFeature(id: string): void;
   featureForFace(faceId: number): string | null;
@@ -151,7 +152,6 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
   e.canvas = canvas;
   e.lastAction = null;
   e.planePick = false;
-  e.selectedFeature = null;
 
   // Was `statusEl.textContent = …; statusEl.className = \`status ${cls}\``.
   // The pinia instance is created and made active in main.ts BEFORE this runs,

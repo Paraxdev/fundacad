@@ -23,6 +23,7 @@ import {
   HANDLE_UP,
   type DragHandle,
 } from "./manipulator";
+import { collapseDiameter, deltaForDiameter, radialDrag, type RoundFace } from "./radialDrag";
 
 type Phase = "pick" | "drag";
 
@@ -37,9 +38,13 @@ export class PressPullTool {
   private pickingTarget = false; // waiting for the user to click the up-to target surface
   private bodyId: string | null = null; // the body that owns the picked face
   private anchor = new THREE.Vector3(); // gizmo origin = the clicked point on the face
-  private axis = new THREE.Vector3(0, 0, 1); // drag axis (unit) = face outward normal
+  private axis = new THREE.Vector3(0, 0, 1); // drag axis (unit) = face outward normal, or the outward radial on a round face
   private quat = new THREE.Quaternion(); // Y -> current arrow direction
-  private value = 0; // signed distance in mm (+ along normal / out, − in)
+  private value = 0; // signed distance in mm (+ along the axis / out, − in)
+  /** Set when a lone CYLINDRICAL face is selected: the drag then resizes it
+   *  rather than moving it, `value` is the radial delta, and the readout speaks
+   *  diameters. Null for every other face, where nothing changes. */
+  private round: RoundFace | null = null;
   private previewId = ""; // id shared by the live preview and the committed feature
 
   private gizmo: THREE.Group | null = null;
@@ -102,7 +107,7 @@ export class PressPullTool {
     window.addEventListener("keydown", this.boundKey, true);
 
     if (pre) {
-      this.beginDrag(pre.selectors, pre.faceIds, pre.anchor, pre.normal, pre.bodyId);
+      this.beginDrag(pre.selectors, pre.faceIds, pre.anchor, pre.normal, pre.bodyId, pre.round);
       if (opts?.grabAt) this.grabHandle(opts.grabAt.x, opts.grabAt.y);
     } else {
       setPrompt("Select a face to Press/Pull (Ctrl+click adds more)");
@@ -137,7 +142,7 @@ export class PressPullTool {
       const stepped = snap(raw, this.viewport.snapStep(this.anchor));
       if (stepped === this.value) return; // same step — don't re-trigger an OCCT rebuild
       this.value = stepped;
-      this.dim.updateFromCursor({ distance: Math.abs(this.value) });
+      this.dim.updateFromCursor({ distance: this.readout() });
       this.refreshPreview();
       return;
     }
@@ -153,7 +158,8 @@ export class PressPullTool {
       if (!hit) return; // missed the body — let the click orbit
       e.preventDefault();
       e.stopImmediatePropagation();
-      this.beginDrag([hit.selector], [hit.faceId], hit.anchor, hit.normal, hit.bodyId);
+      this.beginDrag([hit.selector], [hit.faceId], hit.anchor, hit.normal, hit.bodyId,
+        this.viewport.roundFaceAt(hit.faceId, hit.anchor));
       return;
     }
     // drag phase: clicking the "up to" target surface (after pressing T).
@@ -229,7 +235,11 @@ export class PressPullTool {
     // Clean click on ANOTHER face = extrude UP TO it (mainstream MCAD "to object" —
     // no T needed: pick a face, then click the face to meet). Empty space or
     // one of the operation's own faces = commit as before.
-    const hit = this.viewport.pickFaceForPressPull(e.clientX, e.clientY);
+    //
+    // Never on a round face: "up to" answers how FAR to travel, and a resize is
+    // not travelling anywhere. Offering it would read the click as a target and
+    // commit a distance the user never asked for.
+    const hit = this.round ? null : this.viewport.pickFaceForPressPull(e.clientX, e.clientY);
     if (hit && !this.faceIds.includes(hit.faceId)) {
       this.upTo = hit.selector;
       this.commitUpTo();
@@ -252,7 +262,7 @@ export class PressPullTool {
       this.cancel();
       return;
     }
-    if ((e.key === "t" || e.key === "T") && this.phase === "drag" && !this.pickingTarget) {
+    if ((e.key === "t" || e.key === "T") && this.phase === "drag" && !this.pickingTarget && !this.round) {
       this.pickingTarget = true;
       this.dim.hide(); // Enter must not commit a plain distance while picking
       this.viewport.clearPressPullGhost();
@@ -260,14 +270,15 @@ export class PressPullTool {
     }
   }
 
-  private beginDrag(faces: Selector[], faceIds: number[], anchor: THREE.Vector3, normal: THREE.Vector3, bodyId: string | null = null) {
+  private beginDrag(faces: Selector[], faceIds: number[], anchor: THREE.Vector3, normal: THREE.Vector3, bodyId: string | null = null, round: RoundFace | null = null) {
     this.faces = faces;
     this.faceIds = faceIds;
     this.upTo = null;
     this.pickingTarget = false;
     this.bodyId = bodyId;
+    this.round = round;
     this.anchor.copy(anchor);
-    this.axis.copy(normal).normalize();
+    this.axis.copy(round?.radial ?? normal).normalize();
     this.phase = "drag";
     this.value = 0;
     this.previewId = this.store.nextId();
@@ -276,11 +287,28 @@ export class PressPullTool {
     this.dim.show([{ name: "distance", label: "D", kind: "length" }], () => this.commit(), () => this.cancel());
     const s = this.viewport.projectToScreen(this.anchor);
     this.dim.position(s.x, s.y);
-    this.dim.updateFromCursor({ distance: 0 });
+    // A round face opens showing the size it ALREADY is, not a zero — the field
+    // is a diameter here, and the current one is the number you are about to
+    // edit. A flat face opens at 0 because there the field is a travel.
+    this.dim.updateFromCursor({ distance: this.readout() });
     setPrompt(
-      "Drag the arrow · type a value (negative = cut) · click ANOTHER face = extrude up to it · click empty space to commit · Esc to cancel",
+      round
+        ? `Drag to resize · type a diameter · under ${collapseDiameter(round.radius).toFixed(2)}mm removes it · click empty space to commit · Esc to cancel`
+        : "Drag the arrow · type a value (negative = cut) · click ANOTHER face = extrude up to it · click empty space to commit · Esc to cancel",
     );
     this.raf = requestAnimationFrame(this.boundTick);
+  }
+
+  /** What the heads-up field shows for the current drag: a DIAMETER on a round
+   *  face (the size it would become — 0 while the drag is asking for it to go),
+   *  the travelled distance on any other. */
+  private readout(): number {
+    return this.round ? radialDrag(this.round.radius, this.value, this.round.solidInside).diameter : Math.abs(this.value);
+  }
+
+  /** The inverse: a number the user TYPED into that field, read back as a drag. */
+  private fromReadout(v: number): number {
+    return this.round ? deltaForDiameter(this.round.radius, v) : v;
   }
 
   /** keep the handle a constant on-screen size, point it the way we're dragging,
@@ -307,8 +335,9 @@ export class PressPullTool {
           // the field is the truth: typed sign wins (out = +, cut = −). The old
           // code re-applied the drag's sign onto |v|, so a typed "-2" after an
           // outward drag silently JOINED 2 instead of cutting.
-          if (Math.abs(v - this.value) > 1e-6) {
-            this.value = v;
+          const want = this.fromReadout(v);
+          if (Math.abs(want - this.value) > 1e-6) {
+            this.value = want;
             this.refreshPreview();
           }
         }
@@ -321,7 +350,18 @@ export class PressPullTool {
    *  kernel round-trip (that's why dragging feels immediate). The real OCCT geometry
    *  is computed once on commit. Near-zero distance clears the ghost. */
   private refreshPreview() {
-    this.viewport.setPressPullGhost(this.faceIds, this.value);
+    // Nothing to ghost once the drag is asking for the face to GO: the honest
+    // preview of a removal is the healed body, which needs the kernel. The
+    // readout dropping to 0 and the prompt saying so is what carries it instead.
+    if (this.round && radialDrag(this.round.radius, this.value, this.round.solidInside).mode === "remove") {
+      this.viewport.clearPressPullGhost();
+      setPrompt("Release to REMOVE this face · drag back to keep resizing · Esc to cancel");
+      return;
+    }
+    if (this.round) {
+      setPrompt(`Drag to resize · type a diameter · under ${collapseDiameter(this.round.radius).toFixed(2)}mm removes it · click empty space to commit · Esc to cancel`);
+    }
+    this.viewport.setPressPullGhost(this.faceIds, this.value, this.round);
   }
 
   private buildGizmo() {
@@ -337,11 +377,26 @@ export class PressPullTool {
   }
 
   private buildFeature(): Feature {
-    const v = Math.round(this.value * 1000) / 1000;
+    const face = this.faces.length === 1 ? (this.faces[0] ?? this.faces) : this.faces;
+    // A round face dragged past the smallest size the kernel will build is a
+    // REMOVAL, not a very small cylinder. It commits as the same deleteFace the
+    // Del key produces, so a shrunk-away hole heals exactly as a deleted one
+    // does — and until this moment nothing has been committed at all, which is
+    // what lets the user drag back out of it.
+    const round = this.round && radialDrag(this.round.radius, this.value, this.round.solidInside);
+    if (round?.mode === "remove") {
+      return {
+        id: this.previewId,
+        type: "deleteFace",
+        face,
+        ...(this.bodyId != null ? { body: this.bodyId } : {}),
+      } as Feature;
+    }
+    const v = Math.round((round ? round.distance : this.value) * 1000) / 1000;
     return {
       id: this.previewId,
       type: "press-pull",
-      face: this.faces.length === 1 ? (this.faces[0] ?? this.faces) : this.faces,
+      face,
       distance: v,
       operation: v >= 0 ? "join" : "cut",
       ...(this.bodyId != null ? { body: this.bodyId } : {}),
@@ -362,10 +417,10 @@ export class PressPullTool {
     // typed. While dragging, the field displays |value| (line ~106), so reading
     // it back unguarded strips a dragged cut's sign and commits a JOIN — the
     // mirror image of the typed-"-2"-after-outward-drag bug this line fixed.
-    if (v != null && this.dim.isUserDriven("distance")) this.value = v;
+    if (v != null && this.dim.isUserDriven("distance")) this.value = this.fromReadout(v);
     if (Math.abs(this.value) < 1e-3) {
       // keep the tool alive: silently cancelling here read as "nothing happened"
-      setPrompt("Nothing to commit — drag the handle or type a distance first");
+      setPrompt(this.round ? "Nothing to commit — the diameter is unchanged" : "Nothing to commit — drag the handle or type a distance first");
       return;
     }
     const feature = this.buildFeature();
@@ -407,6 +462,7 @@ export class PressPullTool {
     this.fluentGrab = false;
     this.hovering = false;
     this.value = 0;
+    this.round = null;
     setPrompt(null);
   }
 

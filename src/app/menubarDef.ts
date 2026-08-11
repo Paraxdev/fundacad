@@ -45,7 +45,12 @@ export function buildMenubar(e: Engine): MenuDef[] {
         {
           label: "Delete",
           shortcut: "Del",
-          disabled: () => !e.selectedFeature,
+          // A selected FACE is deletable too (defeature) — onClick has always
+          // tried that first, but the predicate only asked about features, so
+          // the menu greyed out the one case the Del key still handled.
+          // getSelectedFaceIds, not selectedFacesForPressPull: this runs on
+          // every menu render and the full call walks every triangle.
+          disabled: () => !e.selectedFeature && e.viewport.getSelectedFaceIds().length === 0,
           onClick: () => {
             if (e.deleteSelectedFace()) return;
             if (e.selectedFeature) {

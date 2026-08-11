@@ -151,6 +151,11 @@ export function installViewportWiring(e: Engine): void {
         `${plural(regions.length, "profile area")} selected — drag the handle to pull it into a solid ` +
           `(in cuts) · Ctrl-click adds · Esc clears`,
       );
+    } else if (faces?.round) {
+      setPrompt(
+        `Round face selected (⌀${(faces.round.radius * 2).toFixed(2)}mm) — drag the handle to resize it ` +
+          `· drag it away to nothing to remove it · Esc to clear`,
+      );
     } else if (faces?.faceIds.length) {
       setPrompt(
         `${plural(faces.faceIds.length, "face")} selected — drag the handle to push or pull ` +

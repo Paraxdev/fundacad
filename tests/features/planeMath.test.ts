@@ -8,6 +8,8 @@ import {
   planeFromPickedFace,
   planeFromPointNormal,
   planeXDir,
+  radialAt,
+  solidInsideCylinder,
   tangentPlaneOnCylinder,
   unit,
 } from "../../src/features/planeMath";
@@ -159,6 +161,81 @@ describe("cylinderFromFace", () => {
       }
     }
     expect(cylinderFromFace(points, normals)).toBeNull();
+  });
+});
+
+/** A cylinder wall as TRIANGLES — three corners per facet, which is the packing
+ *  facePlanePick collects and the only one solidInsideCylinder accepts.
+ *  `bore` flips the normals inward, as a hole's are. */
+function cylinderTris(r: number, bore = false, seg = 16, h = 10, arc = Math.PI * 2) {
+  const points: Vec3[] = [];
+  const normals: Vec3[] = [];
+  const s = bore ? -1 : 1;
+  for (let i = 0; i < seg; i++) {
+    const a0 = (arc * i) / seg;
+    const a1 = (arc * (i + 1)) / seg;
+    points.push(
+      [r * Math.cos(a0), r * Math.sin(a0), 0],
+      [r * Math.cos(a1), r * Math.sin(a1), 0],
+      [r * Math.cos(a1), r * Math.sin(a1), h],
+    );
+    const am = (a0 + a1) / 2;
+    normals.push([s * Math.cos(am), s * Math.sin(am), 0]);
+  }
+  return { points, normals };
+}
+
+describe("solidInsideCylinder", () => {
+  const cyl = { axis: [0, 0, 1] as Vec3, point: [0, 0, 0] as Vec3, radius: 5 };
+
+  it("tells a shaft from a bore", () => {
+    const boss = cylinderTris(5);
+    const bore = cylinderTris(5, true);
+    expect(solidInsideCylinder(cyl, boss.points, boss.normals)).toBe(true);
+    expect(solidInsideCylinder(cyl, bore.points, bore.normals)).toBe(false);
+  });
+
+  it("survives a CLOSED cylinder, where the average normal is zero", () => {
+    // The whole point. faceNormalWorld sums the facet normals and a full
+    // cylinder's cancel to (0,0,0), which is how a round face's drag handle
+    // ended up pointing at world +Z. Per-facet against its own radial has
+    // nothing to cancel.
+    const { points, normals } = cylinderTris(5, false, 64);
+    const sum = normals.reduce((a, n) => [a[0] + n[0], a[1] + n[1], a[2] + n[2]] as Vec3, [0, 0, 0] as Vec3);
+    expect(Math.hypot(...sum)).toBeLessThan(1e-9); // the degeneracy, reproduced
+    expect(solidInsideCylinder(cyl, points, normals)).toBe(true);
+  });
+
+  it("answers a half cylinder the same as a whole one", () => {
+    const half = cylinderTris(5, false, 16, 10, Math.PI);
+    expect(solidInsideCylinder(cyl, half.points, half.normals)).toBe(true);
+    const halfBore = cylinderTris(5, true, 16, 10, Math.PI);
+    expect(solidInsideCylinder(cyl, halfBore.points, halfBore.normals)).toBe(false);
+  });
+
+  it("refuses the wrong point packing rather than reading it loosely", () => {
+    // One point per normal indexes into the wrong facet and still answers — and
+    // the answer is a sign, so a plausible one is worse than none.
+    const { points, normals } = cylinderTris(5);
+    expect(solidInsideCylinder(cyl, points.slice(0, normals.length), normals)).toBeNull();
+  });
+
+  it("has no opinion about a flat face that happens to be handed to it", () => {
+    const points: Vec3[] = [[0, 0, 9], [1, 0, 9], [0, 1, 9]];
+    expect(solidInsideCylinder(cyl, points, [[0, 0, 1]])).toBeNull(); // all grazing
+  });
+});
+
+describe("radialAt", () => {
+  const cyl = { axis: [0, 0, 1] as Vec3, point: [0, 0, 0] as Vec3, radius: 5 };
+
+  it("points away from the axis, whatever the height", () => {
+    expect(radialAt(cyl, [4.9, 0, 3])).toEqual([1, 0, 0]);
+    expect(radialAt(cyl, [0, -2, -8])).toEqual([0, -1, 0]);
+  });
+
+  it("is null on the axis, where outward means nothing", () => {
+    expect(radialAt(cyl, [0, 0, 4])).toBeNull();
   });
 });
 
