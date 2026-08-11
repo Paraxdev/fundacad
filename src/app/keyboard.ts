@@ -2,6 +2,8 @@ import { installKeymap } from "../input/keymap";
 import { isEditableTarget } from "../ui/focus";
 import { saveDocument, saveDocumentAs, exportModel } from "../io/files";
 import { SKETCH_TOOLS } from "./actionTables";
+import { currentPie, dismissPie, openPie } from "../ui/pieMenu";
+import { viewPie } from "../ui/viewPie";
 import type { Engine } from "./engine";
 
 /** Global keyboard: the MCAD keymap plus the two window-level handlers that
@@ -39,6 +41,38 @@ export function installKeyboard(e: Engine): void {
       e.store.removeFeature(e.selectedFeature);
       e.selectFeature(null);
     }
+  });
+
+  // The orientation wheel, on backquote. Squaring up the view is the most
+  // repeated non-modelling action in the app and every existing route to it —
+  // the cube's faces, the Look submenu, the palette — asks you to find a target
+  // and hit it. A pie asks for a direction instead, which is a wrist movement
+  // and needs no aim once it is learned.
+  //
+  // Backquote rather than a letter because every letter worth having is a tool,
+  // and because it is the key this gesture already lives on for anyone who has
+  // met a pie menu before. It is deliberately live mid-sketch: looking at the
+  // part from somewhere else is not an edit, and refusing it there would make
+  // the wheel feel like a mode rather than a camera.
+  //
+  // Opened at the pointer, so the flick starts where the hand already is. The
+  // position is tracked here rather than read from the viewport because the
+  // wheel works over the whole window, including the panes.
+  let lastPointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  window.addEventListener(
+    "pointermove",
+    (ev) => {
+      lastPointer = { x: ev.clientX, y: ev.clientY };
+    },
+    { passive: true, capture: true },
+  );
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key !== "`" && ev.code !== "Backquote") return;
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (isEditableTarget(ev.target)) return;
+    if (currentPie()) return dismissPie(); // a second press closes it
+    ev.preventDefault();
+    openPie(viewPie(lastPointer.x, lastPointer.y, e.viewport));
   });
 
   // file shortcuts (work everywhere, even mid-sketch)

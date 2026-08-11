@@ -6,6 +6,8 @@ import ModalHost from "./components/overlays/ModalHost.vue";
 import PrintStatusPill from "./components/overlays/PrintStatusPill.vue";
 import ShortcutHud from "./components/overlays/ShortcutHud.vue";
 import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
+import PieMenuHost from "./components/overlays/PieMenuHost.vue";
+import SelectionToolbar from "./components/overlays/SelectionToolbar.vue";
 import InspectorPane from "./components/shell/InspectorPane.vue";
 import LeftToolbar from "./components/shell/LeftToolbar.vue";
 import CommandPalette from "./components/overlays/CommandPalette.vue";
@@ -65,6 +67,10 @@ const toolPanels = useToolPanelStore();
   <PrintStatusPill />
   <ShortcutHud />
   <ContextMenuHost />
+  <!-- After ContextMenuHost: both bind a dismissing pointerdown, and the pie is
+       the one that should win a press aimed at it. -->
+  <PieMenuHost />
+  <SelectionToolbar />
   <CommandPalette />
 
   <!-- Floating "measure-panel" popups. Independent of one another: Properties
