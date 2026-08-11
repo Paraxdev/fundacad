@@ -254,6 +254,13 @@ export function createEngine(canvas: HTMLCanvasElement): Engine {
   // --- predicates the UI wiring below depends on ---
   Object.assign(e, createToolBusy(e));
   Object.assign(e, createSketchVisibility(e));
+  // The overlay declared this hook and nothing ever assigned it, so its default
+  // ("everything is visible") stood: a sketch hidden from the browser tree kept
+  // drawing its curves AND kept its region fills in the pick list, so clicking
+  // the face underneath selected the hidden profile instead. Wired here rather
+  // than in the SketchOverlay constructor because isSketchVisible is only
+  // Object.assign'd onto the engine on the line above.
+  e.overlay.sketchVisible = (id) => e.isSketchVisible(id);
   Object.assign(e, createDatumPlanes(e));
   Object.assign(e, createSelection(e));
   Object.assign(e, createDocumentActions(e));
