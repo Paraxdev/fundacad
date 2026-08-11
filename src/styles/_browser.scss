@@ -1,6 +1,48 @@
 /* ============================================================================
    BROWSER TREE  (MCAD-style folders)
    ============================================================================ */
+/* The panel heading carries the kind filter, so it is a row rather than a line
+   of text. The base .panel-title (in _timeline.scss, shared with the inspector)
+   still supplies the type and the margins — this only adds the layout. */
+.browser-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.browser-filter {
+  /* Takes what the heading does not: the labels are long ("Planes and axes")
+     and the panel is a fixed 232px, so the control shrinks rather than pushing
+     the heading out of the panel. */
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px var(--s-2);
+  color: var(--text-dim);
+  /* Deliberately not inheriting .panel-title's uppercase + 1px tracking: this is
+     a value the user picked, not a heading. */
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+}
+.browser-filter:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.browser-filter:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.browser-filter option {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
 .tree-folder {
   display: flex;
   align-items: center;

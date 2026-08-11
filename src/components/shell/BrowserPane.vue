@@ -30,6 +30,10 @@ import TreeRow from "./TreeRow.vue";
 import {
   bodyColorMenuItems, buildAssemblyGroups, collectBodyIds, type AsmGroup,
 } from "../../ui/browserTree";
+import {
+  BROWSER_FILTERS, asBrowserFilter, getBrowserFilter, onBrowserFilterChange,
+  sectionVisible, setBrowserFilter, type BrowserSection,
+} from "../../ui/browserFilter";
 import type { CtxItem } from "../../ui/menu";
 import type { CadDocument, Feature, Plane3 } from "../../types";
 
@@ -38,6 +42,19 @@ const store = engine.store;
 const selection = useSelectionStore();
 const browser = useBrowserStore();
 const root = useTemplateRef<HTMLElement>("root");
+
+// The chosen filter is module state in a plain .ts, not a store, so nothing
+// tracks it — the same arrangement LeftToolbar uses for the rail's remembered
+// defaults, and for the same reason: ui/browserFilter.ts has to stay Vue-free
+// for the headless suite.
+const filter = ref(getBrowserFilter());
+const offFilter = onBrowserFilterChange(() => { filter.value = getBrowserFilter(); });
+onUnmounted(offFilter);
+
+function onFilterInput(ev: Event) {
+  const id = asBrowserFilter((ev.target as HTMLSelectElement).value);
+  if (id) setBrowserFilter(id);
+}
 
 // --- the node model ------------------------------------------------------
 
@@ -167,6 +184,10 @@ const nodes = useDocValue((doc): TreeNode[] => {
   engine.bridge.buildVersion.value; // bodies, body names/colours, the palette
   browser.viewTick; // sketch + plane visibility, which the store does not emit
 
+  // A hidden section is not BUILT, not built-then-dropped: under "Sketches" the
+  // body list, the assembly walk and the palette are all work with no output.
+  const show = (s: BrowserSection) => sectionVisible(filter.value, s);
+
   const errId = store.buildState.errorFeatureId;
   const bodies = bodyList();
   const sketches = doc.features.filter((f) => f.type === "sketch");
@@ -193,7 +214,7 @@ const nodes = useDocValue((doc): TreeNode[] => {
   };
 
   // --- Origin ---
-  folder("Origin", "origin", (["XY", "XZ", "YZ"] as Plane3[]).map((p) => ({
+  if (show("origin")) folder("Origin", "origin", (["XY", "XZ", "YZ"] as Plane3[]).map((p) => ({
     kind: "row" as const,
     k: `o:${p}`,
     depth: 0,
@@ -205,7 +226,7 @@ const nodes = useDocValue((doc): TreeNode[] => {
   })));
 
   // --- Construction / datum planes (only when present) ---
-  if (datums.length) {
+  if (datums.length && show("planes")) {
     folder("Planes", "plane", datums.map((f, i) => ({
       kind: "row" as const,
       k: `p:${f.id}`,
@@ -225,7 +246,7 @@ const nodes = useDocValue((doc): TreeNode[] => {
   }
 
   // --- Palette + Bodies ---
-  if (bodies.length) {
+  if (bodies.length && show("palette")) {
     const collapsed = browser.isCollapsed("Palette");
     out.push({ kind: "palette-head", k: "palette", count: store.colorPalette.length, collapsed });
     if (!collapsed) {
@@ -285,8 +306,10 @@ const nodes = useDocValue((doc): TreeNode[] => {
     for (const b of g.bodies) out.push(bodyRow(b, depth + 1));
   };
 
-  const groups = buildAssemblyGroups(bodies, importTrees(doc));
-  if (!groups) {
+  const groups = show("bodies") ? buildAssemblyGroups(bodies, importTrees(doc)) : null;
+  if (!show("bodies")) {
+    // nothing: the filter is narrowed to something else
+  } else if (!groups) {
     // no imported assembly tree in this document — exactly the flat list as before
     folder("Bodies", "body", bodies.map((b) => bodyRow(b, 0)));
   } else {
@@ -302,7 +325,7 @@ const nodes = useDocValue((doc): TreeNode[] => {
   }
 
   // --- Sketches ---
-  folder("Sketches", "sketch", sketches.map((f, i) => ({
+  if (show("sketches")) folder("Sketches", "sketch", sketches.map((f, i) => ({
     kind: "row" as const,
     k: `s:${f.id}`,
     depth: 0,
@@ -495,7 +518,21 @@ onUnmounted(() => root.value?.removeEventListener("wheel", onWheel));
 
 <template>
   <aside id="browser" ref="root">
-    <div class="panel-title">Browser</div>
+    <div class="panel-title browser-title">
+      <span>Browser</span>
+      <!-- In the title row rather than above it: the panel is 232px and a
+           filter on its own line would cost a whole row of tree for a control
+           that is usually left on "All items". -->
+      <select
+        id="browser-filter"
+        class="browser-filter"
+        title="Show only one kind of item"
+        :value="filter"
+        @change="onFilterInput"
+      >
+        <option v-for="f in BROWSER_FILTERS" :key="f.id" :value="f.id">{{ f.label }}</option>
+      </select>
+    </div>
     <template v-for="n in nodes" :key="n.k">
       <TreeFolder
         v-if="n.kind === 'folder'"

@@ -202,6 +202,44 @@ describe("BrowserPane", () => {
     expect(panel(w).map((r) => r.text)).toContain(evil);
   });
 
+  it("narrows the tree to one kind of item, and back", async () => {
+    const fake = makeEngine(
+      { parameters: {}, features: [sketch("s1"), { id: "dp", type: "datumPlane", plane: "XY", offset: 5 } as Feature] },
+      [{ id: "b1", name: "Body1" }],
+    );
+    const w = render(fake);
+    // The palette head is a .tree-folder with no .tree-label, so it falls
+    // through to el.text() and reads as its label plus its count.
+    const heads = () => panel(w).filter((r) => r.kind === "folder").map((r) => r.text);
+    expect(heads()).toEqual(["Origin", "Planes", "Palette1", "Bodies", "Sketches"]);
+
+    const select = w.get("#browser-filter");
+    await select.setValue("sketches");
+    expect(heads()).toEqual(["Sketches"]);
+    // The Bodies folder's own empty state must go with it — under "Sketches" a
+    // "No bodies yet" row would be answering a question nobody asked.
+    expect(panel(w).some((r) => r.text.includes("bodies"))).toBe(false);
+
+    await select.setValue("planes");
+    expect(heads()).toEqual(["Origin", "Planes"]);
+
+    await select.setValue("all");
+    expect(heads()).toEqual(["Origin", "Planes", "Palette1", "Bodies", "Sketches"]);
+  });
+
+  it("keeps the palette with the bodies", async () => {
+    // The palette head carries no .tree-label, so it is found by its own class.
+    const fake = makeEngine({ parameters: {}, features: [sketch("s1")] }, [{ id: "b1", name: "Body1" }]);
+    const w = render(fake);
+    expect(w.find(".pal-dot").exists()).toBe(true);
+
+    await w.get("#browser-filter").setValue("sketches");
+    expect(w.find(".pal-dot").exists()).toBe(false);
+
+    await w.get("#browser-filter").setValue("bodies");
+    expect(w.find(".pal-dot").exists()).toBe(true);
+  });
+
   it("hides every body under an assembly node from its eye", async () => {
     const fake = makeEngine(
       { parameters: {}, features: [IMPORT([{ name: "Robot", parent: null }, { name: "a", parent: 0 }, { name: "b", parent: 0 }])] },
