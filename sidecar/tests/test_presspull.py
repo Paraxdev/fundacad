@@ -2,22 +2,28 @@
 
 Run:  python test_presspull.py
 
-The operation used to accept planes and cylinders and refuse every other
-surface. That was too narrow in one direction and, it turned out, exactly right
-in another, so these tests pin BOTH edges of the line.
+Three operations, in descending order of how good the answer is and ascending
+order of how often it works. These tests pin every step and every boundary.
 
-Too narrow: every ANALYTIC curved surface offsets cleanly — cone, sphere,
-torus. The one that matters most to a user is the torus, because a fillet on a
-round edge is a toroidal face; "blend a part, then adjust the blend by dragging
-it" was refused outright, with a message that read as a permanent limitation.
+1. PLANES extrude the face region into a prism and boolean it.
+2. ANALYTIC curves (cylinder, cone, sphere, torus) get the real local offset,
+   which is what resizes a hole, a boss or a blend properly. The torus matters
+   most: a fillet on a round edge is a toroidal face, so "blend a part, then
+   adjust the blend by dragging it" used to be refused outright.
+3. FREEFORM faces sweep along one direction and boolean, like a plane. Weaker —
+   the face travels with straight side walls instead of the surface thickening —
+   but robust, and a weaker answer beats a refusal.
 
-Right: FREEFORM surfaces are not merely unreliable, they crash. A swept BSPLINE
-offsets fine at +-1mm and dies with an access violation at +-8mm and +-20mm.
-The first version of this change probed only +-1.5mm, concluded that nothing
+The offset must NEVER be tried on a freeform face. It does not fail there, it
+crashes: a swept BSPLINE offsets fine at +-1mm and dies with an access violation
+at +-8mm and +-20mm. An earlier change probed +-1.5mm only, concluded nothing
 crashes, and shipped — and a -20mm cut then killed a worker mid-rebuild. Hence
-test_the_large_offsets_that_killed_a_worker, which runs out of process so that
-a crash is a return code rather than the end of the test run, and hence the
-rule that a surface joins OFFSETTABLE_CURVED only on evidence at LARGE offsets.
+test_the_large_offsets_that_killed_a_worker, which runs out of process so a
+crash is a return code, and test_the_freeform_path_never_calls_the_offset.
+
+And validity is not enough to accept a sweep. A face that wraps around produces
+a valid solid of volume 0.0 — a well-formed nothing — so the volume is checked
+for sign and direction too.
 """
 
 import _bootstrap  # noqa: F401  (puts sidecar/ on sys.path)
@@ -79,28 +85,85 @@ def test_the_analytic_curved_surfaces():
         print(f"  {name} OK: {v0:.1f} -> {v1:.1f}")
 
 
-def test_a_freeform_face_is_refused_because_it_crashes():
-    """A freeform face must be refused, and the reason is not caution.
+def _lofted_freeform():
+    """A loft between two offset, rotated rectangles: four BSpline side faces,
+    each of which faces one way. The ordinary freeform shape — a draft, a blended
+    transition, an imported organic part."""
+    from build123d import Face, Plane, Rot, loft
 
-    This is the regression test for a worker that died mid-rebuild. Offsetting a
-    swept BSPLINE by +-1mm works, which is exactly what makes this look like a
-    case for a magnitude cap; at +-8mm and +-20mm the same face takes the process
-    down with an access violation, in both directions. The threshold depends on
-    the surface's own local curvature, which nothing here can bound, and being
-    wrong costs a crash while refusing costs a sentence."""
+    bottom = Plane.XY * Face.make_rect(30, 30)
+    top = Plane.XY.offset(20) * Rot(0, 0, 30) * Face.make_rect(14, 22)
+    return loft([bottom, top])
+
+
+def test_a_freeform_face_moves_by_sweeping_instead_of_offsetting():
+    """A freeform face that faces one way is no longer refused — it sweeps.
+
+    This is the capability the refusal used to cost. The offset path cannot go
+    here at all: it works at +-1mm and dies with an access violation at +-8mm and
+    +-20mm, in both directions, on a threshold set by local curvature that
+    nothing can bound.
+
+    Sweeping gives a different answer, and the difference is real — the face
+    travels along one direction with straight side walls rather than the surface
+    thickening. On a face like this that is what "push this patch" means."""
+    s = _lofted_freeform()
+    f = max((x for x in s.faces() if x.geom_type == GeomType.BSPLINE),
+            key=lambda x: x.area)
+    for d in (1.5, 5.0, 20.0, -5.0):
+        v0 = mesh_volume(s.wrapped)
+        out = _press_pull(s, f, d)
+        assert BRepCheck_Analyzer(out.wrapped).IsValid(), f"{d}: invalid solid"
+        v1 = mesh_volume(out.wrapped)
+        assert (v1 > v0) == (d > 0), f"{d}: material moved the wrong way {v0} -> {v1}"
+        print(f"  freeform swept {d:+6}mm OK: {v0:.1f} -> {v1:.1f}")
+
+
+def test_a_face_that_wraps_is_refused_rather_than_swallowing_the_body():
+    """The failure a validity check alone does not catch.
+
+    The side of a swept tube closes on itself, so no single direction means
+    anything and the prism eats the solid. Measured: the result passes
+    BRepCheck_Analyzer and has volume 0.0 — a perfectly well-formed nothing. It
+    is the VOLUME check that refuses it, and this test is here because without it
+    the fallback silently destroys the body it was meant to move."""
     from build123d import Face, Spline
 
     s = Solid.sweep(Face(Wire.make_circle(4)), Spline((0, 0, 0), (4, 0, 10), (0, 0, 20)))
     f = _one(s, GeomType.BSPLINE)
     try:
-        _press_pull(s, f, 1.0)
+        out = _press_pull(s, f, 1.0)
     except ValueError as ex:
-        assert "freeform" in str(ex), f"refusal should name the reason, got: {ex}"
-        print(f"freeform refused OK: {ex}")
+        assert "wraps" in str(ex), f"refusal should name the reason, got: {ex}"
+        print(f"wrapping face refused OK: {ex}")
         return
     raise AssertionError(
-        "a freeform face was accepted — small offsets succeed, so this passes "
-        "until a user picks a big one and the worker dies")
+        f"a wrapping face was accepted, leaving volume {mesh_volume(out.wrapped):.1f}")
+
+
+def test_the_freeform_path_never_calls_the_offset_that_crashes():
+    """The guarantee above, held structurally rather than by reading the code.
+
+    _offset_faces is replaced with a bomb for the duration: if the freeform
+    branch ever grows a "try the offset first" it fails here, loudly, instead of
+    in a user's session as a dead worker."""
+    import builder
+    from build123d import Face, Spline
+
+    s = _lofted_freeform()
+    f = max((x for x in s.faces() if x.geom_type == GeomType.BSPLINE),
+            key=lambda x: x.area)
+    real = builder._offset_faces
+
+    def bomb(*_a, **_k):
+        raise AssertionError("the freeform path reached BRepOffset — this crashes workers")
+
+    builder._offset_faces = bomb
+    try:
+        builder._press_pull(s, f, 1.0)
+    finally:
+        builder._offset_faces = real
+    print("freeform path stays clear of BRepOffset OK")
 
 
 def test_the_large_offsets_that_killed_a_worker():
@@ -182,7 +245,9 @@ if __name__ == "__main__":
     try:
         test_the_blend_face_of_a_filleted_part()
         test_the_analytic_curved_surfaces()
-        test_a_freeform_face_is_refused_because_it_crashes()
+        test_a_freeform_face_moves_by_sweeping_instead_of_offsetting()
+        test_a_face_that_wraps_is_refused_rather_than_swallowing_the_body()
+        test_the_freeform_path_never_calls_the_offset_that_crashes()
         test_the_large_offsets_that_killed_a_worker()
         test_an_impossible_offset_is_refused_not_crashed()
         test_a_flat_face_still_takes_the_prism_path()

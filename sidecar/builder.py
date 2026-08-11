@@ -5236,10 +5236,11 @@ def _press_pull(part, face, d, clamp=True):
     a part. The permitted set is now every ANALYTIC surface (OFFSETTABLE_CURVED),
     each measured safe in an isolated subprocess at offsets up to +-20mm.
 
-    Freeform surfaces stay refused, and that refusal is load-bearing rather than
-    conservative: they crash. See the note on OFFSETTABLE_CURVED — a small offset
+    FREEFORM faces sweep instead (_sweep_press_pull). They must never reach the
+    offset — it does not fail on them, it crashes the worker, and a small offset
     on a BSPLINE works, which is precisely what makes a magnitude cap look
-    sufficient when it is not.
+    sufficient when it is not. Sweeping is a weaker operation but a robust one,
+    and a weaker answer beats a refusal.
 
     Separately, _offset_faces now validates its own result, which is a guarantee
     the old whitelist never gave: a cylinder could always be offset into an
@@ -5272,15 +5273,17 @@ def _press_pull(part, face, d, clamp=True):
     # Curved. The radius cap applies only where a radius is what runs out: pushing
     # a cylinder or a cone inward past its own axis collapses it, and OCCT does
     # not survive that gracefully.
-    if gt in (GeomType.CYLINDER, GeomType.CONE):
-        return _offset_face(part, face, _clamp_cylinder(face, d))
+    # Analytic curves get the REAL offset first — it is what resizes a hole, a
+    # boss or a blend properly — and the sweep only if that refuses. Freeform
+    # faces go straight to the sweep: the offset does not fail on them, it
+    # crashes the worker, so it must never be tried.
     if gt in OFFSETTABLE_CURVED:
-        return _offset_face(part, face, d)
-    raise ValueError(
-        "can't press/pull this face — its surface is freeform, and offsetting "
-        "one is not something the kernel can do reliably. Use Extrude from a "
-        "sketch, or push a neighbouring flat or round face instead."
-    )
+        dd = _clamp_cylinder(face, d) if gt in (GeomType.CYLINDER, GeomType.CONE) else d
+        try:
+            return _offset_face(part, face, dd)
+        except Exception:
+            return _sweep_press_pull(part, face, dd)
+    return _sweep_press_pull(part, face, d)
 
 
 def _distance_to_target(src_face, target_pt, target_n):
@@ -5362,6 +5365,67 @@ def _guard_offsetable(part, faces, label):
             raise
         except Exception:
             pass
+
+
+def _sweep_press_pull(part, face, d):
+    """Move a face by SWEEPING it along one direction and booleaning the result,
+    instead of offsetting its surface.
+
+    This is the same thing the planar path has always done, pointed at the faces
+    the offset path cannot take. It touches no BRepOffset, which is what makes it
+    survive a freeform face: measured on a lofted body with four BSpline sides,
+    +-1.5 / 5 / 20mm all produce valid solids, where the local offset crashes the
+    worker outright at the same distances.
+
+    It is NOT an offset, and the difference shows on a strongly curved face: the
+    face keeps its shape and travels, with straight side walls, rather than the
+    surface thickening. That is what "push this patch" means and is the honest
+    behaviour to offer where the exact one is unavailable — but it is the reason
+    this stays a FALLBACK and analytic faces keep the real offset, which resizes
+    a hole, a boss or a blend properly.
+
+    The direction is the face normal at its parametric centre. A freeform face
+    has no single normal, so a face that wraps — the side of a swept tube, which
+    closes on itself — has no direction that means anything, and sweeping it
+    produces a prism that swallows the body.
+
+    Validity is NOT enough to catch that. Measured on exactly that tube: the
+    result passes BRepCheck_Analyzer and has volume 0.0, i.e. a perfectly
+    well-formed nothing. So the volume is checked too, for sign and direction,
+    and a sweep that does not move material the way the drag asked for is
+    refused rather than committed.
+    """
+    n = face.normal_at()
+    prism = extrude(face, abs(d), dir=(n if d > 0 else -n))
+    out = (part + prism) if d > 0 else (part - prism)
+    from OCP.BRepCheck import BRepCheck_Analyzer
+
+    if not BRepCheck_Analyzer(out.wrapped).IsValid():
+        raise ValueError(_SWEEP_REFUSAL)
+    before, after = _solid_volume(part), _solid_volume(out)
+    if after <= 0 or (after > before) != (d > 0):
+        raise ValueError(_SWEEP_REFUSAL)
+    return out
+
+
+_SWEEP_REFUSAL = (
+    "can't press/pull this face — its surface is freeform and wraps around, so "
+    "there is no one direction to push it in. Push a neighbouring flat or round "
+    "face, or edit the sketch this shape was built from."
+)
+
+
+def _solid_volume(shape):
+    """Volume in mm3, or 0.0 when the shape has none to measure."""
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
+    try:
+        props = GProp_GProps()
+        BRepGProp.VolumeProperties_s(shape.wrapped, props)
+        return float(props.Mass())
+    except Exception:
+        return 0.0
 
 
 def _offset_face(part, face, d):
