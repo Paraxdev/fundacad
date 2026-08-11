@@ -50,15 +50,13 @@ rm -rf "$OUT"/site-packages/vtkmodules "$OUT"/site-packages/vtk.py \
   "$OUT"/site-packages/vtk-*.dist-info 2>/dev/null || true
 
 # 4. sidecar sources + precompile (read-only bundle: no .pyc writes at import time).
-#    Ship only what the app RUNS: a blanket *.py put 14 test_*.py suites and a
-#    spike script into every installer. Nothing imports them (checked statically
-#    and by name), so they were pure dead weight in a 954 MB bundle. Keep this a
-#    denylist, not an allowlist — a new sidecar module must ship by default, or
-#    the app breaks in the packaged build only, which is the worst place to find out.
+#    Non-recursive, so sidecar/tests/ never ships. A denylist, not an allowlist —
+#    a new sidecar module must ship by default, or the app breaks in the packaged
+#    build only, which is the worst place to find out.
 mkdir -p "$OUT/app"
 for _src in "$SIDE"/*.py; do
   case "${_src##*/}" in
-    test_*.py|spike_*.py) continue ;;
+    spike_*.py) continue ;;
   esac
   cp "$_src" "$OUT/app/"
 done

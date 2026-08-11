@@ -17,10 +17,7 @@
     // vue-tsc requires a jsx setting even though this project has no JSX.
     "jsx": "preserve"
   },
-  // .vue files are resolved natively by vue-tsc — there is deliberately NO
-  // `declare module "*.vue"` shim anywhere in this repo. A shim would win over
-  // the real resolution and silently switch off prop type-checking, which is
-  // most of what typing the components buys us. If an editor complains about a
-  // .vue import, install the Vue (Volar) extension rather than adding one.
-  "include": ["src/**/*.ts", "src/**/*.vue"]
+  // No `declare module "*.vue"` shim, deliberately: it would win over vue-tsc's
+  // real resolution and silently switch off prop type-checking.
+  "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts"]
 }
