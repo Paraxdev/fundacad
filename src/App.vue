@@ -22,6 +22,7 @@ import CameraPanel from "./components/overlays/CameraPanel.vue";
 import ParamsDialog from "./components/overlays/ParamsDialog.vue";
 import WelcomeModal from "./components/overlays/WelcomeModal.vue";
 import SpaceMouseModal from "./components/overlays/SpaceMouseModal.vue";
+import PreferencesDialog from "./components/overlays/PreferencesDialog.vue";
 import SignInDialog from "./components/overlays/SignInDialog.vue";
 import PublishDialog from "./components/overlays/PublishDialog.vue";
 import BugReportButton from "./components/overlays/BugReportButton.vue";
@@ -103,6 +104,7 @@ const toolPanels = useToolPanelStore();
        they genuinely stack — the welcome screen opens sign-in over itself. -->
   <WelcomeModal v-if="dialogs.welcome && dialogs.welcomeCallbacks" />
   <SpaceMouseModal v-if="dialogs.spaceMouse" />
+  <PreferencesDialog v-if="dialogs.preferences" />
   <SignInDialog v-if="dialogs.signIn" :req="dialogs.signIn" />
   <PublishDialog v-if="dialogs.publish" :req="dialogs.publish" />
   <FilamentMappingDialog v-if="dialogs.filament" :req="dialogs.filament" />

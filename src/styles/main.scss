@@ -36,6 +36,10 @@
 @use "toolrail";
 @use "timeline";
 @use "inspector";
+// After _ribbon and _timeline, and before _utilities: these rules restate the
+// axis-specific parts of both bars for a side-mounted arrangement, so they must
+// win against them — and .hidden must still win against everything.
+@use "shellsides";
 @use "utilities";
 @use "browser";
 @use "modals";

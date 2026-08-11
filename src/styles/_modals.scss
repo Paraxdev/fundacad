@@ -245,6 +245,32 @@
   cursor: pointer;
 }
 
+/* --- Preferences ---
+   Reuses .sm-section / .sm-hint / .sm-select from the 3D-mouse dialog above:
+   they are the shared vocabulary of a settings screen (a heading, a caption, a
+   dropdown) and a second set under different names would drift. Only the ROW is
+   its own, because a preference is a label and one control, not the three-column
+   grid a slider or an axis mapping needs. */
+.prefs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 340px;
+}
+.prefs-row {
+  display: grid;
+  /* The label column is fixed so every control starts on the same line — a
+     settings list reads as a column of choices, not as ragged pairs. */
+  grid-template-columns: 92px 1fr;
+  align-items: center;
+  gap: var(--s-3);
+  cursor: pointer;
+}
+.prefs-label {
+  font-size: 12px;
+  color: var(--text-dim, #9aa3af);
+}
+
 /* --- small modal chooser (Split keep-mode, Combine operation) --- */
 .choice-backdrop {
   position: fixed;

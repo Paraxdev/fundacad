@@ -14,6 +14,7 @@ import { FEATURE_META } from "../../ui/featureMeta";
 import Icon from "./Icon.vue";
 import { contextMenu } from "../../ui/menu";
 import { buildProgress, CANCEL_DELAY_MS } from "../../ui/buildProgress";
+import { gapIndexIn } from "../../ui/trackGaps";
 
 const engine = useEngine();
 const store = engine.store;
@@ -196,20 +197,18 @@ function onMarkerDown(e: PointerEvent) {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", up);
     m.classList.remove("dragging");
-    store.setRollback(gapIndexAt(ev.clientX));
+    store.setRollback(gapIndexAt(ev));
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
 }
 
-/** Which inter-feature gap (0..n) the x coordinate falls into. */
-function gapIndexAt(clientX: number): number {
+/** Which inter-feature gap (0..n) the pointer falls into. The measuring is here;
+ *  the arithmetic — including which axis the track runs along, since the history
+ *  strip can be moved to the right-hand side — is in ui/trackGaps.ts. */
+function gapIndexAt(ev: PointerEvent): number {
   const nodes = [...(track.value?.querySelectorAll<HTMLElement>(".timeline-node:not(.building)") ?? [])];
-  for (let i = 0; i < nodes.length; i++) {
-    const r = nodes[i]?.getBoundingClientRect();
-    if (r && clientX < r.left + r.width / 2) return i;
-  }
-  return nodes.length;
+  return gapIndexIn(nodes.map((n) => n.getBoundingClientRect()), ev.clientX, ev.clientY);
 }
 
 // --- right-click context menu (shared engine in ui/menu.ts) --------------

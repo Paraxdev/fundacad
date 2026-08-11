@@ -7,7 +7,7 @@ import type { TaUser } from "../tinkeratlas/client";
 import type { LogicalSlot, MappingResult } from "../print/printDialog";
 import type { ToolheadFilament } from "../print/printerClient";
 
-/** Open/closed state for the seven app-level dialogs that used to build their own
+/** Open/closed state for the app-level dialogs that used to build their own
  *  DOM. Each exported opener in ui/ and tinkeratlas/ is now a facade over a field
  *  here; the markup lives in components/overlays/*.vue.
  *
@@ -43,6 +43,7 @@ export const useDialogStore = defineStore("dialogs", () => {
   const welcome = ref(false);
   const spaceMouse = ref(false);
   const bugReport = ref(false);
+  const preferences = ref(false);
 
   const signIn = shallowRef<SignInReq | null>(null);
   const publish = shallowRef<PublishReq | null>(null);
@@ -108,6 +109,7 @@ export const useDialogStore = defineStore("dialogs", () => {
     welcome,
     spaceMouse,
     bugReport,
+    preferences,
     signIn,
     publish,
     filament,

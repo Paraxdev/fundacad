@@ -9,6 +9,7 @@ import { MODEL, SKETCH, PRIORITY, PINNED, leavesOf } from "../../ui/ribbonDefs";
 import type { Group, Item, RibbonContext, ToolItem } from "../../ui/ribbonDefs";
 import Icon from "./Icon.vue";
 import RibbonPopup from "./RibbonPopup.vue";
+import { layoutPrefs, onLayoutPrefsChange } from "../../ui/layoutPrefs";
 
 const ribbon = useRibbonStore();
 // Two elements, two jobs, exactly as the class had them: the ResizeObserver
@@ -63,18 +64,25 @@ watch(
 );
 
 // --- overflow packing ----------------------------------------------------
-// Natural group widths, measured with every group shown, cached per context.
-// Re-measuring on each reflow would mean un-collapsing, awaiting a frame and
-// re-collapsing — a visible flicker during a resize drag. The widths only
-// change when the context, the font or the zoom changes, none of which is a
-// container resize, so the cache is invalidated on context change alone.
+// Natural group sizes ALONG THE BAR, measured with every group shown, cached
+// per context. Re-measuring on each reflow would mean un-collapsing, awaiting a
+// frame and re-collapsing — a visible flicker during a resize drag. The sizes
+// only change when the context, the font, the zoom or the bar's axis changes,
+// none of which is a container resize, so the cache is invalidated on those.
 const naturalWidths = new Map<RibbonContext, number[]>();
 const collapsedLabels = ref<Set<string>>(new Set());
+
+// Which way the bar runs (ui/layoutPrefs.ts). Everything below is written in
+// terms of "along the bar" rather than "wide", because a side ribbon overflows
+// DOWNWARD: measuring widths there compares each full-width group against a
+// column of its own width and collapses almost all of them into the ⋯ button.
+const vertical = ref(layoutPrefs().ribbon === "left");
 
 function measure(): number[] {
   const el = ctx.value;
   if (!el) return [];
-  return [...el.querySelectorAll<HTMLElement>(".ribbon-group")].map((g) => g.offsetWidth);
+  const along = (g: HTMLElement) => (vertical.value ? g.offsetHeight : g.offsetWidth);
+  return [...el.querySelectorAll<HTMLElement>(".ribbon-group")].map(along);
 }
 
 async function naturalFor(context: RibbonContext): Promise<number[]> {
@@ -99,7 +107,7 @@ async function reflow() {
   const widths = await naturalFor(ribbon.context);
   if (widths.length !== list.length) return; // mid-swap; the context watcher re-runs it
 
-  const available = el.clientWidth - 12;
+  const available = (vertical.value ? el.clientHeight : el.clientWidth) - 12;
   let total = widths.reduce((a, b) => a + b, 0);
   if (total <= available) {
     collapsedLabels.value = new Set();
@@ -136,12 +144,27 @@ const collapsedGroups = computed(() =>
 );
 
 let ro: ResizeObserver | null = null;
+let offLayout: (() => void) | null = null;
 onMounted(() => {
   ro = new ResizeObserver(() => void reflow());
   if (root.value) ro.observe(root.value);
+  // Turning the bar on its side changes which dimension the cached sizes are,
+  // so they have to go — a column of heights compared against a row's width
+  // collapses everything. The ResizeObserver fires too, but only after the
+  // layout settles, and it would reflow against the stale cache first.
+  offLayout = onLayoutPrefsChange(async () => {
+    const next = layoutPrefs().ribbon === "left";
+    if (next === vertical.value) return; // the history side moved, not ours
+    vertical.value = next;
+    naturalWidths.clear();
+    collapsedLabels.value = new Set();
+    closePopup();
+    await nextTick();
+    void reflow();
+  });
   void reflow();
 });
-onUnmounted(() => ro?.disconnect());
+onUnmounted(() => { ro?.disconnect(); offLayout?.(); });
 
 // A context switch swaps the whole group list, so the cache key changes and the
 // packing has to be redone against the new set.

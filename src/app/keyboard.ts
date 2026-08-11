@@ -5,6 +5,7 @@ import { SKETCH_TOOLS } from "./actionTables";
 import { currentPie, dismissPie, openPie } from "../ui/pieMenu";
 import { viewPie } from "../ui/viewPie";
 import { logError, toggleConsole } from "../ui/logStore";
+import { useDialogStore } from "../stores/dialogs";
 import type { Engine } from "./engine";
 
 /** Global keyboard: the MCAD keymap plus the two window-level handlers that
@@ -111,5 +112,10 @@ export function installKeyboard(e: Engine): void {
     else if (k === "s" && ev.shiftKey) { ev.preventDefault(); void saveDocumentAs(e.store); }
     else if (k === "s") { ev.preventDefault(); void saveDocument(e.store); }
     else if (k === "e") { ev.preventDefault(); void exportModel(e.store, e.geometry); }
+    // Ctrl+, is the conventional Preferences key and belongs with the file
+    // shortcuts rather than the keymap: like them it has to work mid-sketch,
+    // and unlike them it is punctuation, which the keymap's tool bindings are
+    // not.
+    else if (ev.key === ",") { ev.preventDefault(); useDialogStore().preferences = true; }
   });
 }

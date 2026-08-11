@@ -1,0 +1,170 @@
+/* ============================================================================
+   SHELL ARRANGEMENT — the ribbon on the top or the side, history on the bottom
+   or the right.
+   ============================================================================
+
+   Driven by the attributes ui/layoutPrefs.ts stamps on <html>. The DEFAULT
+   arrangement has no attribute at all and so has no rules here: it is what
+   _base.scss's #app grid already says. Same trick theme.ts uses for the palette
+   that lives on bare :root, and for the same reason — a `[data-ribbon="top"]`
+   block would be a copy of the base rules and the two would drift.
+
+   Nothing is re-parented. Every component keeps its element id and its place in
+   App.vue; only the grid changes, which is what named areas are for. That
+   matters beyond tidiness: every layout rule in _layout.scss is id-scoped to
+   these ids and the e2e suite selects on them.
+
+   Loaded after _ribbon and _timeline so these can override the axis-specific
+   declarations (overflow, borders, flex direction) each of those sets for the
+   default arrangement. */
+
+/* ---- the four grids ------------------------------------------------------ */
+
+:root[data-ribbon="left"] #app {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 36px minmax(0, 1fr) 52px;
+  grid-template-areas:
+    "title  title"
+    "ribbon main"
+    "history history";
+}
+
+:root[data-history="right"] #app {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 36px auto minmax(0, 1fr);
+  grid-template-areas:
+    "title  title"
+    "ribbon ribbon"
+    "main   history";
+}
+
+:root[data-ribbon="left"][data-history="right"] #app {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: 36px minmax(0, 1fr);
+  grid-template-areas:
+    "title  title title"
+    "ribbon main  history";
+}
+
+/* ---- the ribbon, stood on end -------------------------------------------- */
+
+:root[data-ribbon="left"] {
+  #ribbon {
+    /* The gradient runs along the bar's long axis in both orientations, and the
+       border is on the edge that faces the viewport. */
+    background: linear-gradient(90deg, var(--panel) 0%, #131519 100%);
+    border-bottom: none;
+    border-right: 1px solid var(--line);
+    /* Swapped with the horizontal bar's: a column scrolls down, not across.
+       min-height: fit-content would now be a WIDTH floor, so it goes. */
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    /* Wide enough for a 60px button plus the group's padding and its divider.
+       Fixed rather than fit-content because an `auto` column would be sized to
+       the widest group CAPTION, and the captions are the one part of a ribbon
+       group that is allowed to be narrower than its tools. */
+    width: 92px;
+  }
+  .ribbon-context {
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    min-height: 100%;
+    /* The horizontal bar pads its ends; the vertical one pads its top and
+       bottom, so the first and last group are not flush against the chrome. */
+    padding: var(--s-4) 0;
+  }
+  /* A group's divider moves from its right edge to its bottom one — it is
+     separating rows now, not columns. */
+  .ribbon-group:not(:last-child)::after {
+    top: auto;
+    bottom: 0;
+    left: 14px;
+    right: 14px;
+    width: auto;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent);
+  }
+  /* The spacer that pushes Finish Sketch to the far end pushes it DOWN here;
+     `flex: 1` already does that once the axis is vertical, so nothing to add —
+     but the overflow button is centred on the cross axis, which was the
+     horizontal one. */
+  .ribbon-overflow {
+    align-self: center;
+    height: 30px;
+    min-width: 60px;
+    margin: var(--s-1) 0;
+  }
+}
+
+/* ---- history, stood on end ----------------------------------------------- */
+
+:root[data-history="right"] {
+  #timeline {
+    /* Matches the inspector it now sits beside, rather than the browser: this
+       is the right-hand edge of the app. */
+    width: 232px;
+    background: var(--panel);
+    border-top: none;
+    border-left: 1px solid var(--line);
+    flex-direction: column;
+    align-items: stretch;
+    /* The horizontal strip is vertically centred chrome; the column is a list
+       that starts at the top. */
+    justify-content: flex-start;
+    padding: var(--s-4) var(--s-3);
+  }
+  /* The transport buttons stay a ROW — they are a segmented control, and four
+     of them stacked would be a column of unrelated arrows. */
+  .timeline-transport {
+    flex: none;
+    justify-content: center;
+  }
+  .timeline-scroll {
+    /* Scrolls down now. The wheel handler that turns vertical scrolling into
+       horizontal is still bound, and is simply the identity here. */
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: auto;
+    min-width: 0;
+    /* The horizontal strip keeps its chips on one line with nowrap; a column of
+       full-width rows must be allowed to break. */
+    white-space: normal;
+  }
+  .timeline-track {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .timeline-node {
+    /* A full-width row rather than a square chip: there is width to spend here
+       and a vertical list of icons with no labels is unreadable. */
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .timeline-busy {
+    text-align: center;
+  }
+  /* The rollback marker separates rows now, so it lies across the track and is
+     dragged up and down. */
+  .timeline-marker {
+    width: 100%;
+    height: 14px;
+    margin: 1px 0;
+    cursor: ns-resize;
+  }
+  .timeline-marker::before {
+    left: 2px;
+    right: 2px;
+    top: 6px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
+  }
+  .timeline-marker .marker-grip {
+    top: 2px;
+    left: -2px;
+    width: 13px;
+    height: 10px;
+  }
+}

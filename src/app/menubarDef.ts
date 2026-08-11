@@ -7,6 +7,7 @@ import { currentAccount } from "../tinkeratlas/client";
 import { getSpaceMouseMode, setSpaceMouseMode } from "../input/spacemouse";
 import { toggleShortcutHUD } from "../input/shortcuts";
 import { checkForUpdates, showAbout } from "../ui/updates";
+import { useDialogStore } from "../stores/dialogs";
 import type { MenuDef } from "../ui/menu";
 import type { Engine } from "./engine";
 
@@ -64,6 +65,8 @@ export function buildMenubar(e: Engine): MenuDef[] {
           disabled: () => !e.selectedFeature,
           onClick: () => e.selectedFeature && e.store.toggleSuppress(e.selectedFeature),
         },
+        { separator: true, label: "" },
+        { label: "Preferences…", shortcut: "Ctrl+,", onClick: () => { useDialogStore().preferences = true; } },
       ],
     },
     {
