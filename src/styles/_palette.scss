@@ -109,6 +109,22 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* It became a <button> so that a clipped error can be clicked open in the
+     console. A button brings its own UA font and alignment, so both are
+     restated; the ellipsis above is the whole reason the click exists and is
+     deliberately kept. */
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.status:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.status:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
 }
 .status::before {
   content: "";

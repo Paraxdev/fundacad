@@ -7,6 +7,7 @@ import PrintStatusPill from "./components/overlays/PrintStatusPill.vue";
 import ShortcutHud from "./components/overlays/ShortcutHud.vue";
 import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
 import PieMenuHost from "./components/overlays/PieMenuHost.vue";
+import ConsolePanel from "./components/overlays/ConsolePanel.vue";
 import SelectionToolbar from "./components/overlays/SelectionToolbar.vue";
 import InspectorPane from "./components/shell/InspectorPane.vue";
 import LeftToolbar from "./components/shell/LeftToolbar.vue";
@@ -70,6 +71,7 @@ const toolPanels = useToolPanelStore();
   <!-- After ContextMenuHost: both bind a dismissing pointerdown, and the pie is
        the one that should win a press aimed at it. -->
   <PieMenuHost />
+  <ConsolePanel />
   <SelectionToolbar />
   <CommandPalette />
 

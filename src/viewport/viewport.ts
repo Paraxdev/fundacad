@@ -849,8 +849,18 @@ export class Viewport {
       edgePx: this.screenExtent(pts),
       viewportPx,
       pixelWorldSize: mid ? this.pixelWorldSize(new THREE.Vector3(mid[0], mid[1], mid[2])) : null,
-      modelDiagonal: this.model ? this.model.box.getSize(new THREE.Vector3()).length() : null,
+      modelDiagonal: this.modelDiagonal(),
     };
+  }
+
+  /** The displayed model's bounding-box diagonal in world units, or null before
+   *  there is any geometry. Public because the manipulators size themselves
+   *  against it (manipulator.handleScale) and reading `store.buildState` instead
+   *  would give them the model as the DOCUMENT has it, not as the viewport is
+   *  drawing it — those differ all through a live preview, which is exactly when
+   *  a handle must not change size. */
+  modelDiagonal(): number | null {
+    return this.model ? this.model.box.getSize(new THREE.Vector3()).length() : null;
   }
 
   /** Diagonal of a polyline's projected bounding box, in CSS pixels — its

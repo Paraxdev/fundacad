@@ -10,6 +10,10 @@ import {
   leanOutOfView,
   orientOutward,
   screenPlaneOrientation,
+  HANDLE_LENGTH,
+  HANDLE_MODEL_FRACTION,
+  MIN_HANDLE_SCALE,
+  handleScale,
 } from "./manipulator";
 
 describe("orientOutward", () => {
@@ -340,5 +344,61 @@ describe("fluentRelease", () => {
       }
     }
     expect(fluentRelease({ fluent: true, moved: false, meaningful: true })).not.toBe("commit");
+  });
+});
+
+describe("handleScale", () => {
+  it("leaves the usual pixel scale alone while the model is the bigger of the two", () => {
+    // A 100mm part filling a 900px viewport: the handle is 45px against 900px of
+    // model, nowhere near the cap, and must stay exactly its pixel size — this
+    // is the ordinary case and the cap must be invisible in it.
+    expect(handleScale(100, 100 / 900)).toBe(1);
+    expect(handleScale(20, 20 / 600)).toBe(1);
+  });
+
+  it("shrinks the handle once it would dwarf the part", () => {
+    // The reported case: zoomed out until the body is a thumbnail, where a
+    // constant-size handle stops being a control ON an object and becomes a
+    // balloon with an object hanging off it.
+    const modelPx = 60;
+    const s = handleScale(10, 10 / modelPx);
+    expect(s).toBeLessThan(1);
+    expect(s * HANDLE_LENGTH).toBeLessThanOrEqual(modelPx * HANDLE_MODEL_FRACTION + 1e-9);
+  });
+
+  it("never shrinks past the point of being aimable", () => {
+    // Below the floor the cure is worse than the disease: a handle too small to
+    // hit is a tool that has effectively disappeared, which is worse than one
+    // that merely looks too big.
+    expect(handleScale(1, 1 / 4)).toBe(MIN_HANDLE_SCALE);
+    expect(handleScale(1e-6, 1)).toBe(MIN_HANDLE_SCALE);
+  });
+
+  it("never returns zero or a non-finite scale", () => {
+    // scale.setScalar(0) collapses the glyph AND its invisible grab volumes, so
+    // the handle would be invisible and unclickable at once — indistinguishable
+    // from the tool being broken.
+    for (const [d, p] of [[0, 1], [-5, 1], [10, 0], [10, -1], [NaN, 1], [10, NaN]] as const) {
+      const s = handleScale(d, p);
+      expect(Number.isFinite(s)).toBe(true);
+      expect(s).toBeGreaterThan(0);
+    }
+  });
+
+  it("falls back to the pixel scale when there is nothing to measure against", () => {
+    // An empty document still has to show a usable handle.
+    expect(handleScale(null, 0.1)).toBe(1);
+    expect(handleScale(100, null)).toBe(1);
+  });
+
+  it("is monotone in how much of the screen the model occupies", () => {
+    // A handle that grew as you zoomed out, or jumped about mid-orbit, would
+    // read as flicker rather than as a rule.
+    let prev = 0;
+    for (const modelPx of [10, 30, 60, 120, 300, 900]) {
+      const s = handleScale(50, 50 / modelPx);
+      expect(s).toBeGreaterThanOrEqual(prev - 1e-12);
+      prev = s;
+    }
   });
 });

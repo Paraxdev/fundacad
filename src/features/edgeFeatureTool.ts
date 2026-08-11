@@ -32,6 +32,7 @@ import {
   edgeHandleAxis,
   fluentRelease,
   HANDLE_UP,
+  handleScale,
   leanOutOfView,
   type DragHandle,
 } from "./manipulator";
@@ -1041,7 +1042,9 @@ export class EdgeFeatureTool {
       const k = this.viewport.pixelWorldSize(this.anchor);
       this.gizmo.position.copy(this.anchor);
       this.gizmo.quaternion.copy(this.quat);
-      this.gizmo.scale.setScalar(k);
+      // Same product as the passive handle (selectionNudge), or the glyph would
+      // resize at the instant the gesture takes over from it.
+      this.gizmo.scale.setScalar(k * handleScale(this.viewport.modelDiagonal(), k));
       this.handle?.paint({ hot: this.hovering || this.grabbing });
       const s = this.viewport.projectToScreen(this.anchor);
       this.dim.position(s.x, s.y);

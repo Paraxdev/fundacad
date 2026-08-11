@@ -29,7 +29,13 @@
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";
-import { createDragHandle, HANDLE_UP, leanOutOfView, type DragHandle } from "./manipulator";
+import {
+  createDragHandle,
+  HANDLE_UP,
+  handleScale,
+  leanOutOfView,
+  type DragHandle,
+} from "./manipulator";
 
 // Dimmer than an armed tool's handle: this is an offer, not a live control,
 // and it must not compete with the selection itself for attention.
@@ -132,7 +138,11 @@ export class SelectionNudge {
     this.quat.setFromUnitVectors(HANDLE_UP, leanOutOfView(this.axis, fwd, camRight));
     group.position.copy(anchor);
     group.quaternion.copy(this.quat);
-    group.scale.setScalar(this.viewport.pixelWorldSize(anchor));
+    // Pixel-scaled, then held to a fraction of the model's own on-screen size —
+    // see manipulator.handleScale. The armed tool applies the SAME product, or
+    // the handle would resize at the instant the gesture takes over.
+    const k = this.viewport.pixelWorldSize(anchor);
+    group.scale.setScalar(k * handleScale(this.viewport.modelDiagonal(), k));
     // The viewport renders on demand, and a raycast reads matrixWorld — which
     // is only refreshed by a render. Between two draws the handle would then be
     // hit-tested where it USED to be: visibly there, not grabbable. Two objects,

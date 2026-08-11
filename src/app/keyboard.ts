@@ -4,6 +4,7 @@ import { saveDocument, saveDocumentAs, exportModel } from "../io/files";
 import { SKETCH_TOOLS } from "./actionTables";
 import { currentPie, dismissPie, openPie } from "../ui/pieMenu";
 import { viewPie } from "../ui/viewPie";
+import { logError, toggleConsole } from "../ui/logStore";
 import type { Engine } from "./engine";
 
 /** Global keyboard: the MCAD keymap plus the two window-level handlers that
@@ -73,6 +74,32 @@ export function installKeyboard(e: Engine): void {
     if (currentPie()) return dismissPie(); // a second press closes it
     ev.preventDefault();
     openPie(viewPie(lastPointer.x, lastPointer.y, e.viewport));
+  });
+
+  // The console, on Ctrl+` — next to the wheel on backquote, and the pairing is
+  // deliberate: both are things you reach for without wanting to leave what you
+  // are doing. Live inside text fields too, unlike most shortcuts, because the
+  // moment you most want the full error text is while you are typing a value
+  // into the box that just refused one.
+  window.addEventListener("keydown", (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey)) return;
+    if (ev.key !== "`" && ev.code !== "Backquote") return;
+    ev.preventDefault();
+    toggleConsole();
+  });
+
+  // Anything that escapes to the window. These are the failures with no toast
+  // at all — a listener that threw, a rejected promise nobody awaited — so
+  // without this they exist only in devtools, which is exactly where a user
+  // reporting a bug is not looking.
+  window.addEventListener("error", (ev) => {
+    logError(ev.error ?? ev.message, {
+      source: "window",
+      detail: ev.filename ? `${ev.filename}:${ev.lineno}:${ev.colno}` : undefined,
+    });
+  });
+  window.addEventListener("unhandledrejection", (ev) => {
+    logError(ev.reason, { source: "promise" });
   });
 
   // file shortcuts (work everywhere, even mid-sketch)

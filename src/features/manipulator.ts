@@ -295,18 +295,25 @@ export interface DragHandle {
  *  what makes the drawn shape agree with it.)
  */
 const PROFILE: [number, number][] = [
-  [0.0, 6.0], // sits off the surface so it never buries in the face it stands on
-  [2.8, 6.6],
-  [3.1, 12.0],
-  [2.7, 20.0], // waist
-  [3.3, 26.0],
-  [6.4, 30.5], // flare
-  [9.5, 36.0],
-  [9.7, 41.0], // widest
-  [7.5, 46.0],
-  [4.0, 50.0],
-  [0.0, 52.0], // pole
+  [0.0, 5.0], // sits off the surface so it never buries in the face it stands on
+  [2.0, 5.4],
+  [2.2, 10.0],
+  [2.0, 18.0], // waist
+  [2.4, 23.0],
+  [4.2, 27.0], // shoulder
+  [6.0, 32.0],
+  [6.2, 36.0], // widest
+  [5.4, 40.0],
+  [3.2, 43.5],
+  [0.0, 45.0], // pole
 ];
+
+/** The drawn glyph's height in its own units — the profile's last y.
+ *
+ *  Read by handleScale, so the two cannot drift apart: if the profile is
+ *  retuned, the size cap retunes with it rather than quietly capping against a
+ *  length the shape no longer has. */
+export const HANDLE_LENGTH = 45;
 
 /** How far off the axis a press still counts as grabbing the handle, in pixels.
  *
@@ -316,8 +323,48 @@ const PROFILE: [number, number][] = [
  *  aim. These proxies never draw; they only widen what counts as a hit. Three's
  *  raycaster tests layers and never `visible`, so an invisible mesh is still
  *  pickable — locked down by a test, since the whole affordance rests on it. */
+// Deliberately NOT slimmed along with the drawn profile above. These never
+// render, so a smaller one buys no visual restraint at all and spends the
+// aiming margin that was the entire reason they exist — the glyph may be
+// quieter than it was, but it must not become harder to grab.
 const GRAB_HEAD = 17;
 const GRAB_STEM = 11;
+
+/** Most of the model's on-screen size the handle may occupy. */
+export const HANDLE_MODEL_FRACTION = 0.45;
+
+/** How far the handle may be shrunk before it stops being a target worth
+ *  aiming at. At 0.45 of a 45-unit glyph it is still ~20px with a ~7px grab
+ *  radius, which a hand can hit; below that the cure is worse than the disease
+ *  and it is better to let the handle look large than to make it unusable. */
+export const MIN_HANDLE_SCALE = 0.45;
+
+/** Multiplier on the usual constant-pixel scale, so the handle cannot dwarf the
+ *  thing it is attached to.
+ *
+ *  Constant SCREEN size is the right default — a handle that shrank with the
+ *  model would become unaimable the moment you zoomed out, which is the whole
+ *  reason gizmos are pixel-scaled. But it is only right while the model is the
+ *  bigger of the two. Zoom out until the part is 60px across and a 45px handle
+ *  is no longer a control ON an object, it is a balloon with an object hanging
+ *  off it — which is exactly what it looks like.
+ *
+ *  So the pixel scale stands until the handle would exceed a fraction of the
+ *  model's own on-screen size, and from there they shrink together. Returns 1
+ *  when there is nothing to measure against: an empty document, or a reading the
+ *  camera cannot produce. Never returns 0 — a handle scaled to nothing is a tool
+ *  that has silently vanished. */
+export function handleScale(
+  modelDiagonal: number | null,
+  pixelWorldSize: number | null,
+): number {
+  if (modelDiagonal == null || !Number.isFinite(modelDiagonal) || modelDiagonal <= 0) return 1;
+  if (pixelWorldSize == null || !Number.isFinite(pixelWorldSize) || pixelWorldSize <= 0) return 1;
+  const modelPx = modelDiagonal / pixelWorldSize;
+  if (!Number.isFinite(modelPx) || modelPx <= 0) return 1;
+  const allowed = modelPx * HANDLE_MODEL_FRACTION;
+  return Math.max(MIN_HANDLE_SCALE, Math.min(1, allowed / HANDLE_LENGTH));
+}
 
 function lathe(): THREE.LatheGeometry {
   // Sample a spline through the control points rather than lathing the polyline

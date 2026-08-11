@@ -16,11 +16,18 @@ export interface ToastOptions {
 }
 
 import { crumb } from "../diagnostics/breadcrumbs";
+import { log } from "./logStore";
 import { useToastStore } from "../stores/toasts";
 
 export function toast(message: string, opts: ToastOptions = {}) {
   const kind = opts.kind ?? "info";
   crumb(`[${kind}] ${message}`); // toasts double as bug-report breadcrumbs
+  // The toast itself is one clipped line and then it disappears. The log keeps
+  // the sentence whole and keeps it around, which for a kernel error is the
+  // difference between a diagnosis and "something went wrong". Every toast is
+  // recorded rather than only the errors: the warning that preceded a failure is
+  // routinely the one that explains it.
+  log(kind, message, { source: "ui" });
   useToastStore().push(
     message,
     kind,

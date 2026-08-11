@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toggleConsole } from "../../ui/logStore";
 import { markRaw, ref, onMounted, onUnmounted } from "vue";
 import { useEngine } from "../../app/engineKey";
 import { useUiStore } from "../../stores/ui";
@@ -108,6 +109,18 @@ function onPackInput(ev: Event) {
         <option v-for="p in iconPacks()" :key="p.id" :value="p.id">{{ p.label }}</option>
       </select>
     </label>
-    <span id="status" class="status" :class="ui.statusClass">{{ ui.statusText }}</span>
+    <!-- A button, not a span, because this is where a failure is first seen and
+         it is the one place in the app guaranteed to be showing a CLIPPED
+         version of it — the pill is narrow and the sentence is long, so the
+         tail that says what to do is exactly what gets cut. Clicking opens the
+         console, which keeps it whole. -->
+    <button
+      id="status"
+      type="button"
+      class="status"
+      :class="ui.statusClass"
+      :title="ui.statusText + ' — click for the full text'"
+      @click="toggleConsole()"
+    >{{ ui.statusText }}</button>
   </header>
 </template>
