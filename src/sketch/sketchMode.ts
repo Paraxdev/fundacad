@@ -750,6 +750,16 @@ export class SketchMode {
     if (this.referenceMode && !drivenable) {
       toast("A line length / circle diameter can't be a reference dimension yet, created as driving.");
     }
+    // The forced case, said out loud. With Reference Dim OFF the user has asked
+    // for a driving dimension and is getting a reference one, and until now that
+    // happened in silence, which reads as the toggle being ignored. It is not:
+    // both operands are projected geometry, which is fixed, so there is nothing
+    // a driving value could move and the solver would only report the sketch as
+    // over-constrained. The pick-time hint says so too, but that scrolls past
+    // while the eye is on the geometry.
+    if (driven && forceDriven && !this.referenceMode) {
+      toast("Both sides of this dimension are projected geometry, which can't move, so it was created as a reference dimension.");
+    }
     const out = driven ? ({ ...c, driven: true } as SketchConstraint) : c;
     this.setDrivingDimension(out);
     return out;

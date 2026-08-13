@@ -232,26 +232,55 @@ export interface DragHandle {
   dispose(): void;
 }
 
-/** The lathe profile, as (radius, height) in PIXELS: a soft stem swelling into a
- *  fat rounded head.
+/** The lathe profile, as (radius, height) in PIXELS: a slim shaft with a cone at
+ *  EACH end.
  *
- *  Deliberately not an arrow. An arrowhead promises a direction these handles do
- *  not have — the edge drag runs a fillet one way and a chamfer the other through
- *  zero. A symmetric head says "slide me along this line", and putting the mass at
- *  the head rather than on a 1.6px stalk is where the eye and cursor go anyway. */
+ *  Double-ended on purpose, and this is the constraint any redesign has to keep.
+ *  The edge drag runs a fillet one way and a chamfer the other, through "no
+ *  feature" at zero, so a single arrowhead would promise a direction the gesture
+ *  does not have. Two heads say what is true: slide me along this line, either
+ *  way. The shape this replaced was a fat rounded blob, which avoided the same
+ *  problem by pointing nowhere at all.
+ *
+ *  Lathed as a POLYLINE, not sampled through a spline: the steps at 11 and 34 are
+ *  where the shaft meets each cone, and a spline would round exactly those into
+ *  the blob this stopped being. The facets are the shape now. */
 const PROFILE: [number, number][] = [
-  [0.0, 5.0], // sits off the surface so it never buries in the face it stands on
-  [2.0, 5.4],
-  [2.2, 10.0],
-  [2.0, 18.0], // waist
-  [2.4, 23.0],
-  [4.2, 27.0], // shoulder
-  [6.0, 32.0],
-  [6.2, 36.0], // widest
-  [5.4, 40.0],
-  [3.2, 43.5],
-  [0.0, 45.0], // pole
+  [0.0, 5.0], // lower point, stood off the surface so it never buries in the face
+  [4.5, 14.0], // lower head, at its widest
+  [1.5, 14.0], // step in to the shaft
+  [1.5, 31.0], // shaft
+  [4.5, 31.0], // upper head, at its widest
+  [0.0, 45.0], // upper point
 ];
+
+/** How far the outline stands off the body, in the same pixel units.
+ *
+ *  A constant WIDTH, which is what a cell-shaded edge is, rather than the
+ *  uniform scale this used to be. A scale outlines a thin shape thinly: at the
+ *  old 1.13 the shaft would carry an edge under half a pixel wide and wash out
+ *  over a pale face, which is the one thing the outline exists to prevent. This
+ *  is also smaller than what the scale gave the old blob at its widest. */
+const OUTLINE_PX = 0.9;
+
+/** The same profile, pushed out by `k` along its own normal: the outline's
+ *  shape. The ends extend by `k` as well, so a cone's point is covered rather
+ *  than left poking through its own edge. */
+function outset(profile: [number, number][], k: number): [number, number][] {
+  return profile.map(([r, y], i) => {
+    const prev = profile[i - 1] ?? profile[i]!;
+    const next = profile[i + 1] ?? profile[i]!;
+    // The outward normal of the profile polyline, which for a lathe points away
+    // from the axis. Degenerate at a lone point, where it falls back to radial.
+    const tx = next[0] - prev[0];
+    const ty = next[1] - prev[1];
+    const len = Math.hypot(tx, ty) || 1;
+    const nx = ty / len;
+    const ny = -tx / len;
+    const endY = i === 0 ? -k : i === profile.length - 1 ? k : 0;
+    return [Math.max(0, r + nx * k), y + ny * k + endY];
+  });
+}
 
 /** The drawn glyph's height in its own units — the profile's last y. Read by
  *  handleScale, so retuning the profile retunes the size cap with it. */
@@ -298,12 +327,8 @@ export function handleScale(
   return Math.max(MIN_HANDLE_SCALE, Math.min(1, allowed / HANDLE_LENGTH));
 }
 
-function lathe(): THREE.LatheGeometry {
-  // Sample a spline through the control points rather than lathing the polyline
-  // itself: the corners between segments would otherwise show as visible facets
-  // right where the shape is supposed to read as soft.
-  const spline = new THREE.SplineCurve(PROFILE.map(([r, y]) => new THREE.Vector2(r, y)));
-  return new THREE.LatheGeometry(spline.getPoints(56), 28);
+function lathe(profile: [number, number][]): THREE.LatheGeometry {
+  return new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 28);
 }
 
 export function createDragHandle(tone: HandleTone = "idle"): DragHandle {
@@ -323,12 +348,15 @@ export function createDragHandle(tone: HandleTone = "idle"): DragHandle {
     transparent: true,
     opacity: 1,
   });
-  const geo = lathe();
+  const geo = lathe(PROFILE);
   const blob = new THREE.Mesh(geo, body);
   blob.renderOrder = 999;
 
-  // A back-face shell a touch larger — an outline, so the blob holds its shape
-  // over a pale face where amber-on-white would otherwise wash out.
+  // A back-face shell standing off by a constant width, an outline, so the
+  // handle holds its shape over a pale face where amber-on-white would otherwise
+  // wash out. Its own geometry rather than a scaled copy of the body's: a scale
+  // outlines a 1.3px shaft with a fraction of a pixel and the head with several,
+  // so the edge would thin out exactly where the shape is thinnest.
   const outlineMat = new THREE.MeshBasicMaterial({
     color: themeColor("--bg", HANDLE_OUTLINE),
     side: THREE.BackSide,
@@ -337,8 +365,8 @@ export function createDragHandle(tone: HandleTone = "idle"): DragHandle {
     transparent: true,
     opacity: 1,
   });
-  const outline = new THREE.Mesh(geo, outlineMat);
-  outline.scale.setScalar(1.13);
+  const outlineGeo = lathe(outset(PROFILE, OUTLINE_PX));
+  const outline = new THREE.Mesh(outlineGeo, outlineMat);
   outline.renderOrder = 998;
 
   // Invisible, generous, and DIRECT children of the group: every consumer hit
@@ -385,6 +413,7 @@ export function createDragHandle(tone: HandleTone = "idle"): DragHandle {
     },
     dispose() {
       geo.dispose();
+      outlineGeo.dispose(); // its own geometry now, not a scaled share of the body's
       grabHead.geometry.dispose();
       grabStem.geometry.dispose();
       body.dispose();
