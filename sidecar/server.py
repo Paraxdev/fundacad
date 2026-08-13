@@ -2410,6 +2410,15 @@ async def handle(ws):
             await ws.close(code=1008, reason="too many connections")
             return
         _ip_conns[peer] = _ip_conns.get(peer, 0) + 1
+    # Bound BEFORE the try, because the finally reads it and one path through the
+    # try returns before the old binding was reached: an unauthorized connection
+    # closed, returned, and then raised UnboundLocalError out of its own cleanup
+    # — which skipped the rest of that cleanup, so the per-IP counter above was
+    # incremented and never decremented. MAX_CONNS_PER_IP failed handshakes later
+    # the sidecar answered "too many connections" to every client from that
+    # address, for the rest of its life, and the only symptom on the other end
+    # was a viewport that never built anything.
+    tasks: set = set()
     try:
         if not _authorized(ws.request):
             await ws.close(code=1008, reason="unauthorized")
@@ -2420,7 +2429,6 @@ async def handle(ws):
         # that, while dispatching as tasks keeps the read loop free.
         lock = asyncio.Lock()
         running: dict = {"id": None, "token": None}
-        tasks: set = set()
         async for raw in ws:
             try:
                 req = json.loads(raw)
