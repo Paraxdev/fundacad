@@ -1,8 +1,8 @@
 """Conic-profile edge blends — the fillet/chamfer family as one continuous knob.
 
 A circular fillet and a 45-degree chamfer are the two ends of a single family of
-sections, and MCAD kernels that expose it (Parasolid's `rho`, Shapr3D's profile
-slider) let you slide between them without changing the feature. OCCT does not:
+sections. Kernels that expose that family as a single parameter allow travel
+between the two without changing the feature. OCCT does not:
 `BRepFilletAPI_MakeFillet` offers a radius and nothing about the section's shape
 (`ChFi3d_FilletShape` picks how the CIRCLE is approximated, not what curve to
 use), and its blend functions are circular, chamfer or ruled only.
