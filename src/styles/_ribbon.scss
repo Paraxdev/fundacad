@@ -134,6 +134,13 @@
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
+/* A press is being held on this face, and the family is about to open. Without
+   it the 300ms before the list appears look like the button ignoring the press,
+   which is the whole reason a hold-to-open gesture gets called broken. */
+.ribbon-split .ribbon-btn.holding {
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+}
 .ribbon-split-arrow {
   width: 14px;
   padding: 0;

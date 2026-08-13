@@ -71,11 +71,15 @@ onUnmounted(() => {
           </button>
         </template>
       </template>
+      <!-- data-pick is how a press-and-hold release finds what it landed on:
+           the popup is teleported to the body, so the ribbon never sees the
+           pointer enter it and reads the row back out of the document instead. -->
       <button
         v-for="it in items"
         v-else
         :key="it.action"
         class="ribbon-overflow-item"
+        :data-pick="it.action"
         @click="emit('pick', it)"
       >
         <Icon :name="it.iconName" /><span>{{ it.label }}</span>

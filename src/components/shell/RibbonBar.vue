@@ -10,6 +10,7 @@ import type { Group, Item, RibbonContext, ToolItem } from "../../ui/ribbonDefs";
 import Icon from "./Icon.vue";
 import RibbonPopup from "./RibbonPopup.vue";
 import { layoutPrefs, onLayoutPrefsChange } from "../../ui/layoutPrefs";
+import { HOLD_MS, IDLE, holdStep, type HoldEvent, type HoldPhase } from "../../ui/holdGesture";
 
 const ribbon = useRibbonStore();
 // Two elements, two jobs, exactly as the class had them: the ResizeObserver
@@ -163,8 +164,20 @@ onMounted(() => {
     void reflow();
   });
   void reflow();
+  window.addEventListener("pointerup", onWindowUp, true);
+  window.addEventListener("pointercancel", onWindowCancel, true);
+  window.addEventListener("blur", onWindowCancel);
+  window.addEventListener("keydown", onKey);
 });
-onUnmounted(() => { ro?.disconnect(); offLayout?.(); });
+onUnmounted(() => {
+  ro?.disconnect();
+  offLayout?.();
+  clearHoldTimer();
+  window.removeEventListener("pointerup", onWindowUp, true);
+  window.removeEventListener("pointercancel", onWindowCancel, true);
+  window.removeEventListener("blur", onWindowCancel);
+  window.removeEventListener("keydown", onKey);
+});
 
 // A context switch swaps the whole group list, so the cache key changes and the
 // packing has to be redone against the new set.
@@ -208,13 +221,125 @@ function toggleSplit(ev: MouseEvent, it: Item & { children: ToolItem[] }) {
   popup.value = { kind: "split", anchor, label: it.label, items: it.children };
 }
 
+// --- press and hold the face to open the family --------------------------
+// The caret is a small target and knowing it is there is half the trick, so the
+// button face carries the same list on a press-and-hold, and on a right-click
+// for anyone who already knows. The rules are ui/holdGesture.ts, which has no
+// DOM in it; what lives here is the timer, the element under the pointer at
+// release, and the dispatch.
+
+const hold = shallowRef<HoldPhase>(IDLE);
+let holdTimer: ReturnType<typeof setTimeout> | null = null;
+/** A primary button is down on a split face, so the next release belongs to this
+ *  gesture. Not the same as "the machine is busy": a right-click opens the list
+ *  with nothing held, and there the rows are picked by an ordinary click, which
+ *  arrives as a `click` on the row. Consuming that release here as well would
+ *  run the tool twice. */
+let pressDown = false;
+/** The button faces, by split label, so an `open` effect knows what to hang the
+ *  popup off without the gesture layer being handed elements. */
+const splitFaces = new Map<string, HTMLElement>();
+
+function clearHoldTimer() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+}
+
+function sendHold(ev: HoldEvent) {
+  const { next, effect } = holdStep(hold.value, ev);
+  hold.value = next;
+  if (next.phase !== "pressing") clearHoldTimer();
+  if (next.phase === "idle") pressDown = false;
+  const list = (id: string) =>
+    groups.value.flatMap((g) => g.items).find((it) => "children" in it && it.label === id);
+  switch (effect.kind) {
+    case "open": {
+      const anchor = splitFaces.get(effect.groupId);
+      const it = list(effect.groupId);
+      if (anchor && it && "children" in it) {
+        popup.value = { kind: "split", anchor, label: effect.groupId, items: it.children };
+      }
+      break;
+    }
+    case "close":
+      closePopup();
+      break;
+    case "runDefault": {
+      const it = list(effect.groupId);
+      if (it && "children" in it) ribbon.act(primaryTool(it).action);
+      break;
+    }
+    case "pick":
+      primaryOf.value = { ...primaryOf.value, [effect.groupId]: effect.action };
+      closePopup();
+      ribbon.act(effect.action);
+      break;
+    case "none":
+      break;
+  }
+}
+
+function onSplitDown(e: PointerEvent, it: Item & { children: ToolItem[] }) {
+  if (e.button !== 0) return; // a right-click emits pointerdown too, and contextmenu owns it
+  pressDown = true;
+  splitFaces.set(it.label, e.currentTarget as HTMLElement);
+  // Pen and touch capture the pointer on the element that was pressed, which
+  // would deliver the release here however far the finger travelled, and the
+  // release position is exactly what decides the pick.
+  (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  sendHold({ type: "press", groupId: it.label, hasVariants: it.children.length > 1 });
+  clearHoldTimer();
+  holdTimer = setTimeout(() => sendHold({ type: "hold" }), HOLD_MS);
+}
+
+/** The family row under the pointer at release. Read from the DOM rather than
+ *  tracked, because the popup is teleported to the body and the pointer never
+ *  entered it as far as the ribbon is concerned. */
+function rowAt(x: number, y: number): { groupId: string; action: string } | null {
+  const p = popup.value;
+  if (p?.kind !== "split") return null;
+  const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-pick]");
+  const action = el?.dataset["pick"];
+  return action ? { groupId: p.label, action } : null;
+}
+
+// On the WINDOW: a hold that ends over the model, over another panel, or off the
+// edge of the app still has to end, and only the release position distinguishes
+// a pick from backing out.
+function onWindowUp(e: PointerEvent) {
+  if (e.button !== 0 || !pressDown) return;
+  sendHold({ type: "release", over: rowAt(e.clientX, e.clientY) });
+}
+function onWindowCancel() {
+  if (hold.value.phase !== "idle") sendHold({ type: "cancel" });
+}
+function onKey(e: KeyboardEvent) {
+  if (e.key === "Escape" && hold.value.phase !== "idle") sendHold({ type: "cancel" });
+}
+
+function onSplitContext(e: MouseEvent, it: Item & { children: ToolItem[] }) {
+  e.preventDefault();
+  splitFaces.set(it.label, e.currentTarget as HTMLElement);
+  sendHold({ type: "contextmenu", groupId: it.label, hasVariants: it.children.length > 1 });
+}
+
 function pickFromPopup(it: ToolItem) {
   const p = popup.value;
   // A split pick also becomes that button's primary (last-used-wins); an
   // overflow pick just runs, because the group is collapsed anyway.
   if (p?.kind === "split") primaryOf.value = { ...primaryOf.value, [p.label]: it.action };
   closePopup();
+  // This is the click-to-pick route (the caret, or a right-click), so the
+  // gesture is over however it was opened. Leaving the machine `open` would make
+  // the next press on that face read as a dismiss instead of a tool.
+  hold.value = IDLE;
+  pressDown = false;
   ribbon.act(it.action);
+}
+
+function dismissPopup() {
+  closePopup();
+  hold.value = IDLE;
+  pressDown = false;
 }
 
 function title(it: ToolItem) {
@@ -232,12 +357,19 @@ function title(it: ToolItem) {
           <div class="ribbon-tools">
             <template v-for="it in g.items" :key="'children' in it ? it.label : it.action">
               <div v-if="'children' in it" class="ribbon-split">
+                <!-- No @click: the press-and-hold machine owns this face, and
+                     running the tool from both would run it twice on every
+                     ordinary click. `runDefault` is the click. -->
                 <button
                   class="ribbon-btn"
                   :data-action="primaryTool(it).action"
-                  :class="{ active: ribbon.activeSketchTool === primaryTool(it).action }"
-                  :title="title(primaryTool(it))"
-                  @click="ribbon.act(primaryTool(it).action)"
+                  :class="{
+                    active: ribbon.activeSketchTool === primaryTool(it).action,
+                    holding: hold.phase !== 'idle' && hold.groupId === it.label,
+                  }"
+                  :title="`${title(primaryTool(it))} · hold for more`"
+                  @pointerdown="onSplitDown($event, it)"
+                  @contextmenu="onSplitContext($event, it)"
                 >
                   <Icon :name="primaryTool(it).iconName" /><span>{{ primaryTool(it).label }}</span>
                 </button>
@@ -279,7 +411,7 @@ function title(it: ToolItem) {
       :items="popup.kind === 'split' ? popup.items : []"
       :groups="popup.kind === 'overflow' ? collapsedGroups : undefined"
       @pick="pickFromPopup"
-      @dismiss="closePopup"
+      @dismiss="dismissPopup"
     />
   </div>
 </template>

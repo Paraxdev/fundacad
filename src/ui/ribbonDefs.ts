@@ -134,12 +134,27 @@ export const SKETCH: Group[] = [
     label: "CREATE",
     items: [
       { action: "line", label: "Line", iconName: "line", key: "L" },
-      { action: "rectangle", label: "Rectangle", iconName: "rectangle", key: "R" },
-      { action: "centerRectangle", label: "Center Rect", iconName: "centerRectangle" },
-      { action: "rectangle3", label: "Rect 3-Pt", iconName: "rectangle3" },
-      { action: "circle", label: "Circle", iconName: "circle", key: "C" },
-      { action: "circle2", label: "Circle 2-Pt", iconName: "circle2" },
-      { action: "circle3", label: "Circle 3-Pt", iconName: "circle3" },
+      // Three rectangles and three circles held six of this group's fourteen
+      // buttons, and each trio is ONE shape anchored differently: from a corner,
+      // from its centre, or on a drawn edge. They fold into the split button the
+      // ribbon already has, which remembers the one last used, and the family
+      // opens on the caret, on a right-click, or by holding the face down.
+      {
+        label: "Rectangle",
+        children: [
+          { action: "rectangle", label: "Rectangle", iconName: "rectangle", key: "R" },
+          { action: "centerRectangle", label: "Center Rect", iconName: "centerRectangle" },
+          { action: "rectangle3", label: "Rect 3-Pt", iconName: "rectangle3" },
+        ],
+      },
+      {
+        label: "Circle",
+        children: [
+          { action: "circle", label: "Circle", iconName: "circle", key: "C" },
+          { action: "circle2", label: "Circle 2-Pt", iconName: "circle2" },
+          { action: "circle3", label: "Circle 3-Pt", iconName: "circle3" },
+        ],
+      },
       { action: "arc", label: "Arc", iconName: "arc", key: "A" },
       { action: "polygon", label: "Polygon", iconName: "polygon" },
       { action: "slot", label: "Slot", iconName: "slot" },
