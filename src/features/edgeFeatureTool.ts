@@ -6,12 +6,16 @@
 // tree via store.setPreview() and the normal rebuild pipeline renders it.
 // Commit promotes it to a real feature (records undo); Esc clears + reverts.
 //
-// The drag reads BOTH treatments off one axis (see edgeDragMath): the arrow's
-// own direction gives whichever treatment the gesture opened on, the far side of
-// the origin gives the other, and the origin itself gives no feature at all. So
-// `value` here is always a magnitude and `signed` is the position on that axis —
-// `kind` is a reading of the sign, not an independent piece of state, except at
-// the origin where there is no sign to read and the last one stands.
+// The gesture is a swipe away from the edge: how far the cursor is from the
+// edge is the radius or the setback, and which side of it the cursor is on
+// picks which of the two. features/edgeSwipe.ts does that measurement and says
+// why it is made against the edge rather than along a world axis;
+// features/edgeDragMath.ts turns the signed result into a treatment.
+//
+// So `value` here is always a magnitude and `signed` is which side of the edge
+// the drag has reached — `kind` is a reading of that sign, not an independent
+// piece of state, except at the origin where there is no sign to read and the
+// last one stands.
 
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
@@ -27,7 +31,6 @@ import { canConsume } from "./toolCapabilities";
 import { DimInput } from "../sketch/dimInput";
 import { setPrompt } from "../ui/prompt";
 import {
-  axisDragDistance,
   createDragHandle,
   edgeHandleAxis,
   fluentRelease,
@@ -36,6 +39,7 @@ import {
   leanOutOfView,
   type DragHandle,
 } from "./manipulator";
+import { swipeOffsetPx } from "./edgeSwipe";
 import { clearanceLimit, localClearance } from "./blendClearance";
 import { fmtLength } from "../ui/units";
 import { ProfileArc } from "./profileArc";
@@ -198,6 +202,31 @@ export class EdgeFeatureTool {
     );
   }
 
+  /** How far the cursor is from the picked edge, in mm, signed by which side of
+   *  it the cursor is on — the whole of the drag measurement (features/edgeSwipe.ts
+   *  has the reasoning and the arithmetic).
+   *
+   *  Both reference directions are taken by projecting a step along them from
+   *  the anchor rather than by any screen-space shortcut, so the measurement
+   *  follows the same camera the handle is drawn under, frame for frame. The
+   *  step is 40px worth of world at the anchor, which is long enough that the
+   *  projection's own rounding is nothing beside it and short enough that a
+   *  perspective camera has not bent it. */
+  private swipeProj(clientX: number, clientY: number): number {
+    const px = this.viewport.pixelWorldSize(this.anchor);
+    const step = px * 40;
+    const o = this.viewport.projectToScreen(this.anchor);
+    const along = (v: THREE.Vector3) => {
+      const p = this.viewport.projectToScreen(this.anchor.clone().addScaledVector(v, step));
+      return { x: p.x - o.x, y: p.y - o.y };
+    };
+    // No tangent means a multi-edge pre-selection with no single direction to
+    // be perpendicular to; edgeSwipe falls back to travel along the arrow,
+    // which is the best available answer and the one the axis gave before.
+    const edgeDir = this.tangent ? along(this.tangent) : { x: 0, y: 0 };
+    return swipeOffsetPx(o, edgeDir, along(this.axis), { x: clientX, y: clientY }) * px;
+  }
+
   /** How far the drag may travel either side of the origin. */
   private limit(): number {
     return dragLimit(this.modelDiagonal(), this.clearanceLimitMm);
@@ -295,7 +324,7 @@ export class EdgeFeatureTool {
     this.downOnGizmo = true;
     this.downPos = { x: clientX, y: clientY };
     this.grabSigned = this.signed;
-    this.grabProj = axisDragDistance(this.viewport, clientX, clientY, this.anchor, this.axis);
+    this.grabProj = this.swipeProj(clientX, clientY);
     this.viewport.domElement.style.cursor = "grabbing";
   }
 
@@ -305,7 +334,7 @@ export class EdgeFeatureTool {
    *  to add it), the saved value seeds the input, and commit REPLACES the
    *  feature in place (same id, one undo step). Returns false when this
    *  feature can't be tool-edited (parameter-driven value, or selectors
-   *  without a point) — the caller falls back to the inspector. */
+   *  without a point) — the caller falls back to the value rows. */
   startEdit(featureId: string, onDone: (id: string | null) => void): boolean {
     if (this.active) return false;
     const f = this.store.document.features.find((x) => x.id === featureId);
@@ -313,7 +342,7 @@ export class EdgeFeatureTool {
     const value = f.type === "fillet" ? f.radius : f.distance;
     const field = f.type === "fillet" ? "radius" : "distance";
     if (typeof value !== "number" || this.store.isParamBound({ kind: "feature", feature: f.id, field }))
-      return false; // parameter-driven value — inspector's job
+      return false; // parameter-driven value — the value rows' job
     const sels = Array.isArray(f.edges) ? f.edges : [f.edges];
     if (!sels.length || !sels.every((s) => "point" in s)) return false; // structural selectors — can't re-anchor
 
@@ -605,7 +634,7 @@ export class EdgeFeatureTool {
     if (this.paramBlocked(next.kind)) {
       setPrompt(
         `Can't switch: this feature's ${treatmentField(next.kind).name} is driven by a parameter, ` +
-          `change it in the inspector · Esc to cancel`,
+          `change it under this feature in the history · Esc to cancel`,
       );
       return;
     }
@@ -752,7 +781,7 @@ export class EdgeFeatureTool {
       let signed = scrubSigned({
         grabSigned: this.grabSigned,
         grabProj: this.grabProj,
-        proj: axisDragDistance(this.viewport, e.clientX, e.clientY, this.anchor, this.axis),
+        proj: this.swipeProj(e.clientX, e.clientY),
         step: this.viewport.snapStep(this.anchor),
         limit: this.limit(),
       });
@@ -836,7 +865,7 @@ export class EdgeFeatureTool {
       e.stopImmediatePropagation(); // don't let the camera orbit while dragging the handle
       this.grabbing = true;
       this.grabSigned = this.signed;
-      this.grabProj = axisDragDistance(this.viewport, e.clientX, e.clientY, this.anchor, this.axis);
+      this.grabProj = this.swipeProj(e.clientX, e.clientY);
       this.viewport.domElement.style.cursor = "grabbing";
       return;
     }

@@ -48,6 +48,63 @@ export class DimInput {
     this.root.className = "dim-input";
     this.root.style.display = "none";
     document.body.appendChild(this.root);
+    // Capture phase, on the window, for the lifetime of the box — see
+    // onForeignPress for what it is protecting.
+    window.addEventListener("pointerdown", this.boundForeignDown, true);
+  }
+
+  /** Drop the box out of hit testing for the duration of a drag that began
+   *  somewhere else.
+   *
+   *  The box hangs over the canvas near what is being dragged, and it is a
+   *  sibling of the canvas rather than a child — so the moment the cursor
+   *  crossed it, pointermove went to the box and the tool listening on the
+   *  canvas simply stopped hearing about the drag. It read as the model sticking
+   *  and then jumping, and on a short drag as the value refusing to move at all.
+   *
+   *  Keyed on where the press LANDED rather than on any tool state: a press on
+   *  the box is someone using the box, a press anywhere else is a gesture the
+   *  box has no business intercepting, and that rule needs nothing from the
+   *  eleven tools that show one. */
+  private boundForeignDown = (e: PointerEvent) => this.onForeignPress(e);
+  private boundForeignUp = () => this.endForeignPress();
+  /** Tool-driven, via setClickThrough. */
+  private clickThrough = false;
+  /** A drag that started outside the box is in flight. */
+  private foreignPress = false;
+
+  private onForeignPress(e: PointerEvent) {
+    // Deliberately NOT gated on `active`. The press that arms a tool is the same
+    // press that drags it — the box is shown from inside that pointerdown, long
+    // after this capture listener has already run — so a gate here would miss
+    // the one gesture that needs it most, the grab-the-handle-and-pull entry.
+    if (this.foreignPress) return;
+    if (this.ownsTarget(e.target)) return;
+    this.foreignPress = true;
+    this.applyHitTesting();
+    window.addEventListener("pointerup", this.boundForeignUp, true);
+    window.addEventListener("pointercancel", this.boundForeignUp, true);
+  }
+
+  private endForeignPress() {
+    window.removeEventListener("pointerup", this.boundForeignUp, true);
+    window.removeEventListener("pointercancel", this.boundForeignUp, true);
+    this.foreignPress = false;
+    this.applyHitTesting();
+  }
+
+  private applyHitTesting() {
+    this.root.style.pointerEvents = this.clickThrough || this.foreignPress ? "none" : "";
+  }
+
+  /** Free the window listeners. Tools hold one DimInput for their own lifetime
+   *  and never disposed one before, so this exists for tests and for any future
+   *  tool that is torn down with the document. */
+  dispose() {
+    this.hide();
+    this.endForeignPress();
+    window.removeEventListener("pointerdown", this.boundForeignDown, true);
+    this.root.remove();
   }
 
   get isActive() {
@@ -67,7 +124,8 @@ export class DimInput {
    *  unaffected: keystrokes go to the focused input regardless of pointer-events.
    *  Turn it back off once the click-to-place is done, or confirm/cancel become unclickable. */
   setClickThrough(on: boolean) {
-    this.root.style.pointerEvents = on ? "none" : "";
+    this.clickThrough = on;
+    this.applyHitTesting();
   }
 
   show(

@@ -145,6 +145,47 @@ async function withPrefs(page, prefs) {
   }
   await shot("10-history-props");
 
+  // The same values in the DEFAULT arrangement, where the history is a 52px
+  // strip and the rows float above it instead. This is the half that cannot be
+  // checked any other way: it is fixed-positioned from a measured chip rect, so
+  // "is it on screen, next to the right chip, and inside the window" is a
+  // question only a picture answers.
+  await withPrefs(page, { "sindricad.layout": null });
+  await page.getByText("XY plane").click();
+  await page.waitForTimeout(700);
+  await page.keyboard.press("c");
+  await page.waitForTimeout(300);
+  await page.mouse.click(cx, cy);
+  await page.mouse.move(cx + 150, cy - 80, { steps: 8 });
+  await page.mouse.click(cx + 150, cy - 80);
+  await page.waitForTimeout(400);
+  const finish2 = page.locator(".ribbon-btn.finish").first();
+  if (await finish2.count()) await finish2.click({ force: true });
+  await page.waitForTimeout(700);
+  const node2 = page.locator(".timeline-node").first();
+  if (await node2.count()) {
+    await node2.click({ force: true });
+    await page.waitForTimeout(400);
+  }
+  await shot("11-history-props-floating");
+
+  // The heads-up box on its own, big. Its confirm/cancel marks laid out 0px
+  // wide for a release and drew as two empty squares, which no assertion in the
+  // suite could see: the markup was right the whole time and only the box was
+  // wrong. Shown at 3x so a 13px glyph is actually legible in the shot.
+  await page.evaluate(async () => {
+    const { DimInput } = await import("/src/sketch/dimInput.ts");
+    const d = new DimInput();
+    d.show([{ name: "radius", label: "R", kind: "length" }], () => {}, () => {});
+    d.seed("radius", 4.592201);
+    d.position(60, 60);
+  });
+  await page.waitForTimeout(300);
+  await page.locator(".dim-input").last().screenshot({
+    path: path.join(OUT, "12-headsup-buttons.png"), scale: "css",
+  });
+  console.log("  12-headsup-buttons.png");
+
   await browser.close();
   if (errors.length) {
     console.log(`\n${errors.length} console error(s):`);
