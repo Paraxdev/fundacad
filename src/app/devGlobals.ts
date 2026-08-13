@@ -48,6 +48,12 @@ export function installDevGlobals(e: Engine): void {
     extrude: e.tools.extrude,
     overlay: e.overlay,
     toolBusy: () => e.toolBusy(),
+    // The one formula every datum surface goes through: the drawn quad, "sketch
+    // on this plane", and an offset plane's target. Exposed so a harness can ask
+    // where a datum IS without reading it back out of the scene graph, which is
+    // the only way to see that a datum following a face followed it on screen
+    // too and not just in the kernel.
+    datumPlaneDef: (f: Parameters<Engine["datumPlaneDef"]>[0]) => e.datumPlaneDef(f),
     // Direct handles on the two global overlay facades, so a harness can drive
     // them without needing an operation that happens to raise one.
     toast,

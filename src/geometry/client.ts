@@ -919,6 +919,7 @@ export class Geometry implements GeometryBackend {
     if (r.featureError) out.featureError = r.featureError;
     if (r.featureErrors) out.featureErrors = r.featureErrors;
     if (r.projectionUpdates) out.projectionUpdates = r.projectionUpdates;
+    if (r.datumPlanes) out.datumPlanes = r.datumPlanes;
     return out;
   }
 

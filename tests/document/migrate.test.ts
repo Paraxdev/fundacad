@@ -100,10 +100,12 @@ describe("migrateDocument", () => {
   it("v3 (projected entities) is a no-op stamp: v3 docs pass through unchanged, twice", () => {
     // Pins the current format so a version bump has to come past these tests.
     // v5 moved geometry OUT of the document (inline base64 `brep` -> the `geom`
-    // content hash carried in the container); v6 added `rectangle.angle`. A v3
-    // document still passes through migrateDocument untouched by either: `brep`
-    // is still READ, and an absent angle already means 0.
-    expect(FORMAT_VERSION).toBe(6);
+    // content hash carried in the container); v6 added `rectangle.angle`; v7
+    // added `datumPlane.face`. A v3 document still passes through
+    // migrateDocument untouched by any of them: `brep` is still READ, an absent
+    // angle already means 0, and an absent face reference already means the
+    // datum keeps the plane it was given.
+    expect(FORMAT_VERSION).toBe(7);
     const doc = v1({
       version: 3,
       features: [{ id: "f1", type: "sketch", plane: "XY", entities: [

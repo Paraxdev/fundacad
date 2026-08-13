@@ -43,8 +43,19 @@ import { nextDName } from "../params/engine";
 // know, it ignores it and draws the rectangle axis-aligned — the wrong SHAPE,
 // silently. The stamp turns that into the "made by a newer version" warning.
 
+// v6 -> v7: `datumPlane.face` (and `datumPlane.at` for a round face), the face
+// selector that makes a datum plane FOLLOW the face it was made from instead of
+// freezing that face's numbers. `plane` is still written as the resolved cache,
+// so the datum lands in the right place either way on open.
+//
+// A pure addition, stamped for the same reason v6 was. An older build does not
+// skip the field, it ignores it: the datum silently stops following, so editing
+// the part underneath it moves the geometry and leaves the plane, and every
+// sketch on that plane with it. Nothing about the file looks wrong. The stamp
+// turns that into the "made by a newer version" warning.
+
 /** .sindri file-format version (bump when the on-disk shape changes incompatibly). */
-export const FORMAT_VERSION = 6;
+export const FORMAT_VERSION = 7;
 
 export function migrateDocument(parsed: CadDocument): string[] {
   const version = parsed.version ?? 1;

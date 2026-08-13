@@ -88,9 +88,12 @@ from build123d import (
     Mesher,
 )
 
+import face_plane
 from geom_select import (
     resolve_edges,
     resolve_faces,
+    _face_surface,
+    _face_normal,
     edge_fingerprint,
     _edge_mid,
     _edge_dir,
@@ -1636,12 +1639,96 @@ def _handle_sketch(f, ctx):
         _recompute_projections(f, ctx)
 
 
+def _datum_face_plane(f, ctx):
+    """The plane of the face a datum was made from, re-resolved against the
+    bodies as they stand now, or None when the datum references no face.
+
+    This is what makes a datum made from a face a construction plane rather than
+    a note about where a face used to be. The frozen `plane` on the feature stays
+    as a CACHE (the frontend draws the quad from it, and an older build opening
+    the file still places sketches correctly), but once `face` is present it is
+    this that sketches are placed on.
+
+    Resolution is GLOBAL across bodies, for the reason recorded on
+    _handle_delete_face: body ids are positional, so an upstream split or combine
+    renumbers them and a body-scoped nearest match would silently re-aim the
+    datum at some distant face on the wrong piece.
+
+    A face that stops resolving is not an error. The datum falls back to its
+    cached plane and stays exactly where the user last saw it, because the
+    alternative is a failed feature that takes every sketch on it down as well.
+    """
+    sel = f.get("face")
+    if not sel:
+        return None
+    cached = f.get("plane")
+    cached = cached if isinstance(cached, dict) else None
+    best = None
+    # getattr rather than ctx.bodies: _collect_datums replays datum features
+    # against a ctx that carries nothing but the registry, because it exists to
+    # answer "where are this document's planes" without building any geometry.
+    # There is no body to resolve against there, so the datum falls back to its
+    # cache, which is exactly what that caller wants.
+    for b in getattr(ctx, "bodies", None) or []:
+        shape = b.get("shape")
+        if shape is None:
+            continue
+        try:
+            found = resolve_faces(shape, sel, getattr(ctx, "diagnostics", None), f.get("id"))
+        except Exception:
+            continue
+        for face in found:
+            if face is None:
+                continue
+            try:
+                d = face.distance_to(Vector(*sel["point"])) if "point" in sel else 0.0
+            except Exception:
+                d = 0.0
+            if best is None or d < best[0]:
+                best = (d, face)
+    if best is None:
+        return None
+    face = best[1]
+    at = f.get("at")
+    surface = _face_surface(face)
+    plane = None
+    if surface == "cylinder" and at:
+        # A cylinder has no plane of its own, so the datum is the tangent plane
+        # where the user touched it. Read straight off the analytic surface,
+        # which is exact, rather than fitted from the triangles the frontend had
+        # to work from.
+        try:
+            ax = face._geom_adaptor().Cylinder().Axis()
+            loc, dr = ax.Location(), ax.Direction()
+            plane = face_plane.tangent_plane_on_cylinder(
+                (loc.X(), loc.Y(), loc.Z()),
+                (dr.X(), dr.Y(), dr.Z()),
+                float(face.radius),
+                tuple(at),
+                None,
+            )
+        except Exception:
+            plane = None
+    elif surface == "plane":
+        n = _face_normal(face)
+        c = face.center()
+        plane = face_plane.plane_from_point_normal((c.X, c.Y, c.Z), (n.X, n.Y, n.Z))
+    if plane is None:
+        return None
+    # The face's own normal direction is not stable across a rebuild (a boolean
+    # re-manufactures faces, and a cut's new surface is oriented opposite the one
+    # it cut into), and the datum's normal is the direction its offset runs
+    # along. Keep the direction the user accepted at pick time.
+    return face_plane.agree_with(plane, cached)
+
+
 def _handle_datum_plane(f, ctx):
     # No geometry — register the (optionally offset) plane so sketches
     # / splits can reference it by id. Validate it resolves here so a
     # bad datum flags at its own feature. `offset` shifts the source
     # plane along its normal; we store the resolved offset plane.
-    base = _plane_of(f["plane"], ctx.datums)
+    followed = _datum_face_plane(f, ctx)
+    base = _plane_of(followed or f["plane"], ctx.datums)
     off = f.get("offset") or 0
     origin = base.origin + base.z_dir * off
     ctx.datums[f["id"]] = {
@@ -2819,7 +2906,7 @@ def _make_val(params):
 
 
 def rebuild(document, diagnostics=None, resume=None, snapshots_out=None, persist=None,
-            projections=None):
+            projections=None, datums_out=None):
     """Return (part, errors, bodies).
 
     part    : the merged build123d solid/compound of all bodies, or None.
@@ -2835,6 +2922,12 @@ def rebuild(document, diagnostics=None, resume=None, snapshots_out=None, persist
               resolutions append a ResolveDiag dict to it. Resolution is best-effort
               and never fails the build on a shaky match, so callers that don't pass a
               list are completely unaffected.
+
+    datums_out : optional dict; filled with the RESOLVED plane of every datum
+              feature, keyed by feature id. The frontend caches each datum's
+              plane on the feature and draws its quad from that cache, so a datum
+              that follows a face has to report where the face actually put it or
+              the drawn plane and the plane sketches land on drift apart.
 
     projections : optional list; when given, each sketch handler re-resolves its
               projected entities against the prefix state and appends refresh
@@ -3077,6 +3170,9 @@ def rebuild(document, diagnostics=None, resume=None, snapshots_out=None, persist
     else:
         part = Compound(shapes)
 
+    if datums_out is not None:
+        datums_out.update(datums)
+
     return part, errors, out_bodies
 
 
@@ -3163,7 +3259,13 @@ def _env_sig():
             except Exception:
                 pass
             here = os.path.dirname(os.path.abspath(__file__))
-            for name in ("builder.py", "geom_select.py", "tessellate.py", "selector_tuning.json"):
+            # Every source file whose contents can change a build RESULT. A
+            # module left off this list keeps serving cached geometry built by
+            # its own previous version, which is the hardest kind of stale to
+            # spot: the code is right, the output is not, and a restart does not
+            # help because the checkpoints are on disk.
+            for name in ("builder.py", "geom_select.py", "tessellate.py",
+                         "face_plane.py", "conic_blend.py", "selector_tuning.json"):
                 try:
                     with open(os.path.join(here, name), "rb") as fh:
                         h.update(fh.read())
@@ -3560,7 +3662,7 @@ def _restore_from_disk(store, chain_keys):
 _RAM_SNAP_WINDOW = int(os.environ.get("SINDRI_RAM_SNAP_WINDOW", "300"))
 
 
-def rebuild_cached(document, diagnostics=None, projections=None):
+def rebuild_cached(document, diagnostics=None, projections=None, datums_out=None):
     """Incremental rebuild: reuse cached per-feature state for the unchanged document
     PREFIX and re-run only from the first changed feature. Resume sources, deepest
     wins: (1) in-RAM per-feature snapshots from the previous build in this worker,
@@ -3659,6 +3761,7 @@ def rebuild_cached(document, diagnostics=None, projections=None):
     part, errors, bodies = rebuild(
         document, diagnostics=diagnostics, resume=resume,
         snapshots_out=snaps_out, persist=persist, projections=projections,
+        datums_out=datums_out,
     )
     elapsed = time.monotonic() - t_build
 

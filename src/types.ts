@@ -439,7 +439,23 @@ export type Feature =
   // sketches and splits reference it by id (resolved to its PlaneSpec on rebuild).
   // `plane` is the source reference and `offset` shifts along its normal (mm), so
   // the offset stays editable after creation; absent offset = coincident.
-  | { id: string; type: "datumPlane"; plane: PlaneSpec; offset?: number; name?: string }
+  // `face` makes the datum FOLLOW the face it was made from: the sidecar
+  // re-resolves the selector every rebuild and places the plane where the face
+  // now is. Without it a datum made from a face is a note about where that face
+  // used to be, and raising the part it sits on leaves it (and every sketch on
+  // it) behind with nothing reported.
+  //
+  // `plane` stays populated with the RESOLVED placement as a cache, the same
+  // arrangement sketch's `planeId` uses and for the same two reasons: every
+  // frontend consumer keeps working without resolving anything, and an older
+  // build opening the file still puts the plane in the right place. Once `face`
+  // is set it is the selector that decides, and the cache only stands in when
+  // the face stops resolving.
+  //
+  // `at` is where a ROUND face was touched. A cylinder has no plane of its own,
+  // so the tangent plane is a different plane at every point on it and the pick
+  // location is part of the definition rather than incidental to it.
+  | { id: string; type: "datumPlane"; plane: PlaneSpec; offset?: number; name?: string; face?: Selector; at?: Vec3 }
   // An imported body (STL/3MF/STEP/OBJ/GLB). The sewn/native solid is embedded as
   // a base64 BREP string so the document is self-contained and rebuilds
   // deterministically without the original file. `solid` is false for a
@@ -699,6 +715,15 @@ export interface RebuildResult {
   // the store lands them via a derived, no-undo commit — see
   // DocumentStore.commitProjectionRefresh.
   projectionUpdates?: ProjectionUpdate[];
+  // Where each datum plane actually resolved to this rebuild, keyed by feature
+  // id, with its own `offset` already applied. Only a datum that FOLLOWS A FACE
+  // can differ from the plane cached on its feature, but every datum is reported
+  // so the reading side needs no rule about which ones to trust.
+  //
+  // Display state, deliberately not written back into the document: the cached
+  // `plane` is what an older build reads and what the file records about the
+  // pick, and rewriting it every rebuild would dirty documents nobody edited.
+  datumPlanes?: Record<string, PlaneDef>;
 }
 
 export type RebuildReply =

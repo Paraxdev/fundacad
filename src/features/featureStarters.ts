@@ -16,10 +16,10 @@ import type { LoftTool } from "./loftTool";
 import type { MoveTool } from "./moveTool";
 import type { PlaneOffsetTool } from "./planeOffsetTool";
 import type { TextureTool } from "./textureTool";
-import { pickPlaneTarget, planeSpecOf } from "./facePlanePick";
+import { pickPlaneTarget, planeSpecOf, type FacePlanePick } from "./facePlanePick";
 import { choose } from "../ui/choice";
 import { setPrompt } from "../ui/prompt";
-import type { Feature, PlaneDef, PlaneSpec, Selector } from "../types";
+import type { Feature, PlaneDef, PlaneSpec, Selector, Vec3 } from "../types";
 import { findSelectorAt, replaceSelectorAt } from "./repickReference";
 
 export interface FeatureStartersDeps {
@@ -124,7 +124,14 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
 
   let pendingPickCleanup: (() => void) | null = null;
 
-  function pickPlaneInteractive(promptText: string, onPick: (spec: PlaneSpec) => void) {
+  /** `face` is the pick's face reference when a body face was taken, and null
+   *  for a construction quad. A datum plane keeps it so it can follow the face
+   *  across a rebuild; a sketch started directly on a face has no use for it,
+   *  since a sketch stores its own plane. */
+  function pickPlaneInteractive(
+    promptText: string,
+    onPick: (spec: PlaneSpec, face: FacePlanePick | null) => void,
+  ) {
     if (toolBusy()) return;
     setPlanePick(true);
     viewport.showAllPlanes(true);
@@ -162,14 +169,16 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       // Nothing usable under the cursor: stay in the pick rather than take a
       // guess. A body face with no plane in it deliberately does NOT fall
       // through to the construction quad behind the part.
-      const spec = planeSpecOf(pickPlaneTarget(viewport, e.clientX, e.clientY));
+      const target = pickPlaneTarget(viewport, e.clientX, e.clientY);
+      const spec = planeSpecOf(target);
       if (!spec) return;
+      const face = target?.kind === "face" ? target.face : null;
       // consume this click fully and run on the NEXT frame, so it can't bleed
       // into the sketch's own first-corner placement.
       e.preventDefault();
       e.stopImmediatePropagation();
       cleanup();
-      requestAnimationFrame(() => onPick(spec));
+      requestAnimationFrame(() => onPick(spec, face));
     };
     const onEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") cleanup();
@@ -227,12 +236,14 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   // editable scalar offset), and enters the sketch BY ID, so changing the offset
   // in the value rows moves the sketch with it.
   function offsetPlane() {
-    pickPlaneInteractive("Select a plane or face to offset from", (spec) => {
+    pickPlaneInteractive("Select a plane or face to offset from", (spec, face) => {
       const src = new SketchPlane(spec);
       planeOffset.start(src, (def) => {
         if (!def) return;
         const id = store.nextId();
-        store.addFeature({ id, type: "datumPlane", plane: spec, offset: offsetAlong(def, src) } as Feature);
+        store.addFeature({
+          id, type: "datumPlane", plane: spec, offset: offsetAlong(def, src), ...faceRef(face),
+        } as Feature);
         sketch.enter(def, store, undefined, id);
       });
     });
@@ -250,12 +261,14 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   // flat on or offset away from the shaft. The offset then runs radially, which
   // is what makes "a plane 5 mm off this boss" one gesture.
   function createDatumPlane() {
-    pickPlaneInteractive("Select a plane or face for the datum plane · a round face gives its tangent plane", (spec) => {
+    pickPlaneInteractive("Select a plane or face for the datum plane · a round face gives its tangent plane", (spec, face) => {
       const src = new SketchPlane(spec);
       planeOffset.start(src, (def) => {
         if (!def) return;
         const id = store.nextId();
-        store.addFeature({ id, type: "datumPlane", plane: spec, offset: offsetAlong(def, src) } as Feature);
+        store.addFeature({
+          id, type: "datumPlane", plane: spec, offset: offsetAlong(def, src), ...faceRef(face),
+        } as Feature);
         selectFeature(id);
       });
     });
@@ -272,6 +285,17 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
       store.addFeature({ id, type: "datumPlane", plane: face, offset: offsetAlong(def, src) } as Feature);
       selectFeature(id);
     });
+  }
+
+  /** The face reference a datum keeps, or nothing when the source was a
+   *  construction quad. `at` rides along only for a round face, where the
+   *  tangent plane differs at every point and the pick location is therefore
+   *  part of the definition. One function because three routes create a datum
+   *  and a route that forgot the selector would silently produce the old frozen
+   *  behaviour, which looks identical until something upstream moves. */
+  function faceRef(face: FacePlanePick | null): { face?: Selector; at?: Vec3 } {
+    if (!face) return {};
+    return { face: face.selector, ...(face.kind === "tangent" ? { at: face.at } : {}) };
   }
 
   // signed distance of an offset-tool result from its source plane, along the

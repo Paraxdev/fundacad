@@ -858,9 +858,12 @@ def _rebuild_job(document, tolerance, known=None):
 
     diag = []
     proj = []
+    datums = {}
     known = known or {}
     t0 = time.monotonic()
-    part, errors, bodies = rebuild_cached(document, diagnostics=diag, projections=proj)
+    part, errors, bodies = rebuild_cached(
+        document, diagnostics=diag, projections=proj, datums_out=datums
+    )
     t_rebuild = time.monotonic() - t0
     if errors and part is None and not bodies:
         # nothing built at all — the document is unusable, surface as fatal
@@ -873,6 +876,10 @@ def _rebuild_job(document, tolerance, known=None):
         result = {"protocol": 2, "bodies": [], "bbox": None}
         if proj:
             result["projectionUpdates"] = proj
+        # Datums resolve without any solid (a document can be nothing but planes),
+        # so they ride along on this path too.
+        if datums:
+            result["datumPlanes"] = datums
         return result
 
     live_ids = set()
@@ -933,6 +940,15 @@ def _rebuild_job(document, tolerance, known=None):
           f"bbox={t_bbox:.1f}s",
           flush=True)
     result = {"protocol": 2, "bodies": out, "bbox": doc_bbox}
+    # Where each datum plane actually ended up. The frontend caches a datum's
+    # plane on the feature and draws its quad from that cache, which is the plane
+    # the face had when it was picked; once a datum follows a face, that cache and
+    # the plane sketches are placed on part company the first time anything
+    # upstream moves. Sent every rebuild rather than only on a change: it is a few
+    # dozen bytes, and "absent means unchanged" would need the frontend to hold a
+    # copy across builds and get its invalidation right.
+    if datums:
+        result["datumPlanes"] = datums
     if diag:  # only attach when a selector resolved with low confidence
         result["diagnostics"] = diag
     if proj:  # only attach when the projection refresh found real changes
