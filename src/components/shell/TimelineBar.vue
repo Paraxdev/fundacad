@@ -83,6 +83,12 @@ async function measureProps() {
     el.getBoundingClientRect(),
     { width: window.innerWidth, height: window.innerHeight },
     PROPS_WIDTH,
+    8,
+    8,
+    // Measured rather than assumed: the pill's width is its six buttons' labels
+    // and changes with the theme's font, and it is absent entirely while a
+    // sketch is open.
+    document.querySelector("#viewcontrols")?.getBoundingClientRect() ?? null,
   );
 }
 
