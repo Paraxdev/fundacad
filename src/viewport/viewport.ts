@@ -252,6 +252,17 @@ export class Viewport {
       this.dragMoved = false;
       this.downPos = { x: e.clientX, y: e.clientY };
     });
+    // Middle-drag is orbit. Choose what it turns about NOW, from where the
+    // cursor is, rather than leaving it wherever a pan or a zoom happened to
+    // park the orbit target. Released on the window because a drag that ends
+    // off the canvas still ends, and clearing it is what returns every other
+    // gesture to the library's own behaviour.
+    c.addEventListener("pointerdown", (e) => {
+      if (e.button === 1) this.rig.setOrbitPivot(this.orbitPivotAt(e.clientX, e.clientY));
+    });
+    window.addEventListener("pointerup", (e) => {
+      if (e.button === 1) this.rig.setOrbitPivot(null);
+    });
     c.addEventListener("pointermove", (e) => {
       if (
         Math.abs(e.clientX - this.downPos.x) > 3 ||
@@ -343,6 +354,24 @@ export class Viewport {
       },
       { passive: false },
     );
+  }
+
+  /** What a mouse orbit should turn about: the model surface under the cursor,
+   *  else the model's centre. Null (keep the orbit target) when there is no
+   *  model, which is the only case where the target is still the best guess at
+   *  what the user is looking at.
+   *
+   *  Deliberately NOT the orbit target. A pan moves the target with the camera
+   *  and an orthographic zoom-to-cursor trucks both toward the cursor, so after
+   *  a few ordinary gestures the target sits well off the model, and orbiting
+   *  about it swings the model through an arc the size of that offset. Measured
+   *  on a 40x30x20 box, one 380px pan left the target 61mm from a model of
+   *  radius 27mm and the next orbit took the model half off the screen. */
+  private orbitPivotAt(clientX: number, clientY: number): THREE.Vector3 | null {
+    if (!this.model || this.model.box.isEmpty()) return null;
+    const hit = this.rayFrom(clientX, clientY)
+      .intersectObjects(visibleBodyMeshes(this.model), false)[0];
+    return hit ? hit.point.clone() : this.model.box.getCenter(new THREE.Vector3());
   }
 
   /** World point under the cursor for zoom-to-cursor: the model surface hit if the

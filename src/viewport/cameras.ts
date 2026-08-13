@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import CameraControls from "camera-controls";
+import { frameRotation, pivotShift, viewQuaternion } from "./orbitPivot";
 
 CameraControls.install({ THREE });
 
@@ -55,6 +56,14 @@ export interface CameraRig {
   tumble(az: number, pol: number): void;
   /** Lock out mouse orbit (sketch "lock to plane"); middle-drag pans instead. */
   setOrbitLocked(locked: boolean): void;
+  /** Orbit about this world point rather than about the orbit target, until it
+   *  is cleared with null. The library still aims the camera at its own target,
+   *  so the target is still what sits at the centre of the screen; what this
+   *  changes is which point the view TURNS about, and a pivot on the model is
+   *  what stops the model swinging out of frame once a pan or an orthographic
+   *  zoom-to-cursor has left the target sitting well off it. See
+   *  viewport/orbitPivot.ts for why a shift is all it takes. */
+  setOrbitPivot(pivot: THREE.Vector3 | null): void;
   lookAtPlane(
     origin: THREE.Vector3,
     normal: THREE.Vector3,
@@ -189,6 +198,52 @@ export function createCameraRig(
     return true;
   }
 
+  // The point a mouse orbit turns about, while one is in flight. Null the rest
+  // of the time, which is every path that is not a rotation: a pan, a zoom, a
+  // ViewCube transition and a SpaceMouse tumble all leave this alone and are
+  // unaffected by it.
+  let orbitPivot: THREE.Vector3 | null = null;
+  // The camera basis and target this correction last saw, so the rotation a drag
+  // added between two frames can be measured.
+  let lastView: THREE.Quaternion | null = null;
+  const lastTarget = new THREE.Vector3();
+
+  /** Turn the rotation the drag has asked for, which camera-controls will apply
+   *  about its own target, into the same rotation about `orbitPivot`, by
+   *  shifting camera and target together. See viewport/orbitPivot.ts.
+   *
+   *  Measured on the GOAL, which is what getPosition/getTarget report by
+   *  default, not on the rendered camera. A drag writes its rotation straight
+   *  into the goal and damping walks the camera there over the following frames,
+   *  so sampling the rendered camera measures the damping rather than the drag,
+   *  and correcting THAT fights the interpolation. (Sampling it either side of
+   *  one controls.update() measures nothing at all: both reads return the same
+   *  goal, which is why the first attempt at this computed a zero shift on every
+   *  frame of a drag that was plainly rotating.) Shifting the goal leaves the
+   *  damping to carry the camera to a destination that is already right. */
+  function correctOrbitPivot() {
+    const pos = controls.getPosition(new THREE.Vector3());
+    const tgt = controls.getTarget(new THREE.Vector3());
+    const view = viewQuaternion(pos, tgt, active.up);
+    if (!view) return;
+    if (orbitPivot && lastView) {
+      const d = pivotShift(frameRotation(lastView, view), orbitPivot, lastTarget);
+      // A pan or a zoom moves the goal without rotating it, so the shift comes
+      // out as zero and this costs one comparison. Only a rotation has anything
+      // to correct.
+      if (d.lengthSq() > 1e-18) {
+        controls.setLookAt(
+          pos.x + d.x, pos.y + d.y, pos.z + d.z,
+          tgt.x + d.x, tgt.y + d.y, tgt.z + d.z,
+          true, // the goal only: damping still carries the rendered camera
+        );
+        tgt.add(d);
+      }
+    }
+    lastView = view;
+    lastTarget.copy(tgt);
+  }
+
   const rig: CameraRig = {
     controls,
     get active() {
@@ -216,6 +271,9 @@ export function createCameraRig(
     },
     update(dt: number) {
       pendingOrthoZoom = null; // camera.zoom is authoritative again after this update
+      // BEFORE the update, so this frame damps toward the corrected goal rather
+      // than toward one it will have to be pulled back from next frame.
+      correctOrbitPivot();
       const moved = controls.update(dt);
       const swapped = applyAutoProjection();
       // Apply the persistent roll AFTER camera-controls positions the camera.
@@ -475,6 +533,14 @@ export function createCameraRig(
       orbitLocked = locked;
       // middle-drag pans while locked (no orbit); restore orbit on unlock
       controls.mouseButtons.middle = locked ? A.TRUCK : A.ROTATE;
+    },
+    setOrbitPivot(p) {
+      orbitPivot = p ? p.clone() : null;
+      // Drop the remembered basis with it: the gap between one gesture and the
+      // next holds every camera move that is not this drag (a ViewCube flight, a
+      // standard view, a fit), and reading a rotation across that gap would
+      // shift the rig by the whole of it on the drag's first frame.
+      lastView = null;
     },
   };
 
