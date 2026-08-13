@@ -21,6 +21,53 @@ describe("snap", () => {
     expect(r.point.x).toBe(5);
     expect(r.point.y).toBe(5);
   });
+  // The grid is made of LINES, and it used to snap only to where two of them
+  // cross: both axes were rounded and then one distance was measured to the
+  // resulting corner, so the cursor had to be within tolerance in both axes at
+  // once. Between two intersections, on a grid line, nothing snapped, which is
+  // most of a grid line.
+  it("snaps to a grid line when only one axis is near it", () => {
+    // 2px from the x = 100 line, and 40 units from any horizontal line: the
+    // cursor is on the line and nowhere near a crossing.
+    const r = snap(v(98, 130), [], screen, 100, 10);
+    expect(r.kind).toBe("grid");
+    expect(r.point.x).toBe(100); // pulled onto the line
+    expect(r.point.y).toBe(130); // and left alone along it
+  });
+
+  it("snaps the other axis the same way", () => {
+    const r = snap(v(130, 98), [], screen, 100, 10);
+    expect(r.kind).toBe("grid");
+    expect(r.point.x).toBe(130);
+    expect(r.point.y).toBe(100);
+  });
+
+  it("still snaps to an intersection when both axes are near one", () => {
+    // Which is now the case where both axes fired, rather than a separate rule.
+    const r = snap(v(98, 103), [], screen, 100, 10);
+    expect(r.kind).toBe("grid");
+    expect(r.point.x).toBe(100);
+    expect(r.point.y).toBe(100);
+  });
+
+  it("leaves a point that is near no grid line alone", () => {
+    const r = snap(v(150, 160), [], screen, 100, 10);
+    expect(r.kind).toBe("free");
+    expect(r.point.x).toBe(150);
+    expect(r.point.y).toBe(160);
+  });
+
+  it("measures the tolerance on SCREEN, through a rotated plane", () => {
+    // Lock to Plane can be off, and then a sketch axis is not a screen axis. The
+    // gap has to be the distance between the two projected points, not a
+    // difference in screen x: at 45 degrees a 10-unit move along a sketch axis
+    // is ~14px on screen and must fall outside a 10px tolerance.
+    const k = Math.SQRT1_2;
+    const rot = (p: THREE.Vector2) => ({ x: (p.x - p.y) * k, y: (p.x + p.y) * k });
+    expect(snap(v(92, 130), [], rot, 100, 10).kind).toBe("grid"); // 8 units ~ 8px
+    expect(snap(v(88, 130), [], rot, 100, 10).kind).toBe("free"); // 12 units ~ 12px
+  });
+
   it("returns the raw point (free) when grid snapping is off", () => {
     const r = snap(v(3.3, 7.7), [], screen, 0, 10);
     expect(r.kind).toBe("free");

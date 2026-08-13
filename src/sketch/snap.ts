@@ -59,13 +59,28 @@ export function snap(
 
   if (gridStep <= 0) return { point: raw.clone(), kind: "free" }; // grid snap off
 
-  // grid fallback (always available, lowest priority)
+  // Grid fallback (always available, lowest priority). Each axis is tested on
+  // its OWN, which is the whole of it: this rounded both axes and then measured
+  // one distance to the resulting corner, so the cursor had to be within
+  // tolerance of a lattice POINT in both axes at once. Anywhere along a grid
+  // line but between two intersections, nothing snapped, which is exactly what
+  // "drawing freely does not snap to the grid" describes. Snapping the axes
+  // separately makes an intersection the case where both fire, so the old
+  // behaviour survives as a special case rather than as a second rule.
   const gx = Math.round(raw.x / gridStep) * gridStep;
   const gy = Math.round(raw.y / gridStep) * gridStep;
-  const gridP = new THREE.Vector2(gx, gy);
-  const gs = toScreen(gridP);
-  if (Math.hypot(gs.x - rawScreen.x, gs.y - rawScreen.y) <= pixelTol) {
-    return { point: gridP, kind: "grid" };
+  // Measured as a full SCREEN distance to the axis-snapped point rather than as
+  // a difference in screen x or y. The tolerance is in pixels so that it is the
+  // same reach at every zoom, and the sketch plane can sit at any angle on
+  // screen when Lock to Plane is off, where a sketch axis is neither.
+  const screenGap = (p: THREE.Vector2) => {
+    const s = toScreen(p);
+    return Math.hypot(s.x - rawScreen.x, s.y - rawScreen.y);
+  };
+  const onX = screenGap(new THREE.Vector2(gx, raw.y)) <= pixelTol;
+  const onY = screenGap(new THREE.Vector2(raw.x, gy)) <= pixelTol;
+  if (onX || onY) {
+    return { point: new THREE.Vector2(onX ? gx : raw.x, onY ? gy : raw.y), kind: "grid" };
   }
 
   return { point: raw.clone(), kind: "free" };
