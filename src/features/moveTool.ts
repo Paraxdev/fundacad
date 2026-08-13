@@ -3,7 +3,7 @@
 // with a LIVE sidecar preview (an un-committed `move` feature) — type a value for
 // precision, click off the gizmo / Enter to commit, Esc to revert. Mirrors the
 // PressPull / PlaneOffset gizmo pattern. Translation only; rotation is editable on
-// the committed feature in the inspector (rx/ry/rz).
+// the committed feature's value rows (rx/ry/rz).
 
 import * as THREE from "three";
 import type { Viewport } from "../viewport/viewport";

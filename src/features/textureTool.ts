@@ -123,16 +123,16 @@ export class TextureTool {
    *  selection, the same way a moved fillet edge can miss), the panel seeds from
    *  the saved values, and commit REPLACES the feature in place (same id, one
    *  undo step). Returns false when a numeric field holds a parameter
-   *  expression (not tool-editable) — the caller falls back to the inspector. */
+   *  expression (not tool-editable) — the caller falls back to the value rows. */
   startEdit(featureId: string, onDone: (id: string | null) => void): boolean {
     if (this.active) return false;
     const f = this.store.document.features.find((x) => x.id === featureId);
     if (!f || f.type !== "texture") return false;
     const numeric = [f.depth, f.scale, f.angle, f.offset, f.sharpness, f.boundaryInset, f.seed];
-    if (numeric.some((v) => v !== undefined && typeof v !== "number")) return false; // parameter — inspector's job
+    if (numeric.some((v) => v !== undefined && typeof v !== "number")) return false; // parameter — the value rows' job
     const fields = ["depth", "scale", "angle", "offset", "sharpness", "boundaryInset", "seed"];
     if (fields.some((field) => this.store.isParamBound({ kind: "feature", feature: f.id, field })))
-      return false; // parameter-driven field — inspector's job
+      return false; // parameter-driven field — the value rows' job
 
     this.active = true;
     this.onDone = onDone;

@@ -1,12 +1,9 @@
 /* ============================================================================
-   MAIN — tool rail | browser | viewport | inspector
+   MAIN — browser | viewport
    ============================================================================ */
 #main {
   display: grid;
-  /* The rail's column is `auto`: its width is one number, and it lives with the
-     rail in _toolrail.scss rather than being restated here where a change to
-     one would silently clip the other. */
-  grid-template-columns: auto 232px 1fr 252px;
+  grid-template-columns: 232px 1fr;
   /* The single row must be capped at #main's own height. Left implicit it is
      auto-sized, so the tallest panel's CONTENT set the row height (measured:
      #main 723px, row 811px) and the browser, viewport and canvas all stretched
@@ -17,8 +14,7 @@
   min-height: 0;
 }
 
-#browser,
-#inspector {
+#browser {
   background: var(--panel);
   border-right: 1px solid var(--line);
   overflow-y: auto;
@@ -28,20 +24,14 @@
      a long body list then simply runs off the bottom of the window) */
   min-height: 0;
   overscroll-behavior: contain;
-  /* The two docked panels are siblings and must read as siblings, so they share
-     one padding declaration rather than each drifting to its own value. Stepped
-     up from --s-3 to --s-4 (8px -> 12px): at 8px the tree rows' hover pills sat
-     almost against the panel border and the whole column read as a list crammed
-     into a gutter. 12px costs 8px of a 232px/252px fixed column, which the
-     labels can afford (they already ellipsis), and it is the same 12px the
+  /* Stepped up from --s-3 to --s-4 (8px -> 12px): at 8px the tree rows' hover
+     pills sat almost against the panel border and the whole column read as a
+     list crammed into a gutter. 12px costs 8px of a 232px fixed column, which
+     the labels can afford (they already ellipsis), and it is the same 12px the
      viewport's floating furniture insets itself by, so the eye reads one margin
      all the way across the app. The deeper bottom is deliberate: it is scroll
      runway, so the last row is never flush with the timeline. */
   padding: var(--s-4) var(--s-4) var(--s-6);
-}
-#inspector {
-  border-right: none;
-  border-left: 1px solid var(--line);
 }
 
 #viewport {

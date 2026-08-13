@@ -207,7 +207,7 @@ function openMore(e: PointerEvent) {
   const btn = e.currentTarget as HTMLElement;
   // Touch and pen capture the pointer on the element that was pressed, which
   // would send every move to the button instead of to the window — the same
-  // release LeftToolbar.vue performs before its own hold gesture.
+  // release the (now removed) tool rail performed before its own hold gesture.
   if (btn.hasPointerCapture?.(e.pointerId)) btn.releasePointerCapture(e.pointerId);
   e.preventDefault();
   const req = selectionPie(e.clientX, e.clientY, counts.value, run);

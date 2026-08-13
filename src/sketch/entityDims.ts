@@ -1,7 +1,7 @@
 // Single source of truth for "what dimensions does a sketch entity have, where
 // is each one's label/value, how do you read & write it, and how is it drawn as
 // a MCAD-style dimension (extension lines + dimension line + arrowheads)."
-// Drives the in-canvas dimension labels (SketchDimensions), the inspector, and
+// Drives the in-canvas dimension labels (SketchDimensions), the value rows, and
 // SketchMode.editDimension — one place for all per-entity dimension knowledge.
 
 import * as THREE from "three";
@@ -36,7 +36,7 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
 // badge sit ON the geometry it labels at low zoom (3 mm can project to 2 px),
 // and the labels are click-targets in the select tool — a badge over a line
 // swallows the click meant to select the line. SketchMode feeds the current
-// mm-per-pixel each refresh; 0 (the default — e.g. inspector usage, which never
+// mm-per-pixel each refresh; 0 (the default — e.g. value-row usage, which never
 // renders labels) keeps the pure world-space behavior.
 let mmPerPx = 0;
 export function setDimPixelScale(scale: number) {

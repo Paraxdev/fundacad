@@ -59,9 +59,9 @@
   border: 1px solid var(--line-strong, #3a4048);
   border-radius: var(--r-md, 8px);
   box-shadow: var(--shadow-3, 0 16px 48px rgba(0, 0, 0, 0.5));
-  /* Every popup shell in the app — this, .menu-popup, .context-menu, the rail
-     flyout, the Cmd-K list — pads by --s-1, so a highlighted row always sits
-     the same 4px inside the popup's border wherever the popup came from. */
+  /* Every popup shell in the app — this, .menu-popup, .context-menu, the Cmd-K
+     list — pads by --s-1, so a highlighted row always sits the same 4px inside
+     the popup's border wherever the popup came from. */
   padding: var(--s-1);
   animation: pop-in var(--t-fast, 0.12s) var(--ease, ease);
 }

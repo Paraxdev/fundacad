@@ -225,7 +225,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   // creates the same parametric `datumPlane` that the Datum Plane button and the
   // right-click "Offset plane from face" already created (source plane + an
   // editable scalar offset), and enters the sketch BY ID, so changing the offset
-  // in the inspector moves the sketch with it.
+  // in the value rows moves the sketch with it.
   function offsetPlane() {
     pickPlaneInteractive("Select a plane or face to offset from", (spec) => {
       const src = new SketchPlane(spec);
@@ -241,7 +241,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   // Datum Plane: pick a plane/face, position it (offset), then save a persistent
   // datum plane feature — it lands in the timeline + Planes folder and can be
   // reused as a sketch / split reference. We store the SOURCE plane + a scalar
-  // offset (not a baked plane) so the offset stays editable in the inspector.
+  // offset (not a baked plane) so the offset stays editable in the value rows.
   //
   // A ROUND face is a legitimate source and gives its TANGENT plane at the point
   // you clicked (planeMath.tangentPlaneOnCylinder) — a cylinder has no plane of
@@ -405,7 +405,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Simplify Mesh: merge near-coplanar facets of the active (imported) body into
-  // fewer, larger faces. Tune the angular tolerance in the inspector (higher =
+  // fewer, larger faces. Tune the angular tolerance in the value rows (higher =
   // fewer faces, but coarsens curved regions).
   function startSimplifyMesh() {
     if (toolBusy()) return;
@@ -433,7 +433,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Scale: resize the active body about the origin (handy for fixing the units of
-  // an import). Default factor 1 — set it in the inspector.
+  // an import). Default factor 1 — set it in the value rows.
   function startScale() {
     if (toolBusy()) return;
     if (!hasBody()) {
@@ -444,7 +444,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Move: translate / rotate the active body. Defaults to no-op — set the offsets
-  // and angles in the inspector.
+  // and angles in the value rows.
   function startMove() {
     if (toolBusy()) return;
     if (!hasBody()) {
@@ -494,7 +494,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Revolve: spin a sketch profile around the X/Y/Z axis (defaults to a full 360°;
-  // edit the angle in the inspector for a partial revolve). Uses the selected
+  // edit the angle in the value rows for a partial revolve). Uses the selected
   // profile area, or the only one if the sketch has just a single profile.
   async function startRevolve() {
     if (toolBusy()) return;
@@ -552,7 +552,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Primitive: drop a Box / Cylinder / Sphere body at the origin (edit its size in
-  // the inspector). Useful as a starting block or as a boolean tool body.
+  // the value rows). Useful as a starting block or as a boolean tool body.
   async function startPrimitive() {
     if (toolBusy()) return;
     const shape = await choose<"box" | "cylinder" | "sphere">("Create primitive", [
@@ -641,7 +641,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Shell: pick a face to open, hollow the body to a 2mm wall (edit thickness in
-  // the inspector).
+  // the value rows).
   function startShell() {
     pickFaceInteractive("Select a face to open for the shell · Esc to cancel", (faces) => {
       store.addFeature({ id: store.nextId(), type: "shell", thickness: 2, faces } as Feature);
@@ -649,7 +649,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Draft: pick a face to taper by 5° about the body's base (pull +Z; edit the
-  // angle in the inspector).
+  // angle in the value rows).
   function startDraft() {
     pickFaceInteractive("Select a face to draft · Esc to cancel", (faces) => {
       store.addFeature({ id: store.nextId(), type: "draft", faces, angle: 5, axis: "Z" } as Feature);
@@ -671,7 +671,7 @@ export function createFeatureStarters(deps: FeatureStartersDeps) {
   }
 
   // Pattern: replicate the active body — rectangular grid or circular array. Edit
-  // counts / spacing / angle in the inspector.
+  // counts / spacing / angle in the value rows.
   async function startPattern() {
     if (toolBusy()) return;
     if (!hasBody()) {

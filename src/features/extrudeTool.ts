@@ -128,13 +128,13 @@ export class ExtrudeTool {
    *  pre-selected, and the saved distance seeds (and locks) the input — retype
    *  or Ctrl-click areas, then commit to REPLACE the feature in place (same id,
    *  one undo step). Returns false when the distance is a parameter expression
-   *  (the inspector's job). */
+   *  (the value rows' job). */
   startEdit(featureId: string, onDone: (id: string | null) => void): boolean {
     if (this.active) return false;
     const f = this.store.document.features.find((x) => x.id === featureId);
     if (!f || f.type !== "extrude") return false;
     if (typeof f.distance !== "number" || this.store.isParamBound({ kind: "feature", feature: f.id, field: "distance" }))
-      return false; // parameter-driven distance — inspector's job
+      return false; // parameter-driven distance — the value rows' job
 
     this.active = true;
     this.phase = "pick";

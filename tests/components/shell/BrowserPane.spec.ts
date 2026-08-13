@@ -17,7 +17,7 @@
 // are not meaningful. Indentation as a rendered VALUE is checked; indentation as
 // pixels stays e2e territory (e2e/assembly_tree_e2e.cjs).
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick, ref } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
@@ -71,6 +71,32 @@ function render(fake: ReturnType<typeof makeEngine>): VueWrapper {
     global: { provide: { [ENGINE as symbol]: fake.engine } },
   });
 }
+
+// The filament palette is the printer's toolhead slots, so the panel only draws
+// it once a printer has answered. The probe is behind a dynamic import and a
+// desktop-shell check, both of which have to be satisfied for the section to
+// exist at all — hence the stub rather than a flag on the component.
+vi.mock("../../../src/print/printerClient", () => ({
+  activePrinterId: () => "p1",
+  printerProbe: () => Promise.resolve({ online: true }),
+  printerFilaments: () => Promise.resolve([]),
+  asPrinterError: (e: unknown) => e,
+}));
+
+/** Render with a printer on the other end, and wait for the probe to land. The
+ *  probe is a dynamic import followed by an awaited call, so it settles over
+ *  several microtasks; nextTick drains one each time round. */
+async function renderWithPrinter(fake: ReturnType<typeof makeEngine>): Promise<VueWrapper> {
+  (window as unknown as Record<string, unknown>)["__TAURI_INTERNALS__"] = {};
+  const w = render(fake);
+  for (let i = 0; i < 20 && !w.find(".pal-dot").exists(); i++) await nextTick();
+  return w;
+}
+
+afterEach(() => {
+  delete (window as unknown as Record<string, unknown>)["__TAURI_INTERNALS__"];
+  vi.useRealTimers();
+});
 
 /** Every folder head and row in document order, as [class, label]. */
 function panel(w: VueWrapper) {
@@ -207,7 +233,7 @@ describe("BrowserPane", () => {
       { parameters: {}, features: [sketch("s1"), { id: "dp", type: "datumPlane", plane: "XY", offset: 5 } as Feature] },
       [{ id: "b1", name: "Body1" }],
     );
-    const w = render(fake);
+    const w = await renderWithPrinter(fake);
     // The palette head is a .tree-folder with no .tree-label, so it falls
     // through to el.text() and reads as its label plus its count.
     const heads = () => panel(w).filter((r) => r.kind === "folder").map((r) => r.text);
@@ -230,7 +256,7 @@ describe("BrowserPane", () => {
   it("keeps the palette with the bodies", async () => {
     // The palette head carries no .tree-label, so it is found by its own class.
     const fake = makeEngine({ parameters: {}, features: [sketch("s1")] }, [{ id: "b1", name: "Body1" }]);
-    const w = render(fake);
+    const w = await renderWithPrinter(fake);
     expect(w.find(".pal-dot").exists()).toBe(true);
 
     await w.get("#browser-filter").setValue("sketches");
@@ -238,6 +264,22 @@ describe("BrowserPane", () => {
 
     await w.get("#browser-filter").setValue("bodies");
     expect(w.find(".pal-dot").exists()).toBe(true);
+  });
+
+  it("shows no palette until a printer answers", async () => {
+    // Every slot in it means "the filament loaded in toolhead N", and the sync
+    // button and the staleness dot only mean anything against a machine that
+    // replies. With nothing on the other end it was four fixed rows of nothing
+    // pinned above the bodies. Bodies exist here and the filter is "all", so
+    // the ONLY thing keeping it off screen is the missing printer.
+    const fake = makeEngine({ parameters: {}, features: [sketch("s1")] }, [{ id: "b1", name: "Body1" }]);
+    const w = render(fake);
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(w.find(".pal-dot").exists()).toBe(false);
+    expect(panel(w).map((r) => r.text)).not.toContain("Palette1");
+    // ...and the bodies it colours are still there, so this is the palette
+    // being absent rather than the section it rides with failing to render.
+    expect(panel(w).some((r) => r.text === "Body1")).toBe(true);
   });
 
   it("hides every body under an assembly node from its eye", async () => {

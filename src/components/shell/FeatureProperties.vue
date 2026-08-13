@@ -1,14 +1,14 @@
 <script setup lang="ts">
 // One feature's editable values.
 //
-// Lifted out of InspectorPane so the History strip can show the same rows under
+// Lifted out of the docked Parameters panel so the history can show these rows under
 // the feature you clicked. Both surfaces render THIS, rather than each building
 // its own list: the rows are not a display of the feature, they are the write
 // path into it (a bound field edits its expression, a sketch dimension
 // re-serialises one entity), and two copies of that would drift the moment a
 // field type was added.
 //
-// The title is the caller's business — the inspector heads it with the feature
+// The title is the caller's business — the history heads it with the feature
 // name, the timeline already has the chip you clicked.
 
 import { computed } from "vue";

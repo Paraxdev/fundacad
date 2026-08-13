@@ -170,6 +170,14 @@
 .t-name {
   display: none;
 }
+/* A chip and the values belonging to it. One box so the side arrangement can
+   stack them without the next chip landing between the two; in the horizontal
+   strip it is a transparent wrapper that changes nothing. */
+.timeline-item {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
 .timeline-node {
   position: relative;
   flex: 0 0 auto;
@@ -253,6 +261,58 @@
 .timeline-node .glyph {
   font-size: 15px;
   line-height: 1;
+}
+
+/* The feature's values, floating above the bottom strip. The in-flow twin of
+   this (side arrangement) is styled in _shellsides.scss, where it is a plain
+   indented block — everything below is what it costs to be a free-standing
+   panel instead. */
+.timeline-props.floating {
+  position: fixed;
+  z-index: 180;
+  width: 248px;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  padding: var(--s-3) var(--s-4) var(--s-4);
+}
+.timeline-props.floating .tp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+.timeline-props.floating .tp-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.timeline-props.floating .tp-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+}
+.timeline-props.floating .tp-close:hover {
+  background: var(--raised);
+  color: var(--text);
 }
 
 /* rollback marker: a draggable vertical bar between features */

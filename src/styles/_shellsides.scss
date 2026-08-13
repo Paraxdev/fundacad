@@ -187,6 +187,11 @@
     padding: var(--s-2) var(--s-1);
     line-height: 1.45;
   }
+  /* The chip and its values stack instead of sitting side by side. */
+  .timeline-item {
+    display: block;
+    width: 100%;
+  }
   .timeline-node {
     /* A full-width row rather than a square chip: there is width to spend here
        and a vertical list of icons with no labels is unreadable. */

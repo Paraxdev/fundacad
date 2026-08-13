@@ -5,7 +5,7 @@
 // and error text live in the tooltip — chips stay ~28px so a 100+-feature
 // document spans screens, not screen-miles.
 
-import { computed, nextTick, onUnmounted, ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import { useEngine } from "../../app/engineKey";
 import { useDocValue, useBuildValue } from "../../app/useDoc";
 import { useSelectionStore } from "../../stores/selection";
@@ -15,6 +15,7 @@ import Icon from "./Icon.vue";
 import { contextMenu } from "../../ui/menu";
 import { buildProgress, CANCEL_DELAY_MS } from "../../ui/buildProgress";
 import { gapIndexIn } from "../../ui/trackGaps";
+import { anchorAbove } from "../../ui/propsAnchor";
 import { layoutPrefs, onLayoutPrefsChange } from "../../ui/layoutPrefs";
 import { getUnit, onUnitChange } from "../../ui/units";
 import FeatureProperties from "./FeatureProperties.vue";
@@ -35,16 +36,84 @@ const features = useDocValue((doc) =>
   doc.features.map((f) => ({ id: f.id, type: f.type, name: (f as { name?: string }).name ?? "" })),
 );
 
-// Properties under the clicked chip, but only in the side arrangement: the
-// bottom strip is 52px of chrome with nowhere to put a form, and the panel
-// would cover the model rather than sit beside it.
-const showProps = ref(layoutPrefs().history === "right");
+// A feature's values are edited here, under the entry that names the operation
+// they belong to — there is no docked panel for them any more. That has to hold
+// in BOTH arrangements, which means two presentations of the same rows: in the
+// flow, indented under the chip, when the history is a column with width to
+// spare; floating above the strip when it is 52px of chrome along the bottom.
+const inFlowProps = ref(layoutPrefs().history === "right");
 const unit = ref(getUnit());
 const stops = [
-  onLayoutPrefsChange(() => { showProps.value = layoutPrefs().history === "right"; }),
+  onLayoutPrefsChange(() => {
+    inFlowProps.value = layoutPrefs().history === "right";
+    void measureProps();
+  }),
   onUnitChange(() => { unit.value = getUnit(); }),
 ];
 onUnmounted(() => { for (const stop of stops) stop(); });
+
+// --- the floating half -----------------------------------------------------
+// Teleported to the body and positioned in window coordinates, because
+// #timeline is `overflow: hidden` with a scroller inside it and anything
+// positioned within the strip is clipped at its top edge. The arithmetic is
+// ui/propsAnchor.ts; measuring the chip is the part that has to be here.
+
+/** Wide enough for a label and its value side by side, and no wider: this
+ *  hangs over the model. */
+const PROPS_WIDTH = 248;
+
+const floatAt = ref<{ left: number; bottom: number } | null>(null);
+
+async function measureProps() {
+  await nextTick();
+  const id = selection.featureId;
+  if (inFlowProps.value || !id) {
+    floatAt.value = null;
+    return;
+  }
+  const el = track.value?.querySelector<HTMLElement>(`.timeline-node[data-id="${CSS.escape(id)}"]`);
+  if (!el) {
+    // The chip is gone (deleted, or rolled out of the built set). Nothing to
+    // anchor to, and a panel left at the last coordinates would be pointing at
+    // whatever slid into that spot.
+    floatAt.value = null;
+    return;
+  }
+  floatAt.value = anchorAbove(
+    el.getBoundingClientRect(),
+    { width: window.innerWidth, height: window.innerHeight },
+    PROPS_WIDTH,
+  );
+}
+
+const floatingFeature = computed(() =>
+  floatAt.value && selection.featureId ? selection.featureId : null,
+);
+
+/** The floating panel says which operation it belongs to; the in-flow one is
+ *  already indented under the chip that says so. */
+const propsTitle = computed(() => {
+  const id = floatingFeature.value;
+  const f = id ? features.value.find((x) => x.id === id) : null;
+  return f ? f.name || metaFor(f.type).label : "";
+});
+
+watch(() => [selection.featureId, features.value.length] as const, () => void measureProps(), {
+  immediate: true,
+});
+
+// The strip scrolls under the panel and the window resizes out from under both,
+// so the anchor is re-measured rather than captured once. Cheap: one
+// getBoundingClientRect, and only while a feature is selected.
+const remeasure = () => { if (selection.featureId && !inFlowProps.value) void measureProps(); };
+onMounted(() => {
+  window.addEventListener("resize", remeasure);
+  scroller.value?.addEventListener("scroll", remeasure, { passive: true });
+});
+onUnmounted(() => {
+  window.removeEventListener("resize", remeasure);
+  scroller.value?.removeEventListener("scroll", remeasure);
+});
 const rollback = useDocValue(() => store.rollbackIndex);
 const suppressed = useDocValue(() => new Set(features.value.filter((f) => store.isSuppressed(f.id)).map((f) => f.id)));
 
@@ -277,37 +346,43 @@ function openMenu(e: MouseEvent, id: string, i: number) {
               title="Drag to roll the model back / forward"
               @pointerdown="onMarkerDown"
             ><span class="marker-grip"></span></div>
-            <div
-              class="timeline-node"
-              :data-id="f.id"
-              :class="{
-                selected: selection.featureId === f.id,
-                error: errors.has(f.id),
-                rolled: i >= rollback,
-                suppressed: suppressed.has(f.id),
-                'drop-target': dropTarget === f.id,
-              }"
-              :title="chipTitle(f, i)"
-              draggable="true"
-              @click="timeline.select(f.id)"
-              @dblclick="timeline.edit(f.id)"
-              @contextmenu="openMenu($event, f.id, i)"
-              @dragstart="onDragStart(f.id, $event)"
-              @dragover="onDragOver(f.id, $event)"
-              @dragleave="dropTarget = null"
-              @drop="onDrop(f.id, i, $event)"
-            >
-              <span class="glyph"><Icon :name="metaFor(f.type).icon" :size="18" /></span>
-              <!-- Shown only in the side arrangement, where there is width for
-                   it: a vertical column of unlabelled icons is unreadable. -->
-              <span class="t-name">{{ f.name || metaFor(f.type).label }}</span>
-            </div>
-            <!-- The feature's own values, under the chip you clicked. The point
-                 of putting them HERE rather than in a floating editor is that
-                 the history already says which operation you are changing, so
-                 the panel does not have to. -->
-            <div v-if="showProps && selection.featureId === f.id" class="timeline-props">
-              <FeatureProperties :feature-id="f.id" :unit="unit" />
+            <!-- The chip and its values are one unit, so they are one box: in
+                 the side arrangement the values sit under the chip in the flow,
+                 and the wrapper is what keeps them from being separated by the
+                 next chip. -->
+            <div class="timeline-item">
+              <div
+                class="timeline-node"
+                :data-id="f.id"
+                :class="{
+                  selected: selection.featureId === f.id,
+                  error: errors.has(f.id),
+                  rolled: i >= rollback,
+                  suppressed: suppressed.has(f.id),
+                  'drop-target': dropTarget === f.id,
+                }"
+                :title="chipTitle(f, i)"
+                draggable="true"
+                @click="timeline.select(f.id)"
+                @dblclick="timeline.edit(f.id)"
+                @contextmenu="openMenu($event, f.id, i)"
+                @dragstart="onDragStart(f.id, $event)"
+                @dragover="onDragOver(f.id, $event)"
+                @dragleave="dropTarget = null"
+                @drop="onDrop(f.id, i, $event)"
+              >
+                <span class="glyph"><Icon :name="metaFor(f.type).icon" :size="18" /></span>
+                <!-- Shown only in the side arrangement, where there is width for
+                     it: a vertical column of unlabelled icons is unreadable. -->
+                <span class="t-name">{{ f.name || metaFor(f.type).label }}</span>
+              </div>
+              <!-- The feature's own values, under the chip you clicked. The
+                   point of putting them HERE rather than in a docked panel is
+                   that the history already says which operation you are
+                   changing, so the form does not have to. -->
+              <div v-if="inFlowProps && selection.featureId === f.id" class="timeline-props">
+                <FeatureProperties :feature-id="f.id" :unit="unit" />
+              </div>
             </div>
           </template>
           <div
@@ -346,4 +421,23 @@ function openMenu(e: MouseEvent, id: string, i: number) {
       @click="jumpToNextError()"
     ><Icon name="warning" :size="14" /> {{ errors.size }}</button>
   </footer>
+
+  <!-- The same rows, floating, for the arrangement where the history is a
+       52px strip with no room to open them in place. Teleported because
+       #timeline clips its own overflow. -->
+  <Teleport to="body">
+    <div
+      v-if="floatAt && floatingFeature"
+      class="timeline-props floating"
+      :style="{ left: `${floatAt.left}px`, bottom: `${floatAt.bottom}px` }"
+    >
+      <div class="tp-head">
+        <span class="tp-title">{{ propsTitle }}</span>
+        <button class="tp-close" title="Close" @click="selection.featureId = null">
+          <Icon name="close" :size="12" />
+        </button>
+      </div>
+      <FeatureProperties :feature-id="floatingFeature" :unit="unit" />
+    </div>
+  </Teleport>
 </template>

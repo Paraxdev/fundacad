@@ -1,7 +1,9 @@
 // The feature's values, as rendered by the panel BOTH surfaces use.
 //
-// FeatureProperties was lifted out of InspectorPane so the History strip could
-// show the same rows under the chip you clicked. The reason it is one component
+// FeatureProperties was lifted out of the docked Parameters panel so the history
+// could show these rows under the chip you clicked. That panel is gone now and
+// this is the only place a feature's values can be edited, which is what makes
+// the write path below the thing to protect. The reason it is one component
 // rather than two lists is that these rows are the WRITE PATH into the feature,
 // not a display of it, and a second copy would drift the first time a field type
 // was added. So what is worth pinning here is that both halves of that write

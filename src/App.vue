@@ -9,8 +9,6 @@ import ContextMenuHost from "./components/overlays/ContextMenuHost.vue";
 import PieMenuHost from "./components/overlays/PieMenuHost.vue";
 import ConsolePanel from "./components/overlays/ConsolePanel.vue";
 import SelectionToolbar from "./components/overlays/SelectionToolbar.vue";
-import InspectorPane from "./components/shell/InspectorPane.vue";
-import LeftToolbar from "./components/shell/LeftToolbar.vue";
 import CommandPalette from "./components/overlays/CommandPalette.vue";
 import RibbonBar from "./components/shell/RibbonBar.vue";
 import TimelineBar from "./components/shell/TimelineBar.vue";
@@ -48,16 +46,20 @@ const toolPanels = useToolPanelStore();
        selects on them. -->
   <TitleBar />
   <RibbonBar />
+  <!-- Two columns: what is in the document, and the document. The tool rail
+       that used to stand left of the browser is gone — it was a second copy of
+       the ribbon's tools one column away from the ribbon itself, so whichever
+       of the two you reached for, the other was redundant chrome eating picking
+       width. The ribbon carries every tool, on the top edge or the left one.
+
+       The Parameters inspector that used to close the row on the right is gone
+       too: a feature's values now live under its own entry in the history,
+       where the thing being changed is already named. Document parameters are
+       Modify > Parameters, which is where they could always be added and
+       renamed. -->
   <div id="main">
-    <!-- The tool rail is a COLUMN of #main, not an overlay on the viewport: it
-         must never cover geometry, and the viewport's bottom-left corner is
-         already spoken for by the view-control pill. It is additive — the
-         ribbon above still carries every tool, including the ones the rail
-         folds into a hold-to-open flyout. -->
-    <LeftToolbar />
     <BrowserPane />
     <ViewportPane />
-    <InspectorPane />
   </div>
   <TimelineBar />
 

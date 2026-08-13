@@ -3,6 +3,13 @@ import { useSelectionStore } from "../stores/selection";
 import type { Engine } from "./engine";
 import type { Feature } from "../types";
 
+/** Said when a feature's value cannot be dragged and has to be typed. One
+ *  constant because three feature types say it and they used to say three
+ *  slightly different things, all of them naming a docked panel that no longer
+ *  exists — the values moved under the history entry that names the operation
+ *  they belong to. */
+const VALUES_IN_HISTORY = "Not draggable, edit the value under this feature in the history";
+
 export function createSelection(
   e: Engine,
 ): Pick<Engine, "selectFeature" | "editFeature" | "featureForFace" | "deleteSelectedFace"> {
@@ -19,8 +26,9 @@ export function createSelection(
   });
 
   const selectFeature = (id: string | null) => {
-    // Writing the store is what updates the inspector, the timeline AND the
-    // browser tree — all three render from it rather than being pushed at.
+    // Writing the store is what opens the feature's values in the history AND
+    // marks it in the browser tree — both render from it rather than being
+    // pushed at.
     useSelectionStore().featureId = id;
     e.viewport.highlightDatum(id); // brighten the matching construction plane (if any)
   };
@@ -78,18 +86,20 @@ export function createSelection(
         break;
       case "fillet":
       case "chamfer":
-        // false = not tool-editable (parameter value / structural selectors) —
-        // the inspector is already focused via selectFeature above.
-        if (!e.tools.edgeFeature.startEdit(id, done)) e.setStatus("Edit the value in the inspector (right panel)", "");
+        // false = not tool-editable (parameter value / structural selectors).
+        // selectFeature above has already opened this feature's values in the
+        // history, which is where such a value is changed.
+        if (!e.tools.edgeFeature.startEdit(id, done)) e.setStatus(VALUES_IN_HISTORY, "");
         break;
       case "extrude":
-        if (!e.tools.extrude.startEdit(id, done)) e.setStatus("Edit the value in the inspector (right panel)", "");
+        if (!e.tools.extrude.startEdit(id, done)) e.setStatus(VALUES_IN_HISTORY, "");
         break;
       case "texture":
-        if (!e.tools.texture.startEdit(id, done)) e.setStatus("Edit the value in the inspector (right panel)", "");
+        if (!e.tools.texture.startEdit(id, done)) e.setStatus(VALUES_IN_HISTORY, "");
         break;
       default:
-        break; // inspector focus (selectFeature above) is the edit surface for the rest
+        break; // the values under the history entry (selectFeature above) are the
+               // edit surface for the rest
     }
   };
 

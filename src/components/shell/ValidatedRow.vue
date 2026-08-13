@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A labelled row in the inspector: label on the left, a committing text input
+// A labelled row of feature values: label on the left, a committing text input
 // on the right. The input's behaviour (and the mid-edit guard) lives in
 // ValidatedInput; this only adds the row chrome — the fx-row / param-stale
 // classes and the row tooltip.

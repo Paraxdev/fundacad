@@ -1,6 +1,6 @@
 // The single inventory of parameter-drivable numeric fields: which fields on a
 // feature (and on the solver-rigid sketch entities) hold a `Num`, what kind of
-// quantity each is, and how the inspector labels it. Consumed by the inspector
+// quantity each is, and how the value rows label it. Consumed by those rows
 // (field editors), the load migration (bare-name → model-param conversion), and
 // the parameters engine (target read/write + unit coercion).
 
@@ -40,10 +40,10 @@ export const FEATURE_NUM_FIELDS: Partial<Record<Feature["type"], [string, string
 };
 
 /** Whether selecting this feature type actually opens an editor (numeric fields
- *  in the inspector, or the sketch editor). The context menu labels "Edit"
+ *  in the value rows, or the sketch editor). The context menu labels "Edit"
  *  honestly — a type without an editor gets "Select" instead.
  *
- *  Lives here rather than in the inspector because it is a fact about the field
+ *  Lives here rather than beside the value rows because it is a fact about the field
  *  table above, and its other caller (ui/contextMenus.ts) has no other reason to
  *  reach into a panel. */
 export function isInspectorEditable(type: Feature["type"]): boolean {

@@ -44,9 +44,9 @@ const browser = useBrowserStore();
 const root = useTemplateRef<HTMLElement>("root");
 
 // The chosen filter is module state in a plain .ts, not a store, so nothing
-// tracks it — the same arrangement LeftToolbar uses for the rail's remembered
-// defaults, and for the same reason: ui/browserFilter.ts has to stay Vue-free
-// for the headless suite.
+// tracks it — the same arrangement ui/theme.ts, icons.ts and layoutPrefs.ts use,
+// and for the same reason: ui/browserFilter.ts has to stay Vue-free for the
+// headless suite.
 const filter = ref(getBrowserFilter());
 const offFilter = onBrowserFilterChange(() => { filter.value = getBrowserFilter(); });
 onUnmounted(offFilter);
@@ -175,6 +175,11 @@ const bodyAncestors = useDocValue((doc) => {
   return buildAssemblyGroups(bodyList(), importTrees(doc))?.ancestors ?? new Map<string, string[]>();
 });
 
+/** Whether a printer answered the last probe. null = never asked, or asked and
+ *  the answer has not come back. Declared up here rather than beside the rest of
+ *  the palette code below because the node list gates a whole section on it. */
+const printerOnline = ref<boolean | null>(null);
+
 /** The whole panel, as a flat list.
  *
  *  Reads docVersion (through useDocValue), buildVersion and the view tick
@@ -246,7 +251,13 @@ const nodes = useDocValue((doc): TreeNode[] => {
   }
 
   // --- Palette + Bodies ---
-  if (bodies.length && show("palette")) {
+  // The palette is the printer's filament slots, not a document colour scheme:
+  // every slot means "the material loaded in toolhead N", and the sync button
+  // and staleness dot only mean anything against a machine that answers. With
+  // no printer it was four fixed rows of nothing, permanently at the top of the
+  // browser, so it waits for one — the same rule the Images filter follows, that
+  // a control which cannot do its job is worse present than absent.
+  if (bodies.length && show("palette") && printerOnline.value === true) {
     const collapsed = browser.isCollapsed("Palette");
     out.push({ kind: "palette-head", k: "palette", count: store.colorPalette.length, collapsed });
     if (!collapsed) {
@@ -365,7 +376,6 @@ watch(
 
 const hasBodies = useBuildValue(() => bodyList().length > 0);
 
-const printerOnline = ref<boolean | null>(null); // null = unknown → grey dot
 const staleSlots = ref<number[]>([]); // palette slots that differ from the printer
 
 const stale = computed(() => printerOnline.value === true && staleSlots.value.length > 0);
@@ -504,7 +514,8 @@ onUnmounted(() => { if (pollTimer != null) clearInterval(pollTimer); });
 //
 // Attached by hand rather than with @wheel because it MUST be non-passive:
 // preventDefault is the whole point, and a passive listener would silently
-// no-op it. InspectorPane.vue carries the twin of this.
+// no-op it. (The Parameters panel this was written alongside carried the twin
+// of it; the browser is the only docked scroller left.)
 function onWheel(ev: WheelEvent) {
   const el = root.value;
   if (!el || el.scrollHeight <= el.clientHeight) return;

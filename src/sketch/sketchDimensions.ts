@@ -1,7 +1,7 @@
 // Persistent, editable dimension annotations on committed sketch geometry. Each
 // label is projected onto the geometry; click it to type a new value in the current
 // display unit. This is the "edit the length later" half — the live W/H boxes handle
-// creation. The dimension set comes from entityDims(), shared with the inspector
+// creation. The dimension set comes from entityDims(), shared with the value rows
 // and SketchMode.editDimension.
 //
 // Now a FACADE: the labels are rendered by components/overlays/SketchDimLayer.vue

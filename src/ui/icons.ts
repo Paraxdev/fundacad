@@ -321,6 +321,13 @@ export function icon(name: string): string {
  *  there is exactly one place to audit. */
 export function iconElement(name: string, size = 16): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  // The same class and marker Icon.vue puts on its <svg>, and not decoration:
+  // `.icon { flex: 0 0 auto }` is what stops an icon collapsing when its slot is
+  // a flex container. Without it the confirm/cancel marks on the heads-up box
+  // laid out 0px wide inside their `display: inline-flex` buttons and drew as
+  // two empty squares — the paths were there and correct the whole time.
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("data-icon", name);
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("width", String(size));
   svg.setAttribute("height", String(size));

@@ -117,7 +117,7 @@ export function resolveRealEntities(
 /** Resolve a sketch's real entities AND every pattern's derived copies, in one
  *  flat array — for callers that only render/inspect (never persist) the
  *  result: committed-sketch overlay rendering, region detection for those
- *  sketches, and the inspector's per-entity dimension list. The copies are
+ *  sketches, and the per-entity dimension list under a sketch. The copies are
  *  derived here, never stored as real entities — do NOT feed this back into
  *  `sketch.entities` (see resolveRealEntities for the editable, persist-safe
  *  subset; that's what the sketch-editor session uses). */

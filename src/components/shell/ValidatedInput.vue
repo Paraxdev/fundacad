@@ -3,7 +3,7 @@
 // error message to show — the input turns red and KEEPS the rejected text so
 // the user can fix it — or null on success. Typing clears the error.
 //
-// Replaces liveInputs.ts's validatedInput. Bare on purpose: the inspector wraps
+// Replaces liveInputs.ts's validatedInput. Bare on purpose: ValidatedRow wraps
 // it in a labelled row (ValidatedRow), while the Parameters dialog drops it
 // straight into a grid cell, and those two layouts have nothing in common
 // beyond this behaviour.

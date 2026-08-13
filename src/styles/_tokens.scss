@@ -63,22 +63,24 @@
   --accent-blue: var(--accent);
 
   /* --- radii ---
-     All zero. The rungs are KEPT rather than deleted because ~200 rules name
-     them, and each still says what size of thing it is on, so a future theme
-     that wants soft corners has one file to edit rather than a search.
+     Small, not absent. ~200 rules name these rungs and each says what size of
+     thing it is on, so the whole scale turns from one place.
        xs   badges, swatches and grips
        sm   controls: inputs, buttons, chips, menu rows
        md   containers: popups, cards, the ribbon button
        lg   dialogs and the docked palette
-       pill was fully-rounded capsules and thin bars
-     Square is most of the look. A rounded rectangle reads as a card sitting on
-     a surface; a square one reads as a region OF the surface, which is what a
-     panel in a CAD tool is. */
-  --r-xs: 0;
-  --r-sm: 0;
-  --r-md: 0;
-  --r-lg: 0;
-  --r-pill: 0;
+       pill fully-rounded capsules and thin bars
+     These were all 0 for one release and it was too far: at 0 a control and the
+     surface behind it are the same shape, so a button reads as a painted region
+     rather than something to press, and every corner in a dense panel lands as
+     an identical hard point. 2-6px is enough to separate the two without the
+     card-floating-on-a-page look a large radius gives — the panels themselves
+     stay square, because a panel IS a region of the surface. */
+  --r-xs: 2px;
+  --r-sm: 3px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --r-pill: 999px;
 
   /* --- spacing scale ---
      Every gap, padding and margin in the app comes from this ramp. It is not a
