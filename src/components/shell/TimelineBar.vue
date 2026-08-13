@@ -15,6 +15,9 @@ import Icon from "./Icon.vue";
 import { contextMenu } from "../../ui/menu";
 import { buildProgress, CANCEL_DELAY_MS } from "../../ui/buildProgress";
 import { gapIndexIn } from "../../ui/trackGaps";
+import { layoutPrefs, onLayoutPrefsChange } from "../../ui/layoutPrefs";
+import { getUnit, onUnitChange } from "../../ui/units";
+import FeatureProperties from "./FeatureProperties.vue";
 
 const engine = useEngine();
 const store = engine.store;
@@ -24,7 +27,24 @@ const timeline = useTimelineStore();
 const scroller = useTemplateRef<HTMLElement>("scroller");
 const track = useTemplateRef<HTMLElement>("track");
 
-const features = useDocValue((doc) => doc.features.map((f) => ({ id: f.id, type: f.type })));
+// `name` rides along for the side arrangement, where each chip is a full-width
+// row and a column of unlabelled icons would be unreadable.
+// Cast because `name` is optional and only on SOME feature variants, the same
+// way every other reader of it in the app reaches for it.
+const features = useDocValue((doc) =>
+  doc.features.map((f) => ({ id: f.id, type: f.type, name: (f as { name?: string }).name ?? "" })),
+);
+
+// Properties under the clicked chip, but only in the side arrangement: the
+// bottom strip is 52px of chrome with nowhere to put a form, and the panel
+// would cover the model rather than sit beside it.
+const showProps = ref(layoutPrefs().history === "right");
+const unit = ref(getUnit());
+const stops = [
+  onLayoutPrefsChange(() => { showProps.value = layoutPrefs().history === "right"; }),
+  onUnitChange(() => { unit.value = getUnit(); }),
+];
+onUnmounted(() => { for (const stop of stops) stop(); });
 const rollback = useDocValue(() => store.rollbackIndex);
 const suppressed = useDocValue(() => new Set(features.value.filter((f) => store.isSuppressed(f.id)).map((f) => f.id)));
 
@@ -278,6 +298,16 @@ function openMenu(e: MouseEvent, id: string, i: number) {
               @drop="onDrop(f.id, i, $event)"
             >
               <span class="glyph"><Icon :name="metaFor(f.type).icon" :size="18" /></span>
+              <!-- Shown only in the side arrangement, where there is width for
+                   it: a vertical column of unlabelled icons is unreadable. -->
+              <span class="t-name">{{ f.name || metaFor(f.type).label }}</span>
+            </div>
+            <!-- The feature's own values, under the chip you clicked. The point
+                 of putting them HERE rather than in a floating editor is that
+                 the history already says which operation you are changing, so
+                 the panel does not have to. -->
+            <div v-if="showProps && selection.featureId === f.id" class="timeline-props">
+              <FeatureProperties :feature-id="f.id" :unit="unit" />
             </div>
           </template>
           <div

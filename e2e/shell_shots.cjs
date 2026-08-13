@@ -84,7 +84,66 @@ async function withPrefs(page, prefs) {
   await page.keyboard.press("Control+Comma");
   await page.waitForTimeout(400);
   await shot("06-preferences");
-  await page.keyboard.press("Escape");
+  // Reload rather than press Escape: the dialog is modal and a stray Escape
+  // that misses leaves an overlay swallowing every later click.
+  await withPrefs(page, {});
+
+  // The rest of the run builds a real document, so the layout is chosen HERE,
+  // before anything is drawn: withPrefs reloads, and a reload throws the
+  // document away.
+  await withPrefs(page, { "sindricad.layout": JSON.stringify({ ribbon: "top", history: "right" }) });
+
+  // The heads-up field, which needs a sketch but NOT the sidecar: drawing is
+  // client-side and only the solid build goes to the kernel.
+  await page.getByText("XY plane").click();
+  await page.waitForTimeout(700);
+  await page.keyboard.press("c"); // circle
+  await page.waitForTimeout(300);
+  const box = await page.locator("#canvas").boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.click(cx, cy);
+  await page.mouse.move(cx + 170, cy - 90, { steps: 8 });
+  await page.waitForTimeout(400);
+  await shot("07-headsup-tracking");
+
+  // Type a value with a unit the field is not showing.
+  await page.keyboard.type("1 inch");
+  await page.waitForTimeout(300);
+  await shot("08-headsup-typed-inch");
+
+  // ...and the unit chip's menu.
+  const chip = page.locator(".dim-unit").first();
+  if (await chip.count()) {
+    await chip.click({ force: true });
+    await page.waitForTimeout(300);
+    await shot("09-unit-menu");
+  }
+  // The history strip's own property rows. Needs a real feature in the document,
+  // so start over on a clean one and draw a circle without touching the field:
+  // the shots above left a half-typed value and an open menu, and Escape out of
+  // that cancels the circle rather than committing it. Still no sidecar, because
+  // a sketch is document state and only the SOLID build goes to the kernel.
+  await withPrefs(page, {}); // reload; the layout pref set above survives it
+  await page.getByText("XY plane").click();
+  await page.waitForTimeout(700);
+  await page.keyboard.press("c");
+  await page.waitForTimeout(300);
+  await page.mouse.click(cx, cy); // centre
+  await page.mouse.move(cx + 150, cy - 80, { steps: 8 });
+  await page.mouse.click(cx + 150, cy - 80); // radius, commits the circle
+  await page.waitForTimeout(400);
+  const finish = page.locator(".ribbon-btn.finish").first();
+  if (await finish.count()) await finish.click({ force: true });
+  await page.waitForTimeout(700);
+
+  // Click the chip: selecting the feature is what opens its values under it.
+  const node = page.locator(".timeline-node").first();
+  if (await node.count()) {
+    await node.click({ force: true });
+    await page.waitForTimeout(400);
+  }
+  await shot("10-history-props");
 
   await browser.close();
   if (errors.length) {

@@ -78,36 +78,95 @@ button.finish:hover {
   z-index: 200;
   pointer-events: auto;
 }
+/* One row: NAME [value] UNIT. The name and the unit are chrome at the ends and
+   the value is the thing, which is why they are on one line rather than the
+   label sitting above in its own tier — the box hangs next to the cursor over
+   the model and every pixel of height is picking area given away. */
 .dim-field {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 8.5px;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--accent-hot);
-  background: rgba(22, 24, 29, 0.95);
-  border: 1px solid var(--accent);
+  color: var(--text-mute);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
-  padding: 3px 4px;
-  box-shadow: var(--shadow-2), 0 0 0 3px var(--accent-tint);
+  padding: 3px var(--s-1);
+  box-shadow: var(--shadow-2);
+}
+/* Typing is what turns the readout into an INPUT. Until then the box is
+   something the drag is writing to and the user is only watching. */
+.dim-field.typed {
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+.dim-name {
+  flex: none;
 }
 .dim-field input {
-  width: 52px;
-  border: 1px solid var(--line-strong);
-  background: var(--bg);
+  /* width is set inline, from the content — a formula must not be typed into a
+     box sized for three digits */
+  min-width: 0;
+  border: none;
+  background: none;
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  padding: 2px 4px;
-  border-radius: var(--r-sm);
+  letter-spacing: normal;
+  text-transform: none;
+  padding: 2px 0;
 }
 .dim-field input:focus {
   outline: none;
-  border-color: var(--accent-hot);
-  box-shadow: 0 0 0 2px var(--accent-tint);
+}
+/* The unit is a button: clicking it changes what the field is showing without
+   retyping the number. It has to read as pressable at 9px, hence the border. */
+.dim-unit {
+  flex: none;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: var(--r-xs);
+  color: var(--text-dim);
+  font: inherit;
+  padding: 1px 4px;
+  cursor: pointer;
+  text-transform: none;
+}
+.dim-unit:hover {
+  border-color: var(--accent);
+  color: var(--accent-hot);
+}
+.dim-unit-menu {
+  position: fixed;
+  z-index: 3200;
+  display: flex;
+  flex-direction: column;
+  min-width: 56px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-3);
+  padding: var(--s-1);
+}
+.dim-unit-item {
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: var(--s-2) var(--s-3);
+  cursor: pointer;
+}
+.dim-unit-item:hover {
+  background: var(--accent-tint);
+  color: var(--accent-hot);
+}
+.dim-unit-item.active {
+  color: var(--accent);
 }
 /* visible confirm/cancel on the heads-up input (Enter/Esc equivalents) */
 .dim-btn {

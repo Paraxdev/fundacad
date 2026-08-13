@@ -7,7 +7,8 @@
 // fields are shown/parsed in the user's display unit, angles always in degrees.
 
 import { iconElement } from "../ui/icons";
-import { getUnit, displayValue, parseField } from "../ui/units";
+import { getUnit, parseField } from "../ui/units";
+import { commonUnits, toUnit, tryParseMeasure, unitById, type UnitDef } from "../ui/measure";
 
 export interface DimFieldDef {
   name: string;
@@ -18,8 +19,21 @@ export interface DimFieldDef {
 interface Field {
   def: DimFieldDef;
   input: HTMLInputElement;
+  /** The unit this field is SHOWING. Starts at the document's, follows the user
+   *  if they type one, and can be picked from the chip. Per field rather than
+   *  global: a value the user chose to enter in inches should go on reading in
+   *  inches without changing what every other field in the app shows. */
+  unit: UnitDef | null;
+  /** the clickable unit chip, or null for a count (which has no unit) */
+  chip: HTMLButtonElement | null;
   // false = follows the cursor; true = holds the user's typed/locked value
   userDriven: boolean;
+}
+
+/** The unit a field opens in. */
+function initialUnit(kind: DimFieldDef["kind"]): UnitDef | null {
+  if (kind === "count") return null;
+  return unitById(kind === "angle" ? "deg" : getUnit());
 }
 
 export class DimInput {
@@ -70,20 +84,47 @@ export class DimInput {
     this.fields = defs.map((def) => {
       const wrap = document.createElement("label");
       wrap.className = "dim-field";
-      wrap.textContent =
-        def.kind === "angle" ? `${def.label}°` : def.kind === "count" ? def.label : `${def.label} ${getUnit()}`;
+      const name = document.createElement("span");
+      name.className = "dim-name";
+      name.textContent = def.label;
+      wrap.appendChild(name);
       const input = document.createElement("input");
       input.type = "text";
-      input.inputMode = "decimal";
+      // NOT inputMode "decimal": that asks a touch keyboard for digits only, and
+      // this field takes "1 1/2 in" and "width/2".
+      input.inputMode = "text";
       input.autocomplete = "off";
       wrap.appendChild(input);
+
+      const field: Field = { def, input, unit: initialUnit(def.kind), chip: null, userDriven: false };
+
+      if (field.unit) {
+        // The unit is a BUTTON, not a caption: clicking it is how you change
+        // what the field is showing without retyping the number.
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "dim-unit";
+        chip.title = "Change unit";
+        chip.textContent = field.unit.label;
+        chip.addEventListener("pointerdown", (e) => {
+          e.preventDefault(); // never blur the input to open the menu
+          e.stopPropagation();
+          this.openUnitMenu(field);
+        });
+        wrap.appendChild(chip);
+        field.chip = chip;
+      }
+
       this.root.appendChild(wrap);
-      const field: Field = { def, input, userDriven: false };
 
       input.addEventListener("keydown", (e) => this.onKey(e, field));
       input.addEventListener("input", () => {
         field.userDriven = true; // typing freezes the field from cursor tracking
+        wrap.classList.add("typed");
+        this.sizeToContent(field);
+        this.adoptTypedUnit(field);
       });
+      this.sizeToContent(field);
       return field;
     });
     // Visible confirm/cancel — Enter/Esc equivalents for mouse-first work (the
@@ -145,12 +186,75 @@ export class DimInput {
     e.stopPropagation(); // never let drawing shortcuts fire while typing
   }
 
+  /** The field grows with what is in it, so a formula is not typed into a box
+   *  sized for three digits. Floored so the box does not collapse while empty
+   *  and does not twitch on every keystroke of a short value. */
+  private sizeToContent(f: Field) {
+    f.input.style.width = `${Math.max(5, f.input.value.length + 1)}ch`;
+  }
+
+  /** A unit in the TEXT changes what the field is showing. This is the whole
+   *  point of the field being unit agnostic: it says mm, you type "1 inch", and
+   *  it should not answer by showing you 25.4 mm. The number is left exactly as
+   *  typed — only the chip moves. */
+  private adoptTypedUnit(f: Field) {
+    if (!f.unit) return;
+    const m = tryParseMeasure(f.input.value, f.unit);
+    if (!m?.unit || m.unit === f.unit) return;
+    f.unit = m.unit;
+    if (f.chip) f.chip.textContent = m.unit.label;
+  }
+
+  /** The chip's menu: pick a unit and the value is CONVERTED, not reinterpreted.
+   *  10 mm shown as inches is 0.3937 in, not 10 in. */
+  private openUnitMenu(f: Field) {
+    if (!f.unit || !f.chip) return;
+    this.closeUnitMenu();
+    const dim = f.unit.dim;
+    const menu = document.createElement("div");
+    menu.className = "dim-unit-menu";
+    for (const u of commonUnits(dim)) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "dim-unit-item" + (u.id === f.unit.id ? " active" : "");
+      row.textContent = u.label;
+      row.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const current = tryParseMeasure(f.input.value, f.unit);
+        f.unit = u;
+        if (f.chip) f.chip.textContent = u.label;
+        if (current) f.input.value = String(toUnit(current.value, u));
+        this.sizeToContent(f);
+        this.closeUnitMenu();
+        f.input.focus();
+      });
+      menu.appendChild(row);
+    }
+    const r = f.chip.getBoundingClientRect();
+    menu.style.left = `${r.left}px`;
+    menu.style.top = `${r.bottom + 2}px`;
+    document.body.appendChild(menu);
+    this.unitMenu = menu;
+    // One dismissal path, on the next press anywhere else.
+    setTimeout(() => window.addEventListener("pointerdown", this.boundCloseMenu, { once: true, capture: true }), 0);
+  }
+
+  private unitMenu: HTMLDivElement | null = null;
+  private boundCloseMenu = () => this.closeUnitMenu();
+
+  private closeUnitMenu() {
+    this.unitMenu?.remove();
+    this.unitMenu = null;
+  }
+
   /** tool pushes cursor-derived values in MM; only tracking fields accept them */
   updateFromCursor(values: Record<string, number>) {
     for (const f of this.fields) {
       const v = values[f.def.name];
       if (!f.userDriven && v != null) {
-        f.input.value = String(displayValue(v, f.def.kind));
+        f.input.value = String(f.def.kind === "count" ? Math.round(v) : toUnit(v, f.unit));
+        this.sizeToContent(f);
         // Keep the live value SELECTED while it tracks the cursor (Fusion-style), so
         // typing a number at any moment replaces it instead of appending.
         if (document.activeElement === f.input) f.input.select();
@@ -164,8 +268,9 @@ export class DimInput {
   seed(name: string, value: number) {
     const f = this.fields.find((x) => x.def.name === name);
     if (!f) return;
-    f.input.value = String(displayValue(value, f.def.kind));
+    f.input.value = String(f.def.kind === "count" ? Math.round(value) : toUnit(value, f.unit));
     f.userDriven = true;
+    this.sizeToContent(f);
   }
 
   isUserDriven(name: string): boolean {
@@ -177,7 +282,16 @@ export class DimInput {
   getValue(name: string): number | null {
     const f = this.fields.find((x) => x.def.name === name);
     if (!f) return null;
-    return parseField(f.input.value, f.def.kind);
+    // Parsed against THIS field's unit, not the document's: a field the user put
+    // into inches must read a bare "2" as two inches.
+    if (!f.unit) return parseField(f.input.value, f.def.kind);
+    return tryParseMeasure(f.input.value, f.unit)?.value ?? null;
+  }
+
+  /** The unit a field is currently showing, so a tool can label its own prompt
+   *  with it. Null for a count. */
+  unitOf(name: string): UnitDef | null {
+    return this.fields.find((x) => x.def.name === name)?.unit ?? null;
   }
 
   /** the field's RAW text, untouched — for callers that route input through the
@@ -204,6 +318,7 @@ export class DimInput {
 
   hide() {
     this.active = false;
+    this.closeUnitMenu();
     this.root.style.display = "none";
     this.root.innerHTML = "";
     this.fields = [];

@@ -163,6 +163,13 @@
   font-size: 12px;
   font-style: normal;
 }
+/* The chip's feature name. Hidden in the horizontal strip, which is 52px of
+   chrome holding ~28px chips so a 100-feature document spans screens rather
+   than screen-miles; _shellsides.scss shows it in the side arrangement, where
+   each chip is a full-width row and a column of bare icons is unreadable. */
+.t-name {
+  display: none;
+}
 .timeline-node {
   position: relative;
   flex: 0 0 auto;
