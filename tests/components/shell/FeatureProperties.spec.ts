@@ -25,6 +25,7 @@ function makeEngine(doc: CadDocument) {
   const buildVersion = ref(0);
   const updates: { id: string; patch: Record<string, unknown> }[] = [];
   const values: { field: string; value: number }[] = [];
+  const exprs: { field: string; raw: string }[] = [];
   const store = {
     get document() { return doc; },
     updateFeature: (id: string, patch: Record<string, unknown>) => {
@@ -35,11 +36,12 @@ function makeEngine(doc: CadDocument) {
     boundExpr: () => null,
     isParamBound: () => false,
     setTargetValue: (t: { field: string }, value: number) => { values.push({ field: t.field, value }); },
-    setTargetExpr: () => null,
+    setTargetExpr: (t: { field: string }, raw: string) => { exprs.push({ field: t.field, raw }); return null; },
   };
   return {
     updates,
     values,
+    exprs,
     engine: { store, bridge: { docVersion, buildVersion } } as unknown as Engine,
   };
 }
@@ -51,9 +53,15 @@ function render(fake: ReturnType<typeof makeEngine>, featureId: string): VueWrap
   });
 }
 
-/** Every row as [label, value]. */
+/** Every row as [label, unit, value]. The unit is a chip beside the value and
+ *  NOT part of the label: a label is a name, and "Radius mm | 5in" reads as a
+ *  contradiction. */
 const rows = (w: VueWrapper) =>
-  w.findAll(".param-row").map((r) => [r.find("label").text(), r.find("input").element.value]);
+  w.findAll(".param-row").map((r) => [
+    r.find("label").text(),
+    r.find(".dim-unit").exists() ? r.find(".dim-unit").text() : "",
+    r.find("input").element.value,
+  ]);
 
 /** Commit `text` into the row whose label starts with `label`. */
 async function commit(w: VueWrapper, label: string, text: string) {
@@ -76,12 +84,21 @@ describe("FeatureProperties", () => {
   it("lists a sketch's entity dimensions", () => {
     const fake = makeEngine({ parameters: {}, features: [CIRCLE(6)] });
     // The circle's diameter, in the unit the caller passed.
-    expect(rows(render(fake, "s1"))).toEqual([["Diameter mm", "12"]]);
+    expect(rows(render(fake, "s1"))).toEqual([["Diameter", "mm", "12"]]);
   });
 
   it("lists a feature's numeric fields", () => {
     const fake = makeEngine({ parameters: {}, features: [EXTRUDE] });
-    expect(rows(render(fake, "e1"))).toContainEqual(["Distance mm", "10"]);
+    expect(rows(render(fake, "e1"))).toContainEqual(["Distance", "mm", "10"]);
+  });
+
+  it("gives a unitless field no unit chip rather than a blank one", () => {
+    // A fillet's conic profile is a ratio, and "Profile mm" was never true.
+    const fake = makeEngine({
+      parameters: {},
+      features: [{ id: "f1", type: "fillet", radius: 2, profile: 0.5 } as unknown as Feature],
+    });
+    expect(rows(render(fake, "f1"))).toEqual([["Radius", "mm", "2"], ["Profile", "", "0.5"]]);
   });
 
   it("writes a sketch dimension back through the ONE entity it belongs to", async () => {
@@ -123,6 +140,55 @@ describe("FeatureProperties", () => {
     expect(input.classes()).toContain("input-error");
     expect(input.element.value).toBe("banana");
     expect(input.attributes("title")).toBeTruthy();
+  });
+
+  // --- the feature-field write path (the sketch rows above are the other half)
+  //
+  // These two rows sit one under the other in the same panel and used to
+  // disagree about what a unit is: "1 inch" worked on a sketch dimension and
+  // "5in" was rejected on the field below it, because a feature field sent
+  // anything that was not a plain number to the parameter EXPRESSION engine,
+  // which has no unit vocabulary.
+
+  it("takes a unit-bearing literal in a feature field", async () => {
+    const fake = makeEngine({ parameters: {}, features: [EXTRUDE] });
+    await commit(render(fake, "e1"), "Distance", "5in");
+    expect(fake.values).toEqual([{ field: "distance", value: 127 }]);
+    expect(fake.exprs).toEqual([]); // NOT the expression engine's business
+  });
+
+  it("shows the value back in the unit that was typed", async () => {
+    const fake = makeEngine({ parameters: {}, features: [EXTRUDE] });
+    const w = render(fake, "e1");
+    await commit(w, "Distance", "5in");
+    // The row adopts a unit the user wrote, the way the heads-up dimension box
+    // does. Converting it straight back to mm would answer a request with the
+    // thing that was being corrected.
+    expect(w.find(".param-row .dim-unit").text()).toBe("in");
+  });
+
+  it("leaves a bare expression to the parameter engine, in canonical units", async () => {
+    // The deliberate fork (plan decision R4): a literal INSIDE an expression is
+    // canonical, so a file evaluates identically on every machine, whatever the
+    // machine happens to be displaying. Only a written unit means display units.
+    const fake = makeEngine({ parameters: {}, features: [EXTRUDE] });
+    await commit(render(fake, "e1"), "Distance", "width/2");
+    expect(fake.exprs).toEqual([{ field: "distance", raw: "width/2" }]);
+    expect(fake.values).toEqual([]);
+  });
+
+  it("refuses a length typed into an angle field", async () => {
+    const fake = makeEngine({
+      parameters: {},
+      features: [{ id: "r1", type: "revolve", sketch: "s1", angle: 90 } as unknown as Feature],
+    });
+    const w = render(fake, "r1");
+    await commit(w, "Angle", "5in");
+    // Reported rather than passed to the expression engine: no reading of "5in"
+    // makes it an angle, and 5 degrees is a guess at what was meant.
+    expect(fake.values).toEqual([]);
+    expect(fake.exprs).toEqual([]);
+    expect(w.find("input").classes()).toContain("input-error");
   });
 
   it("renders nothing for a feature with no numeric fields", () => {

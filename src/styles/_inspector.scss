@@ -3,7 +3,11 @@
    ============================================================================ */
 .param-row {
   display: grid;
-  grid-template-columns: 1fr 84px;
+  /* minmax(0, …) on both tracks: a grid track's automatic minimum is its
+     content's MIN-CONTENT width, so an unbreakable label or a long value would
+     push the row past the panel rather than ellipsing inside it — which is what
+     the side-mounted history did, at 195px. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 120px);
   gap: var(--s-3);
   align-items: center;
   margin-bottom: var(--s-2);
@@ -14,6 +18,26 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The value and the unit it is measured in, which belongs beside the number
+   rather than appended to the label: "Radius mm | 5in" reads as a contradiction
+   and spends the label column's width on something that is not a name. */
+.param-value {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-width: 0;
+}
+.param-value .dim-unit {
+  font-size: 12px;
+  padding: 2px 5px;
+}
+/* The chip states the unit for a value that cannot be re-shown in another one
+   (an expression is written in canonical units), so it is not pressable. */
+.param-value .dim-unit.static {
+  border-color: transparent;
+  background: none;
+  cursor: default;
 }
 .param-row input {
   background: var(--panel-2);
@@ -27,7 +51,12 @@
      shorter than a button, which is the hierarchy you want when they sit in the
      same row. */
   padding: var(--s-2) var(--s-3);
-  width: 100%;
+  /* A flex item in .param-value, sharing the cell with the unit chip. width:100%
+     would resolve against the whole cell and leave the chip nowhere to go; the
+     0 minimum is what lets the field be narrower than the number in it, so a
+     long value scrolls inside the field rather than widening the panel. */
+  flex: 1 1 auto;
+  min-width: 0;
   font: inherit;
   font-size: 12px;
   font-variant-numeric: tabular-nums;

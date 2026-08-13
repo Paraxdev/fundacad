@@ -10,9 +10,20 @@ import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import ValidatedRow from "../../../src/components/shell/ValidatedRow.vue";
 
-function mountRow(opts: { value: string; commit?: (raw: string) => string | null }) {
+function mountRow(opts: {
+  value: string;
+  commit?: (raw: string) => string | null;
+  unit?: string;
+  pickUnit?: (x: number, y: number) => void;
+}) {
   return mount(ValidatedRow, {
-    props: { label: "Width", value: opts.value, commit: opts.commit ?? (() => null) },
+    props: {
+      label: "Width",
+      value: opts.value,
+      commit: opts.commit ?? (() => null),
+      ...(opts.unit === undefined ? {} : { unit: opts.unit }),
+      ...(opts.pickUnit === undefined ? {} : { pickUnit: opts.pickUnit }),
+    },
     attachTo: document.body, // focus/activeElement only behave when attached
   });
 }
@@ -75,6 +86,32 @@ describe("ValidatedRow", () => {
     expect(input.element.value).toBe("7.00");
   });
 
+  it("follows a commit that lands after the change event", async () => {
+    // Not every commit is synchronous: a parameter expression is queued on a
+    // promise chain in the store and arrives several frames after `change`,
+    // while the field still has focus. The focus guard is right for an edit
+    // landing from somewhere else and wrong for the answer to this one, so
+    // skipping it left the field showing its pre-edit number and the edit
+    // looked like it had done nothing at all.
+    const w = mountRow({ value: "10", commit: () => null });
+    const input = await type(w, "20+5");
+    await input.trigger("change");
+
+    await w.setProps({ value: "20+5" }); // the queued commit lands
+    expect(input.element.value).toBe("20+5");
+    expect(document.activeElement).toBe(input.element); // still mid-edit
+  });
+
+  it("stops following a late commit once the user types again", async () => {
+    const w = mountRow({ value: "10", commit: () => null });
+    const input = await type(w, "7");
+    await input.trigger("change");
+    await type(w, "8"); // moved on: this outranks the previous edit's answer
+
+    await w.setProps({ value: "7" });
+    expect(input.element.value).toBe("8");
+  });
+
   it("keeps the rejected text and flags the error when a commit fails", async () => {
     const w = mountRow({ value: "10", commit: () => "unknown parameter" });
     const input = await type(w, "widht/2");
@@ -94,5 +131,38 @@ describe("ValidatedRow", () => {
 
     await type(w, "bad2");
     expect(input.classes()).not.toContain("input-error");
+  });
+
+  // --- the unit chip ---
+  // The unit used to be appended to the LABEL, which produced rows reading
+  // "Radius mm | 5in": a label is a name, and a unit is part of the value.
+
+  it("puts the unit beside the value rather than in the label", () => {
+    const w = mountRow({ value: "5", unit: "mm", pickUnit: () => {} });
+    expect(w.get("label").text()).toBe("Width");
+    expect(w.get(".dim-unit").text()).toBe("mm");
+  });
+
+  it("opens the picker under the chip", async () => {
+    const at: [number, number][] = [];
+    const w = mountRow({ value: "5", unit: "mm", pickUnit: (x, y) => at.push([x, y]) });
+    await w.get(".dim-unit").trigger("click");
+    // happy-dom has no layout, so the rect is zeroes; what is pinned here is
+    // that the chip reports a position at all rather than the caller guessing.
+    expect(at).toHaveLength(1);
+  });
+
+  it("makes the chip a caption when the unit cannot be changed", () => {
+    // An expression is written in canonical units, so there is nothing to pick:
+    // the chip states the unit instead of offering it.
+    const w = mountRow({ value: "20+5", unit: "mm" });
+    expect(w.find("button.dim-unit").exists()).toBe(false);
+    expect(w.get("span.dim-unit").classes()).toContain("static");
+  });
+
+  it("renders no chip at all for a unitless value", () => {
+    // A fillet's conic profile is a ratio; a blank chip would claim otherwise.
+    const w = mountRow({ value: "0.5" });
+    expect(w.find(".dim-unit").exists()).toBe(false);
   });
 });

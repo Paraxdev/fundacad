@@ -8,14 +8,16 @@
 // re-serialises one entity), and two copies of that would drift the moment a
 // field type was added.
 //
-// The title is the caller's business — the history heads it with the feature
-// name, the timeline already has the chip you clicked.
+// The title is the caller's business, the history heads it with the feature
+// name and the timeline already has the chip you clicked.
 
-import { computed } from "vue";
+import { ref } from "vue";
 import { useEngine } from "../../app/engineKey";
 import { useDocValue } from "../../app/useDoc";
 import ValidatedRow from "./ValidatedRow.vue";
-import { toDisplay, round, displayValue, isPlainNumber, parseField } from "../../ui/units";
+import { round, isPlainNumber } from "../../ui/units";
+import { commonUnits, toUnit, tryParseMeasure, unitById, type Dim, type Measured, type UnitDef } from "../../ui/measure";
+import { contextMenu } from "../../ui/menu";
 import { resolveEntities, toSketchEntity } from "../../sketch/resolve";
 import { entityDims } from "../../sketch/entityDims";
 import { FEATURE_NUM_FIELDS as NUM_FIELDS, type FieldKind } from "../../document/numFields";
@@ -28,6 +30,69 @@ const store = engine.store;
 
 const feature = useDocValue((doc) => doc.features.find((f) => f.id === props.featureId) ?? null);
 
+// --- what each row is SHOWING its value in ---------------------------------
+// Per row rather than per panel, and the same contract the heads-up dimension
+// box has (sketch/dimInput.ts): the row starts at the document's display unit,
+// follows a unit the user types, and can be changed from its chip, where
+// picking CONVERTS rather than reinterprets. Keyed by row key, so a row that
+// disappears takes its override with it the next time the panel is rebuilt.
+
+const shownUnit = ref<Record<string, string>>({});
+
+/** The dimension a field kind measures, or null for a unitless one (a count,
+ *  and the real-valued ratios that share its kind). */
+function dimOf(kind: FieldKind): Dim | null {
+  return kind === "angle" ? "angle" : kind === "count" ? null : "length";
+}
+
+/** The unit a row shows: its own override when it still fits the field's
+ *  dimension, otherwise the document's for a length and degrees for an angle,
+ *  which is the only unit an angle is ever stored or shown in elsewhere. */
+function unitOf(key: string, kind: FieldKind): UnitDef | null {
+  const dim = dimOf(kind);
+  if (!dim) return null;
+  const picked = unitById(shownUnit.value[key]);
+  if (picked && picked.dim === dim) return picked;
+  return unitById(dim === "angle" ? "deg" : props.unit);
+}
+
+/** Adopt a unit the user wrote, so the value is shown back in the unit they
+ *  just asked for instead of converted straight out of it again. */
+function adopt(key: string, u: UnitDef | null) {
+  if (u) shownUnit.value = { ...shownUnit.value, [key]: u.id };
+}
+
+function pickUnit(key: string, kind: FieldKind, x: number, y: number) {
+  const cur = unitOf(key, kind);
+  if (!cur) return;
+  contextMenu(
+    x,
+    y,
+    commonUnits(cur.dim).map((u) => ({
+      label: u.label,
+      checked: u.id === cur.id,
+      onClick: () => adopt(key, u),
+    })),
+  );
+}
+
+/** Read typed text as a measurement of `dim`, with NO parameter scope: a value
+ *  row's other path is the expression engine, and anything naming a parameter
+ *  belongs to it.
+ *
+ *  Null when the text is not a measurement at all, which is what an expression
+ *  looks like from here. A string when it IS one, of the wrong kind: inches on
+ *  an angle is a mistake no other reading would rescue, so it is reported
+ *  rather than passed along. */
+function measure(raw: string, showing: UnitDef | null, dim: Dim): Measured | string | null {
+  const m = tryParseMeasure(raw, showing, {});
+  if (!m) return null;
+  if (m.unit && m.unit.dim !== dim) {
+    return `${m.unit.label} is not ${dim === "angle" ? "an angle" : "a length"}`;
+  }
+  return m;
+}
+
 // --- sketch: editable per-entity dimensions (same descriptors as the in-canvas
 // labels). Editing entity i serialises just that entity back to numbers and
 // leaves the others (and their parameter references) untouched. ---
@@ -35,13 +100,16 @@ const sketchRows = useDocValue((doc) => {
   const f = feature.value;
   if (f?.type !== "sketch") return [];
   const resolved = resolveEntities(f, doc.parameters);
-  const out: { key: string; label: string; value: string; index: number; field: string }[] = [];
+  const out: { key: string; label: string; unit: string; value: string; index: number; field: string }[] = [];
   resolved.forEach((e, i) => {
     for (const d of entityDims(e)) {
+      const key = `${i}:${d.field}`;
+      const u = unitOf(key, "length");
       out.push({
-        key: `${i}:${d.field}`,
-        label: `${d.label} ${props.unit}`,
-        value: String(displayValue(d.valueMm)),
+        key,
+        label: d.label,
+        unit: u?.label ?? "",
+        value: String(toUnit(d.valueMm, u)),
         index: i,
         field: d.field,
       });
@@ -50,22 +118,31 @@ const sketchRows = useDocValue((doc) => {
   return out;
 });
 
-function commitSketchDim(row: { index: number; field: string }, raw: string): string | null {
-  const v = parseField(raw, "length");
-  if (v == null) return "not a value";
+function commitSketchDim(row: { key: string; index: number; field: string }, raw: string): string | null {
+  const m = measure(raw, unitOf(row.key, "length"), "length");
+  if (typeof m === "string") return m;
+  if (!m) return "not a value";
   const f = feature.value;
   if (f?.type !== "sketch") return null;
   const copy = resolveEntities(f, store.document.parameters)[row.index];
   if (!copy) return null;
-  entityDims(copy).find((x) => x.field === row.field)?.write(v);
+  entityDims(copy).find((x) => x.field === row.field)?.write(m.value);
   const entities = f.entities.map((ent, j) => (j === row.index ? toSketchEntity(copy) : ent));
   store.updateFeature(f.id, { entities } as Partial<Feature>);
+  adopt(row.key, m.unit);
   return null;
 }
 
 // --- numeric feature fields ---
-const featureRows = computed(() => {
-  const f = feature.value;
+// useDocValue rather than a plain computed over `feature`: store.document keeps
+// the same object identity across an in-place mutate, so `feature` recomputes to
+// a value === its last one and Vue short-circuits the notification (the hazard
+// useDoc.ts documents). These rows read `boundExpr` too, which is an untracked
+// raw read, so without the version dependency a value committed from anywhere
+// else, a drag handle or a parameter commit landing off the promise chain, never
+// reached the panel.
+const featureRows = useDocValue((doc) => {
+  const f = doc.features.find((x) => x.id === props.featureId);
   if (!f || f.type === "sketch") return [];
   const fields = NUM_FIELDS[f.type];
   if (!fields) return [];
@@ -73,18 +150,23 @@ const featureRows = computed(() => {
     const cur = (f as unknown as Record<string, Num | undefined>)[field];
     const target: ParamTarget = { kind: "feature", feature: f.id, field };
     const bound = store.boundExpr(target);
-    const suffix = kind === "length" ? ` ${props.unit}` : kind === "angle" ? "°" : "";
+    const u = unitOf(field, kind);
     // a bound field edits its EXPRESSION (canonical units); a plain field shows
-    // its number in display units (lengths convert, angles/counts raw)
+    // its number in the unit the row is showing (counts are unitless and raw)
     const shown = bound
       ? bound.expr
       : typeof cur === "number"
-        ? String(kind === "length" ? round(toDisplay(cur)) : cur)
+        ? String(u ? toUnit(cur, u) : round(cur))
         : (cur ?? "");
     const fx = bound && store.isParamBound(target);
     return {
       key: field,
-      label: `${label}${suffix}`,
+      label,
+      // An expression is written in CANONICAL units so a file evaluates the
+      // same on every machine, which is a fact about it and not a display
+      // choice, so the chip states it and is not offered as a picker.
+      unit: bound ? (dimOf(kind) === "angle" ? "°" : dimOf(kind) ? "mm" : "") : (u?.label ?? ""),
+      pickable: !bound && !!u,
       value: String(shown),
       target,
       kind,
@@ -94,20 +176,43 @@ const featureRows = computed(() => {
   });
 });
 
-/** Route raw field input: plain number → display-unit value write (keeps a
- *  bound field's model param as a literal); anything else → expression in
- *  CANONICAL units (mm/deg) via the params engine. Deliberate semantics fork
- *  (plan decision R4): bare literals in expressions are canonical so the same
- *  file evaluates identically on every machine, unit suffixes (0.5 in) are
- *  the display-unit spelling inside expressions. */
-function commitField(target: ParamTarget, kind: FieldKind, raw: string): string | null {
+/** Route raw field input.
+ *
+ *  A plain number is in the unit the row is SHOWING. A literal that NAMES a unit
+ *  ("5in", `1/2"`, "2mm+3cm") is a measurement and is written as a value in that
+ *  unit. Anything else is an expression, in CANONICAL units (mm/deg) via the
+ *  params engine.
+ *
+ *  Deliberate semantics fork (plan decision R4): bare literals inside
+ *  expressions are canonical so the same file evaluates identically on every
+ *  machine, while a unit suffix is the display-unit spelling. That rule is
+ *  intact; what was broken is narrower. "5in" is not a plain number, so it went
+ *  straight to the expression engine, which has no unit vocabulary and rejected
+ *  it, while the sketch rows above accepted the same text. The measure parser
+ *  gets a first look now, and only claims text that names a unit, so a bare
+ *  "2+3" still means 3mm more than 2mm rather than 2+3 of whatever this row
+ *  happens to be showing. */
+function commitField(
+  row: { key: string; target: ParamTarget; kind: FieldKind },
+  raw: string,
+): string | null {
+  const { key, target, kind } = row;
+  const u = unitOf(key, kind);
   if (isPlainNumber(raw)) {
-    store.setTargetValue(target, parseField(raw, kind)!, kind);
+    store.setTargetValue(target, Number(raw.trim()) * (u?.factor ?? 1), kind);
+    return null;
+  }
+  const m = u ? measure(raw, u, u.dim) : null;
+  if (typeof m === "string") return m;
+  // Only a literal that NAMED a unit is claimed here. A measurement that did
+  // not name one is a bare expression, and R4 says those are canonical.
+  if (m?.unit) {
+    store.setTargetValue(target, m.value, kind);
+    adopt(key, m.unit);
     return null;
   }
   return store.setTargetExpr(target, raw, kind);
 }
-
 </script>
 
 <template>
@@ -116,6 +221,9 @@ function commitField(target: ParamTarget, kind: FieldKind, raw: string): string 
     :key="r.key"
     :label="r.label"
     :value="r.value"
+    :unit="r.unit"
+    :pick-unit="(x, y) => pickUnit(r.key, 'length', x, y)"
+    hint="a value with any unit (2mm, 1 inch, 1/2&quot;)"
     :commit="(raw) => commitSketchDim(r, raw)"
   />
   <ValidatedRow
@@ -123,9 +231,11 @@ function commitField(target: ParamTarget, kind: FieldKind, raw: string): string 
     :key="r.key"
     :label="r.label"
     :value="r.value"
+    :unit="r.unit"
+    :pick-unit="r.pickable ? (x, y) => pickUnit(r.key, r.kind, x, y) : undefined"
     :row-class="r.rowClass"
     :row-title="r.rowTitle"
     hint="a value with any unit (2mm, 1 inch, 1/2&quot;), a parameter, or an expression"
-    :commit="(raw) => commitField(r.target, r.kind, raw)"
+    :commit="(raw) => commitField(r, raw)"
   />
 </template>
